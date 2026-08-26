@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage;
 using Windows.Storage.Pickers;
@@ -11,15 +12,21 @@ public sealed partial class MainPage : Page
     public MainPage()
     {
         InitializeComponent();
-        Viewer.ViewChanged += (_, _) => UpdateViewStatus();
+        UpdateChrome();
     }
 
-    private async void OnOpenClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    /// <summary>The viewer of the selected tab, or null when nothing is open.</summary>
+    private PdfTiledViewer? ActiveViewer =>
+        (Tabs.SelectedItem as TabViewItem)?.Content as PdfTiledViewer;
+
+    private async void OnOpenClicked(object sender, RoutedEventArgs e) => await OpenDocumentInNewTabAsync();
+
+    private async void OnAddTabClicked(TabView sender, object args) => await OpenDocumentInNewTabAsync();
+
+    private async Task OpenDocumentInNewTabAsync()
     {
         var picker = new FileOpenPicker();
-        var hwnd = WindowNative.GetWindowHandle(App.Current.MainWindow);
-        InitializeWithWindow.Initialize(picker, hwnd);
-
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(App.Current.MainWindow));
         picker.FileTypeFilter.Add(".pdf");
         picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
 
@@ -29,74 +36,151 @@ public sealed partial class MainPage : Page
         OpenButton.IsEnabled = false;
         try
         {
-            await Viewer.OpenAsync(file.Path);
-            DocumentNameText.Text = file.Name;
-            SetDocumentControlsEnabled(true);
-            UpdateViewStatus();
+            var viewer = new PdfTiledViewer();
+            viewer.ViewChanged += OnViewerViewChanged;
+
+            var tab = new TabViewItem
+            {
+                Header = file.Name,
+                Content = viewer,
+                IconSource = new SymbolIconSource { Symbol = Symbol.Document },
+            };
+            ToolTipService.SetToolTip(tab, file.Path);
+
+            Tabs.TabItems.Add(tab);
+            Tabs.SelectedItem = tab;
+
+            await viewer.OpenAsync(file.Path);
         }
         catch (Exception ex)
         {
-            DocumentNameText.Text = $"Error al abrir: {ex.Message}";
-            SetDocumentControlsEnabled(false);
+            await ShowErrorAsync(file.Name, ex);
+            CloseTab(Tabs.SelectedItem as TabViewItem);
         }
         finally
         {
             OpenButton.IsEnabled = true;
+            UpdateChrome();
         }
     }
 
-    private void SetDocumentControlsEnabled(bool enabled)
+    private async Task ShowErrorAsync(string fileName, Exception ex)
     {
-        FitButton.IsEnabled = enabled;
-        PanToolButton.IsEnabled = enabled;
-        TextToolButton.IsEnabled = enabled;
-        ContinuousModeButton.IsEnabled = enabled;
-        SingleModeButton.IsEnabled = enabled;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "No se pudo abrir el documento",
+            Content = $"{fileName}\n\n{ex.Message}",
+            CloseButtonText = "Cerrar",
+        };
+        await dialog.ShowAsync();
     }
 
-    private void OnFitClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => Viewer.FitToWidth();
+    private void OnTabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args) =>
+        CloseTab(args.Tab);
 
-    private void OnPanToolClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => SelectTool(ViewerTool.Pan);
+    private void CloseTab(TabViewItem? tab)
+    {
+        if (tab is null) return;
 
-    private void OnTextToolClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => SelectTool(ViewerTool.SelectText);
+        if (tab.Content is PdfTiledViewer viewer)
+        {
+            viewer.ViewChanged -= OnViewerViewChanged;
+            // Explicit teardown: the viewer must not rely on Unloaded, which a
+            // TabView also raises when merely switching away from a tab.
+            viewer.CloseDocument();
+        }
+
+        tab.Content = null;
+        Tabs.TabItems.Remove(tab);
+        UpdateChrome();
+    }
+
+    private void OnTabSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        foreach (var removed in e.RemovedItems)
+        {
+            if (removed is TabViewItem { Content: PdfTiledViewer viewer })
+            {
+                viewer.SetActive(false);
+            }
+        }
+
+        ActiveViewer?.SetActive(true);
+        UpdateChrome();
+    }
+
+    private void OnViewerViewChanged(object? sender, EventArgs e)
+    {
+        // Only the visible tab drives the toolbar.
+        if (!ReferenceEquals(sender, ActiveViewer)) return;
+        UpdateChrome();
+    }
+
+    // --- toolbar ---------------------------------------------------------
+
+    private void OnFitClicked(object sender, RoutedEventArgs e) => ActiveViewer?.FitToWidth();
+
+    private void OnPanToolClicked(object sender, RoutedEventArgs e) => SelectTool(ViewerTool.Pan);
+
+    private void OnTextToolClicked(object sender, RoutedEventArgs e) => SelectTool(ViewerTool.SelectText);
 
     private void SelectTool(ViewerTool tool)
     {
-        Viewer.Tool = tool;
-        PanToolButton.IsChecked = tool == ViewerTool.Pan;
-        TextToolButton.IsChecked = tool == ViewerTool.SelectText;
+        if (ActiveViewer is { } viewer)
+        {
+            viewer.Tool = tool;
+        }
+        UpdateChrome();
     }
 
-    private void OnContinuousModeClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) =>
+    private void OnContinuousModeClicked(object sender, RoutedEventArgs e) =>
         SelectLayoutMode(ViewerLayoutMode.Continuous);
 
-    private void OnSingleModeClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) =>
+    private void OnSingleModeClicked(object sender, RoutedEventArgs e) =>
         SelectLayoutMode(ViewerLayoutMode.SinglePage);
 
     private void SelectLayoutMode(ViewerLayoutMode mode)
     {
-        Viewer.LayoutMode = mode;
-        ContinuousModeButton.IsChecked = mode == ViewerLayoutMode.Continuous;
-        SingleModeButton.IsChecked = mode == ViewerLayoutMode.SinglePage;
-        UpdateViewStatus();
+        if (ActiveViewer is { } viewer)
+        {
+            viewer.LayoutMode = mode;
+        }
+        UpdateChrome();
     }
 
-    private void OnPreviousPageClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => Viewer.PreviousPage();
+    private void OnPreviousPageClicked(object sender, RoutedEventArgs e) => ActiveViewer?.PreviousPage();
 
-    private void OnNextPageClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => Viewer.NextPage();
+    private void OnNextPageClicked(object sender, RoutedEventArgs e) => ActiveViewer?.NextPage();
 
-    private void UpdateViewStatus()
+    /// <summary>Mirrors the active tab's state into the shared toolbar.</summary>
+    private void UpdateChrome()
     {
-        PreviousPageButton.IsEnabled = Viewer.CanGoPrevious;
-        NextPageButton.IsEnabled = Viewer.CanGoNext;
+        var viewer = ActiveViewer;
+        bool hasDocument = viewer is not null && viewer.PageCount > 0;
 
-        if (Viewer.PageCount == 0)
+        EmptyState.Visibility = Tabs.TabItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        FitButton.IsEnabled = hasDocument;
+        PanToolButton.IsEnabled = hasDocument;
+        TextToolButton.IsEnabled = hasDocument;
+        ContinuousModeButton.IsEnabled = hasDocument;
+        SingleModeButton.IsEnabled = hasDocument;
+        PreviousPageButton.IsEnabled = viewer?.CanGoPrevious ?? false;
+        NextPageButton.IsEnabled = viewer?.CanGoNext ?? false;
+
+        PanToolButton.IsChecked = viewer?.Tool != ViewerTool.SelectText;
+        TextToolButton.IsChecked = viewer?.Tool == ViewerTool.SelectText;
+        ContinuousModeButton.IsChecked = viewer?.LayoutMode != ViewerLayoutMode.SinglePage;
+        SingleModeButton.IsChecked = viewer?.LayoutMode == ViewerLayoutMode.SinglePage;
+
+        if (viewer is null || !hasDocument)
         {
             ViewStatusText.Text = string.Empty;
             return;
         }
 
-        string selection = Viewer.HasSelection ? "  ·  texto seleccionado" : string.Empty;
-        ViewStatusText.Text = $"Hoja {Viewer.CurrentPageNumber} de {Viewer.PageCount}  ·  {Viewer.ZoomPercent:0}%{selection}";
+        string selection = viewer.HasSelection ? "  ·  texto seleccionado" : string.Empty;
+        ViewStatusText.Text = $"Hoja {viewer.CurrentPageNumber} de {viewer.PageCount}  ·  {viewer.ZoomPercent:0}%{selection}";
     }
 }

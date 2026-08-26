@@ -6,43 +6,68 @@ namespace ZenInk_App.Rendering;
 
 public readonly record struct PdfPageSize(float WidthPt, float HeightPt);
 
-public sealed record PdfDocumentInfo(IReadOnlyList<PdfPageSize> Pages);
+public sealed record PdfDocumentInfo(int DocumentId, IReadOnlyList<PdfPageSize> Pages);
 
 public readonly record struct TileBitmapData(byte[] Bgra, int Width, int Height);
 
 /// <summary>
 /// Owns every call into PDFium on a single dedicated thread — PDFium's C API is
 /// not thread-safe, so all document/page/bitmap handles live and die on this one
-/// thread. Everything else talks to it through <see cref="OpenDocumentAsync"/> and
-/// <see cref="RequestTileAsync"/>.
+/// thread. Everything else talks to it through the Request* methods.
+///
+/// There is exactly one of these per process, and every open document shares
+/// it. That is not an optimisation: FPDF_InitLibrary and FPDF_DestroyLibrary
+/// are process-global and not reference counted, so a second queue tearing down
+/// on close would pull the library out from under any document still open in
+/// another tab.
 ///
 /// Tile requests are served most-recent-first (LIFO) and coalesced by key, so
 /// during fast pan/zoom the queue always renders what's currently on screen
-/// instead of working through a backlog of tiles that have already scrolled away.
+/// instead of working through a backlog of tiles that have already scrolled
+/// away. Text extraction sits below tiles, so it can never delay them.
 /// </summary>
 public sealed class PdfRenderQueue : IDisposable
 {
-    /// <summary>Parsed pages held open. Each one retains its parsed content, so this is capped.</summary>
-    private const int MaxLoadedPages = 8;
+    /// <summary>Parsed pages held open per document. Each retains its content, so this is capped.</summary>
+    private const int MaxLoadedPagesPerDocument = 6;
+
+    private static readonly Lazy<PdfRenderQueue> LazyShared = new(() => new PdfRenderQueue());
+
+    public static PdfRenderQueue Shared => LazyShared.Value;
 
     private readonly Thread _worker;
     private readonly SemaphoreSlim _signal = new(0);
     private readonly ConcurrentQueue<Action> _controlActions = new();
+
     private readonly object _tileGate = new();
-    private readonly Dictionary<TileKey, TileJob> _pendingTiles = new();
-    private readonly List<TileKey> _tileOrder = new();
+    private readonly Dictionary<TileRequest, TileJob> _pendingTiles = new();
+    private readonly List<TileRequest> _tileOrder = new();
+
     private readonly object _textGate = new();
-    private readonly Dictionary<int, TaskCompletionSource<PageTextLayer>> _pendingText = new();
-    private readonly List<int> _textOrder = new();
+    private readonly Dictionary<TextRequest, TaskCompletionSource<PageTextLayer>> _pendingText = new();
+    private readonly List<TextRequest> _textOrder = new();
+
     private volatile bool _disposed;
+    private int _nextDocumentId;
 
-    private FpdfDocumentT? _document;
-    private readonly Dictionary<int, FpdfPageT> _pages = new();
-    private readonly LinkedList<int> _pageLru = new();
+    private readonly Dictionary<int, OpenDocument> _documents = new();
 
-    private sealed record TileJob(TileKey Key, int TileSize, TaskCompletionSource<TileBitmapData?> Completion);
+    private readonly record struct TileRequest(int DocumentId, TileKey Key);
 
-    public PdfRenderQueue()
+    private readonly record struct TextRequest(int DocumentId, int PageIndex);
+
+    private sealed record TileJob(int TileSize, TaskCompletionSource<TileBitmapData?> Completion);
+
+    private sealed class OpenDocument(FpdfDocumentT handle)
+    {
+        public FpdfDocumentT Handle { get; } = handle;
+
+        public Dictionary<int, FpdfPageT> Pages { get; } = new();
+
+        public LinkedList<int> PageLru { get; } = new();
+    }
+
+    private PdfRenderQueue()
     {
         _worker = new Thread(WorkerLoop)
         {
@@ -55,7 +80,7 @@ public sealed class PdfRenderQueue : IDisposable
     public Task<PdfDocumentInfo> OpenDocumentAsync(string path)
     {
         var tcs = new TaskCompletionSource<PdfDocumentInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _controlActions.Enqueue(() =>
+        EnqueueControl(() =>
         {
             try
             {
@@ -66,24 +91,54 @@ public sealed class PdfRenderQueue : IDisposable
                 tcs.TrySetException(ex);
             }
         });
-        _signal.Release();
         return tcs.Task;
     }
 
-    public Task<TileBitmapData?> RequestTileAsync(TileKey key, int tileSize)
+    public Task CloseDocumentAsync(int documentId)
     {
+        DropPendingWork(documentId);
+
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        EnqueueControl(() =>
+        {
+            CloseDocumentCore(documentId);
+            tcs.TrySetResult();
+        });
+        return tcs.Task;
+    }
+
+    /// <summary>
+    /// Frees a document's parsed pages without closing it. Used when a tab goes
+    /// to the background, since a large sheet's parsed content dwarfs the rest
+    /// of what a document costs to keep open.
+    /// </summary>
+    public void ReleasePages(int documentId)
+    {
+        DropPendingWork(documentId);
+        EnqueueControl(() =>
+        {
+            if (_documents.TryGetValue(documentId, out var document))
+            {
+                ClosePages(document);
+            }
+        });
+    }
+
+    public Task<TileBitmapData?> RequestTileAsync(int documentId, TileKey key, int tileSize)
+    {
+        var request = new TileRequest(documentId, key);
         lock (_tileGate)
         {
-            if (_pendingTiles.TryGetValue(key, out var existing))
+            if (_pendingTiles.TryGetValue(request, out var existing))
             {
-                _tileOrder.Remove(key);
-                _tileOrder.Add(key);
+                _tileOrder.Remove(request);
+                _tileOrder.Add(request);
                 return existing.Completion.Task;
             }
 
-            var job = new TileJob(key, tileSize, new TaskCompletionSource<TileBitmapData?>(TaskCreationOptions.RunContinuationsAsynchronously));
-            _pendingTiles[key] = job;
-            _tileOrder.Add(key);
+            var job = new TileJob(tileSize, new TaskCompletionSource<TileBitmapData?>(TaskCreationOptions.RunContinuationsAsynchronously));
+            _pendingTiles[request] = job;
+            _tileOrder.Add(request);
             _signal.Release();
             return job.Completion.Task;
         }
@@ -94,20 +149,73 @@ public sealed class PdfRenderQueue : IDisposable
     /// text extraction on a dense sheet can never delay the tiles the user is
     /// currently looking at.
     /// </summary>
-    public Task<PageTextLayer> RequestTextLayerAsync(int pageIndex)
+    public Task<PageTextLayer> RequestTextLayerAsync(int documentId, int pageIndex)
     {
+        var request = new TextRequest(documentId, pageIndex);
         lock (_textGate)
         {
-            if (_pendingText.TryGetValue(pageIndex, out var existing))
+            if (_pendingText.TryGetValue(request, out var existing))
             {
                 return existing.Task;
             }
 
             var tcs = new TaskCompletionSource<PageTextLayer>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _pendingText[pageIndex] = tcs;
-            _textOrder.Add(pageIndex);
+            _pendingText[request] = tcs;
+            _textOrder.Add(request);
             _signal.Release();
             return tcs.Task;
+        }
+    }
+
+    private void EnqueueControl(Action action)
+    {
+        _controlActions.Enqueue(action);
+        _signal.Release();
+    }
+
+    /// <summary>
+    /// Abandons queued work for a document. Requests resolve to null rather
+    /// than faulting, since a caller that no longer wants the tile is the
+    /// normal reason for this.
+    /// </summary>
+    private void DropPendingWork(int documentId)
+    {
+        List<TileJob> tiles = [];
+        lock (_tileGate)
+        {
+            for (int i = _tileOrder.Count - 1; i >= 0; i--)
+            {
+                if (_tileOrder[i].DocumentId != documentId) continue;
+                if (_pendingTiles.Remove(_tileOrder[i], out var job))
+                {
+                    tiles.Add(job);
+                }
+                _tileOrder.RemoveAt(i);
+            }
+        }
+
+        foreach (var job in tiles)
+        {
+            job.Completion.TrySetResult(null);
+        }
+
+        List<TaskCompletionSource<PageTextLayer>> texts = [];
+        lock (_textGate)
+        {
+            for (int i = _textOrder.Count - 1; i >= 0; i--)
+            {
+                if (_textOrder[i].DocumentId != documentId) continue;
+                if (_pendingText.Remove(_textOrder[i], out var tcs))
+                {
+                    texts.Add(tcs);
+                }
+                _textOrder.RemoveAt(i);
+            }
+        }
+
+        foreach (var tcs in texts)
+        {
+            tcs.TrySetResult(new PageTextLayer(0, []));
         }
     }
 
@@ -127,60 +235,62 @@ public sealed class PdfRenderQueue : IDisposable
                     continue;
                 }
 
-                TileJob? job = DequeueNewestTile();
-                if (job is not null)
+                if (DequeueNewestTile() is { } tile)
                 {
                     try
                     {
-                        job.Completion.TrySetResult(RenderTileCore(job.Key, job.TileSize));
+                        tile.Job.Completion.TrySetResult(RenderTileCore(tile.Request, tile.Job.TileSize));
                     }
                     catch (Exception ex)
                     {
-                        job.Completion.TrySetException(ex);
+                        tile.Job.Completion.TrySetException(ex);
                     }
                     continue;
                 }
 
-                if (DequeueNewestText() is not { } textJob) continue;
+                if (DequeueNewestText() is not { } text) continue;
 
                 try
                 {
-                    textJob.Completion.TrySetResult(ExtractTextCore(textJob.PageIndex));
+                    text.Completion.TrySetResult(ExtractTextCore(text.Request));
                 }
                 catch (Exception ex)
                 {
-                    textJob.Completion.TrySetException(ex);
+                    text.Completion.TrySetException(ex);
                 }
             }
         }
         finally
         {
-            CloseDocumentCore();
+            foreach (int documentId in _documents.Keys.ToList())
+            {
+                CloseDocumentCore(documentId);
+            }
             fpdfview.FPDF_DestroyLibrary();
         }
     }
 
-    private TileJob? DequeueNewestTile()
+    private (TileRequest Request, TileJob Job)? DequeueNewestTile()
     {
         lock (_tileGate)
         {
             if (_tileOrder.Count == 0) return null;
-            var key = _tileOrder[^1];
+            var request = _tileOrder[^1];
             _tileOrder.RemoveAt(_tileOrder.Count - 1);
-            _pendingTiles.Remove(key, out var job);
-            return job;
+            if (!_pendingTiles.Remove(request, out var job)) return null;
+            return (request, job);
         }
     }
 
-    private (int PageIndex, TaskCompletionSource<PageTextLayer> Completion)? DequeueNewestText()
+    private (TextRequest Request, TaskCompletionSource<PageTextLayer> Completion)? DequeueNewestText()
     {
         lock (_textGate)
         {
             if (_textOrder.Count == 0) return null;
-            int pageIndex = _textOrder[^1];
+            var request = _textOrder[^1];
             _textOrder.RemoveAt(_textOrder.Count - 1);
-            if (!_pendingText.Remove(pageIndex, out var tcs)) return null;
-            return (pageIndex, tcs);
+            if (!_pendingText.Remove(request, out var tcs)) return null;
+            return (request, tcs);
         }
     }
 
@@ -188,24 +298,23 @@ public sealed class PdfRenderQueue : IDisposable
 
     private PdfDocumentInfo OpenDocumentCore(string path)
     {
-        CloseDocumentCore();
-
-        var doc = fpdfview.FPDF_LoadDocument(path, null);
-        if (doc is null)
+        var handle = fpdfview.FPDF_LoadDocument(path, null);
+        if (handle is null)
         {
             throw new InvalidOperationException($"No se pudo abrir el PDF (PDFium error {fpdfview.FPDF_GetLastError()}).");
         }
 
-        _document = doc;
+        int documentId = ++_nextDocumentId;
+        _documents[documentId] = new OpenDocument(handle);
 
-        int pageCount = fpdfview.FPDF_GetPageCount(doc);
+        int pageCount = fpdfview.FPDF_GetPageCount(handle);
         var sizes = new List<PdfPageSize>(pageCount);
         for (int i = 0; i < pageCount; i++)
         {
             double width = 0, height = 0;
             // Reports the size after the page's /Rotate is applied, matching
             // what FPDF_RenderPageBitmap will actually rasterize.
-            if (fpdfview.FPDF_GetPageSizeByIndex(doc, i, ref width, ref height) == 0)
+            if (fpdfview.FPDF_GetPageSizeByIndex(handle, i, ref width, ref height) == 0)
             {
                 width = 612;
                 height = 792;
@@ -213,37 +322,37 @@ public sealed class PdfRenderQueue : IDisposable
             sizes.Add(new PdfPageSize((float)width, (float)height));
         }
 
-        return new PdfDocumentInfo(sizes);
+        return new PdfDocumentInfo(documentId, sizes);
     }
 
-    private FpdfPageT LoadPageCore(int pageIndex)
+    private FpdfPageT LoadPageCore(int documentId, int pageIndex)
     {
-        if (_document is null)
+        if (!_documents.TryGetValue(documentId, out var document))
         {
-            throw new InvalidOperationException("No hay ningún documento abierto.");
+            throw new InvalidOperationException($"El documento {documentId} ya no está abierto.");
         }
 
-        if (_pages.TryGetValue(pageIndex, out var cached))
+        if (document.Pages.TryGetValue(pageIndex, out var cached))
         {
-            _pageLru.Remove(pageIndex);
-            _pageLru.AddLast(pageIndex);
+            document.PageLru.Remove(pageIndex);
+            document.PageLru.AddLast(pageIndex);
             return cached;
         }
 
-        var page = fpdfview.FPDF_LoadPage(_document, pageIndex);
+        var page = fpdfview.FPDF_LoadPage(document.Handle, pageIndex);
         if (page is null)
         {
             throw new InvalidOperationException($"No se pudo cargar la página {pageIndex}.");
         }
 
-        _pages[pageIndex] = page;
-        _pageLru.AddLast(pageIndex);
+        document.Pages[pageIndex] = page;
+        document.PageLru.AddLast(pageIndex);
 
-        while (_pageLru.Count > MaxLoadedPages)
+        while (document.PageLru.Count > MaxLoadedPagesPerDocument)
         {
-            int oldest = _pageLru.First!.Value;
-            _pageLru.RemoveFirst();
-            if (_pages.Remove(oldest, out var stale))
+            int oldest = document.PageLru.First!.Value;
+            document.PageLru.RemoveFirst();
+            if (document.Pages.Remove(oldest, out var stale))
             {
                 fpdfview.FPDF_ClosePage(stale);
             }
@@ -252,9 +361,10 @@ public sealed class PdfRenderQueue : IDisposable
         return page;
     }
 
-    private TileBitmapData RenderTileCore(TileKey key, int tileSize)
+    private TileBitmapData RenderTileCore(TileRequest request, int tileSize)
     {
-        var page = LoadPageCore(key.PageIndex);
+        var key = request.Key;
+        var page = LoadPageCore(request.DocumentId, key.PageIndex);
         double levelScale = ZoomLevels.ScaleForLevel(key.Level);
 
         int scaledWidth = Math.Max(1, (int)Math.Ceiling(fpdfview.FPDF_GetPageWidthF(page) * levelScale));
@@ -344,9 +454,10 @@ public sealed class PdfRenderQueue : IDisposable
             y0 / (float)Precision);
     }
 
-    private PageTextLayer ExtractTextCore(int pageIndex)
+    private PageTextLayer ExtractTextCore(TextRequest request)
     {
-        var page = LoadPageCore(pageIndex);
+        int pageIndex = request.PageIndex;
+        var page = LoadPageCore(request.DocumentId, pageIndex);
         var transform = BuildPageTransform(page);
 
         var textPage = fpdf_text.FPDFTextLoadPage(page);
@@ -395,20 +506,22 @@ public sealed class PdfRenderQueue : IDisposable
         }
     }
 
-    private void CloseDocumentCore()
+    private static void ClosePages(OpenDocument document)
     {
-        foreach (var page in _pages.Values)
+        foreach (var page in document.Pages.Values)
         {
             fpdfview.FPDF_ClosePage(page);
         }
-        _pages.Clear();
-        _pageLru.Clear();
+        document.Pages.Clear();
+        document.PageLru.Clear();
+    }
 
-        if (_document is not null)
-        {
-            fpdfview.FPDF_CloseDocument(_document);
-            _document = null;
-        }
+    private void CloseDocumentCore(int documentId)
+    {
+        if (!_documents.Remove(documentId, out var document)) return;
+
+        ClosePages(document);
+        fpdfview.FPDF_CloseDocument(document.Handle);
     }
 
     public void Dispose()

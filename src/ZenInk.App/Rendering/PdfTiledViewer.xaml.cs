@@ -56,7 +56,7 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private static readonly Color SelectionFill = Color.FromArgb(70, 0, 103, 192);
 
-    private readonly PdfRenderQueue _queue = new();
+    private readonly PdfRenderQueue _queue = PdfRenderQueue.Shared;
     private readonly TileCache _cache = new(CacheBudgetBytes);
     private readonly HashSet<TileKey> _inFlight = new();
     private readonly Dictionary<int, PageTextLayer> _textLayers = new();
@@ -64,6 +64,8 @@ public sealed partial class PdfTiledViewer : UserControl
     private readonly HashSet<int> _textInFlight = new();
 
     private DocumentLayout? _layout;
+    private int _documentId = -1;
+    private bool _isActive = true;
     private IReadOnlyList<PdfPageSize> _pageSizes = [];
     private ViewerLayoutMode _layoutMode = ViewerLayoutMode.Continuous;
     private int _currentPageIndex;
@@ -85,7 +87,6 @@ public sealed partial class PdfTiledViewer : UserControl
     public PdfTiledViewer()
     {
         InitializeComponent();
-        Unloaded += OnUnloaded;
         UpdateCursor();
     }
 
@@ -221,6 +222,11 @@ public sealed partial class PdfTiledViewer : UserControl
     {
         var info = await _queue.OpenDocumentAsync(path);
 
+        if (_documentId >= 0)
+        {
+            _ = _queue.CloseDocumentAsync(_documentId);
+        }
+        _documentId = info.DocumentId;
         _documentGeneration++;
         _cache.Clear();
         _inFlight.Clear();
@@ -265,10 +271,54 @@ public sealed partial class PdfTiledViewer : UserControl
         Clipboard.SetContent(package);
     }
 
-    private void OnUnloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    /// <summary>
+    /// Called when this viewer's tab is shown or hidden. A hidden tab drops its
+    /// rasterized tiles and its parsed pages: only one document is ever on
+    /// screen, and re-rendering the visible tiles on return is fast, whereas
+    /// keeping every tab's tiles would multiply the memory budget by the tab
+    /// count. It also sidesteps holding GPU bitmaps across the unload/reload
+    /// the TabView performs when switching tabs.
+    /// </summary>
+    public void SetActive(bool active)
+    {
+        _isActive = active;
+
+        if (active)
+        {
+            Canvas.Invalidate();
+            return;
+        }
+
+        _cache.Clear();
+        _inFlight.Clear();
+        if (_documentId >= 0)
+        {
+            _queue.ReleasePages(_documentId);
+        }
+    }
+
+    /// <summary>
+    /// Releases the document and its GPU resources. Called explicitly when the
+    /// tab closes — not from Unloaded, which a TabView also raises merely for
+    /// switching away from this tab.
+    /// </summary>
+    public void CloseDocument()
     {
         _cache.Clear();
-        _queue.Dispose();
+        _inFlight.Clear();
+        _textLayers.Clear();
+        _textLru.Clear();
+        _textInFlight.Clear();
+        ClearSelection();
+
+        if (_documentId >= 0)
+        {
+            _ = _queue.CloseDocumentAsync(_documentId);
+            _documentId = -1;
+        }
+
+        _layout = null;
+        _pageSizes = [];
         Canvas.RemoveFromVisualTree();
     }
 
@@ -644,16 +694,16 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private void RequestTile(TileKey key)
     {
-        if (!_inFlight.Add(key)) return;
-        _ = LoadTileAsync(key, _documentGeneration);
+        if (_documentId < 0 || !_inFlight.Add(key)) return;
+        _ = LoadTileAsync(key, _documentId, _documentGeneration);
     }
 
-    private async Task LoadTileAsync(TileKey key, int generation)
+    private async Task LoadTileAsync(TileKey key, int documentId, int generation)
     {
         try
         {
-            var data = await _queue.RequestTileAsync(key, ZoomLevels.TileSize);
-            if (generation != _documentGeneration) return;
+            var data = await _queue.RequestTileAsync(documentId, key, ZoomLevels.TileSize);
+            if (generation != _documentGeneration || !_isActive) return;
 
             if (data is { } tile)
             {
@@ -680,15 +730,15 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private void EnsureTextLayer(int pageIndex)
     {
-        if (_textLayers.ContainsKey(pageIndex) || !_textInFlight.Add(pageIndex)) return;
-        _ = LoadTextLayerAsync(pageIndex, _documentGeneration);
+        if (_documentId < 0 || _textLayers.ContainsKey(pageIndex) || !_textInFlight.Add(pageIndex)) return;
+        _ = LoadTextLayerAsync(pageIndex, _documentId, _documentGeneration);
     }
 
-    private async Task LoadTextLayerAsync(int pageIndex, int generation)
+    private async Task LoadTextLayerAsync(int pageIndex, int documentId, int generation)
     {
         try
         {
-            var layer = await _queue.RequestTextLayerAsync(pageIndex);
+            var layer = await _queue.RequestTextLayerAsync(documentId, pageIndex);
             if (generation != _documentGeneration) return;
 
             _textLayers[pageIndex] = layer;

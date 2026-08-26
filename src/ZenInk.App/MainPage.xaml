@@ -96,24 +96,38 @@
             </Button>
         </StackPanel>
 
-        <StackPanel
+        <TextBlock
+            x:Name="ViewStatusText"
             Grid.Row="0"
             Margin="0,0,12,0"
             HorizontalAlignment="Right"
-            Orientation="Horizontal"
-            Spacing="12">
-            <TextBlock
-                x:Name="DocumentNameText"
-                VerticalAlignment="Center"
-                MaxWidth="280"
-                Opacity="0.7"
-                TextTrimming="CharacterEllipsis" />
-            <TextBlock
-                x:Name="ViewStatusText"
-                VerticalAlignment="Center"
-                Opacity="0.7" />
-        </StackPanel>
+            VerticalAlignment="Center"
+            Opacity="0.7" />
 
-        <rendering:PdfTiledViewer x:Name="Viewer" Grid.Row="1" />
+        <TabView
+            x:Name="Tabs"
+            Grid.Row="1"
+            AddTabButtonClick="OnAddTabClicked"
+            IsAddTabButtonVisible="True"
+            SelectionChanged="OnTabSelectionChanged"
+            TabCloseRequested="OnTabCloseRequested"
+            TabWidthMode="SizeToContent" />
+
+        <StackPanel
+            x:Name="EmptyState"
+            Grid.Row="1"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="12">
+            <FontIcon
+                HorizontalAlignment="Center"
+                FontSize="40"
+                Glyph="&#xEA90;"
+                Opacity="0.35" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                Opacity="0.6"
+                Text="Abre un plano para empezar" />
+        </StackPanel>
     </Grid>
 </Page>
