@@ -1,0 +1,80 @@
+using System.Text;
+
+namespace ZenInk.Tests;
+
+/// <summary>
+/// Builds small PDFs by hand so the suite has known-good ground truth without
+/// depending on sample files. Content is deliberately asymmetric on both axes,
+/// so any flip, rotation or offset error shows up as ink in the wrong corner.
+/// </summary>
+public static class TestPdf
+{
+    public const int PageWidth = 400;
+    public const int PageHeight = 600;
+
+    /// <summary>A single page with a black rectangle in the top-left of the rendered image.</summary>
+    public static string WriteCornerMark(int rotate)
+    {
+        // PDF space is y-up, so a high y is the visual top.
+        string content = "0 0 0 rg\n0 450 100 150 re f\n";
+        string rotateEntry = rotate == 0 ? "" : $"/Rotate {rotate}";
+
+        return Write($"zenink-corner-{rotate}", content, rotateEntry, withFont: false);
+    }
+
+    /// <summary>A single page with the word ZENINK near the top-left, in a standard font.</summary>
+    public static string WriteText(int rotate)
+    {
+        string content = "BT /F1 36 Tf 30 520 Td (ZENINK) Tj ET\n";
+        string rotateEntry = rotate == 0 ? "" : $"/Rotate {rotate}";
+
+        return Write($"zenink-text-{rotate}", content, rotateEntry, withFont: true);
+    }
+
+    /// <summary>A single page with a black rectangle at an arbitrary spot, for telling documents apart.</summary>
+    public static string WriteRectangle(string name, string rectangle)
+    {
+        return Write(name, $"0 0 0 rg\n{rectangle} re f\n", "", withFont: false);
+    }
+
+    private static string Write(string name, string content, string rotateEntry, bool withFont)
+    {
+        int contentLength = Encoding.ASCII.GetByteCount(content);
+        string resources = withFont ? "/Resources<</Font<</F1 5 0 R>>>>" : "";
+
+        var objects = new List<string>
+        {
+            "<</Type/Catalog/Pages 2 0 R>>",
+            "<</Type/Pages/Kids[3 0 R]/Count 1>>",
+            $"<</Type/Page/Parent 2 0 R/MediaBox[0 0 {PageWidth} {PageHeight}]{rotateEntry}{resources}/Contents 4 0 R>>",
+            $"<</Length {contentLength}>>\nstream\n{content}endstream",
+        };
+
+        if (withFont)
+        {
+            objects.Add("<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>");
+        }
+
+        var sb = new StringBuilder();
+        var offsets = new List<int>();
+        sb.Append("%PDF-1.4\n");
+
+        for (int i = 0; i < objects.Count; i++)
+        {
+            offsets.Add(Encoding.ASCII.GetByteCount(sb.ToString()));
+            sb.Append($"{i + 1} 0 obj\n{objects[i]}\nendobj\n");
+        }
+
+        int xrefOffset = Encoding.ASCII.GetByteCount(sb.ToString());
+        sb.Append($"xref\n0 {objects.Count + 1}\n0000000000 65535 f \n");
+        foreach (int offset in offsets)
+        {
+            sb.Append($"{offset:D10} 00000 n \n");
+        }
+        sb.Append($"trailer\n<</Size {objects.Count + 1}/Root 1 0 R>>\nstartxref\n{xrefOffset}\n%%EOF\n");
+
+        string path = Path.Combine(Path.GetTempPath(), $"{name}.pdf");
+        File.WriteAllBytes(path, Encoding.ASCII.GetBytes(sb.ToString()));
+        return path;
+    }
+}

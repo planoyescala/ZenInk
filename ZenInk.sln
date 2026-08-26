@@ -4,6 +4,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ZenInk.App", "src\ZenInk.App\ZenInk.App.csproj", "{0EB9137A-63DE-426B-BA65-AC659C874DB8}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ZenInk.Tests", "tests\ZenInk.Tests\ZenInk.Tests.csproj", "{BC10C848-90BB-4C69-A614-7D08AC72054D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|ARM64 = Debug|ARM64
@@ -32,6 +34,18 @@ Global
 		{0EB9137A-63DE-426B-BA65-AC659C874DB8}.Release|x86.ActiveCfg = Release|x86
 		{0EB9137A-63DE-426B-BA65-AC659C874DB8}.Release|x86.Build.0 = Release|x86
 		{0EB9137A-63DE-426B-BA65-AC659C874DB8}.Release|x86.Deploy.0 = Release|x86
+		{BC10C848-90BB-4C69-A614-7D08AC72054D}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{BC10C848-90BB-4C69-A614-7D08AC72054D}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{BC10C848-90BB-4C69-A614-7D08AC72054D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BC10C848-90BB-4C69-A614-7D08AC72054D}.Debug|x64.Build.0 = Debug|Any CPU
+		{BC10C848-90BB-4C69-A614-7D08AC72054D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BC10C848-90BB-4C69-A614-7D08AC72054D}.Debug|x86.Build.0 = Debug|Any CPU
+		{BC10C848-90BB-4C69-A614-7D08AC72054D}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{BC10C848-90BB-4C69-A614-7D08AC72054D}.Release|ARM64.Build.0 = Release|Any CPU
+		{BC10C848-90BB-4C69-A614-7D08AC72054D}.Release|x64.ActiveCfg = Release|Any CPU
+		{BC10C848-90BB-4C69-A614-7D08AC72054D}.Release|x64.Build.0 = Release|Any CPU
+		{BC10C848-90BB-4C69-A614-7D08AC72054D}.Release|x86.ActiveCfg = Release|Any CPU
+		{BC10C848-90BB-4C69-A614-7D08AC72054D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

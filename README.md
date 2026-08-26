@@ -30,8 +30,22 @@ nativos de PDFium (FreeType, ICU, libjpeg-turbo, lcms2).
 
 ```
 src/
-  ZenInk.App/     # App WinUI 3
+  ZenInk.App/       # App WinUI 3
+tests/
+  ZenInk.Tests/     # Comprobaciones del motor de renderizado
 ```
+
+## Pruebas
+
+```bash
+dotnet run --project tests/ZenInk.Tests -c Release
+```
+
+Comprueban el motor sin abrir ninguna ventana, contra PDFs sintéticos generados
+en el momento: orientación bajo las cuatro rotaciones de página, que cada tile
+coincide píxel a píxel con el render de página completa, que las cajas de texto
+siguen a la tinta dibujada, el apilado de hojas, y que un documento no puede
+alterar a otro al cerrarse o fallar.
 
 ## Hitos
 

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ZenInk.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="PDFiumCore" Version="153.0.7999" />
+  </ItemGroup>
+
+  <!--
+    The rendering engine is compiled straight from the app rather than
+    referenced, because the app is a WinUI executable and these types have no
+    UI dependency of their own. Tests therefore exercise the very sources that
+    ship, with no duplicated copy to drift.
+
+    A ZenInk.Core library would be the tidier home for them; that split belongs
+    with the next architectural pass rather than here.
+  -->
+  <ItemGroup>
+    <Compile Include="../../src/ZenInk.App/Rendering/DocumentLayout.cs" Link="Engine/DocumentLayout.cs" />
+    <Compile Include="../../src/ZenInk.App/Rendering/PageTextLayer.cs" Link="Engine/PageTextLayer.cs" />
+    <Compile Include="../../src/ZenInk.App/Rendering/PdfRenderQueue.cs" Link="Engine/PdfRenderQueue.cs" />
+    <Compile Include="../../src/ZenInk.App/Rendering/TileKey.cs" Link="Engine/TileKey.cs" />
+    <Compile Include="../../src/ZenInk.App/Rendering/ZoomLevels.cs" Link="Engine/ZoomLevels.cs" />
+  </ItemGroup>
+
+</Project>
