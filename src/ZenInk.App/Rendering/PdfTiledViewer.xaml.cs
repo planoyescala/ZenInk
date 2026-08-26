@@ -2,13 +2,22 @@ using System.Numerics;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.Graphics.DirectX;
 using Windows.System;
+using Windows.UI;
 
 namespace ZenInk_App.Rendering;
+
+public enum ViewerTool
+{
+    Pan,
+    SelectText,
+}
 
 /// <summary>
 /// Scrolls a whole PDF as one continuous vertical strip of tiled pages.
@@ -31,25 +40,44 @@ public sealed partial class PdfTiledViewer : UserControl
     private const long CacheBudgetBytes = 384L * 1024 * 1024;
     private const double WheelScrollDips = 90.0;
     private const double ZoomStep = 1.15;
+    private const int MaxTextLayers = 24;
+
+    /// <summary>How far off a glyph the pointer may be and still select it, in points.</summary>
+    private const float SelectionSnapPt = 24f;
+
+    private static readonly Color SelectionFill = Color.FromArgb(70, 0, 103, 192);
 
     private readonly PdfRenderQueue _queue = new();
     private readonly TileCache _cache = new(CacheBudgetBytes);
     private readonly HashSet<TileKey> _inFlight = new();
+    private readonly Dictionary<int, PageTextLayer> _textLayers = new();
+    private readonly LinkedList<int> _textLru = new();
+    private readonly HashSet<int> _textInFlight = new();
 
     private DocumentLayout? _layout;
     private double _scale = 1.0;
     private Vector2 _origin;
     private bool _pendingFit;
     private bool _isPanning;
+    private bool _isSelecting;
     private Point _lastPointerPosition;
+    private ViewerTool _tool = ViewerTool.Pan;
+
+    /// <summary>Bumped on every open, so results for a previous document are discarded.</summary>
+    private int _documentGeneration;
+
+    private int _selectionPage = -1;
+    private int _selectionAnchor = -1;
+    private int _selectionFocus = -1;
 
     public PdfTiledViewer()
     {
         InitializeComponent();
         Unloaded += OnUnloaded;
+        UpdateCursor();
     }
 
-    /// <summary>Raised when the visible page or zoom level changes.</summary>
+    /// <summary>Raised when the visible page, zoom level or selection changes.</summary>
     public event EventHandler? ViewChanged;
 
     public int PageCount => _layout?.PageCount ?? 0;
@@ -66,12 +94,37 @@ public sealed partial class PdfTiledViewer : UserControl
 
     public double ZoomPercent => _scale * 100.0;
 
+    public bool HasSelection => _selectionPage >= 0 && _selectionAnchor >= 0 && _selectionFocus >= 0;
+
+    public ViewerTool Tool
+    {
+        get => _tool;
+        set
+        {
+            if (_tool == value) return;
+            _tool = value;
+            if (value == ViewerTool.Pan)
+            {
+                ClearSelection();
+            }
+            UpdateCursor();
+            Canvas.Invalidate();
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     public async Task OpenAsync(string path)
     {
         var info = await _queue.OpenDocumentAsync(path);
 
+        _documentGeneration++;
         _cache.Clear();
         _inFlight.Clear();
+        _textLayers.Clear();
+        _textLru.Clear();
+        _textInFlight.Clear();
+        ClearSelection();
+
         _layout = new DocumentLayout(info.Pages);
         _origin = Vector2.Zero;
         _pendingFit = true;
@@ -86,11 +139,62 @@ public sealed partial class PdfTiledViewer : UserControl
         Canvas.Invalidate();
     }
 
+    public string? GetSelectedText()
+    {
+        if (!HasSelection) return null;
+        if (!_textLayers.TryGetValue(_selectionPage, out var layer)) return null;
+
+        string text = layer.GetText(_selectionAnchor, _selectionFocus);
+        return string.IsNullOrEmpty(text) ? null : text;
+    }
+
+    public void CopySelection()
+    {
+        if (GetSelectedText() is not { } text) return;
+
+        var package = new DataPackage { RequestedOperation = DataPackageOperation.Copy };
+        package.SetText(text);
+        Clipboard.SetContent(package);
+    }
+
     private void OnUnloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
         _cache.Clear();
         _queue.Dispose();
         Canvas.RemoveFromVisualTree();
+    }
+
+    private void UpdateCursor() => ProtectedCursor = InputSystemCursor.Create(
+        _tool == ViewerTool.SelectText ? InputSystemCursorShape.IBeam : InputSystemCursorShape.Hand);
+
+    private void ClearSelection()
+    {
+        _selectionPage = -1;
+        _selectionAnchor = -1;
+        _selectionFocus = -1;
+    }
+
+    private void OnCopyAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        CopySelection();
+        args.Handled = true;
+    }
+
+    private void OnSelectAllAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (_layout is not { } layout || _tool != ViewerTool.SelectText) return;
+
+        int pageIndex = layout.DominantPageIndex(ViewportInDocSpace().Top, ViewportInDocSpace().Bottom);
+        if (_textLayers.TryGetValue(pageIndex, out var layer) && layer.Count > 0)
+        {
+            _selectionPage = pageIndex;
+            _selectionAnchor = 0;
+            _selectionFocus = layer.Count - 1;
+            Canvas.Invalidate();
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        args.Handled = true;
     }
 
     // --- viewport -------------------------------------------------------
@@ -165,6 +269,28 @@ public sealed partial class PdfTiledViewer : UserControl
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Maps a pointer position to the page under it and the point in that page's local space.</summary>
+    private bool TryHitPage(Point position, out PageBox page, out float localX, out float localY)
+    {
+        page = default;
+        localX = localY = 0;
+        if (_layout is not { } layout) return false;
+
+        double docX = _origin.X + position.X / _scale;
+        double docY = _origin.Y + position.Y / _scale;
+
+        foreach (var candidate in layout.Pages)
+        {
+            if (docY < candidate.YPt || docY > candidate.BottomPt) continue;
+            page = candidate;
+            localX = (float)(docX - candidate.XPt);
+            localY = (float)(docY - candidate.YPt);
+            return true;
+        }
+
+        return false;
+    }
+
     // --- input ----------------------------------------------------------
 
     private void OnCanvasSizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
@@ -205,18 +331,39 @@ public sealed partial class PdfTiledViewer : UserControl
         if (_layout is null) return;
 
         var point = e.GetCurrentPoint(Canvas);
-        if (!point.Properties.IsLeftButtonPressed && !point.Properties.IsMiddleButtonPressed) return;
+        bool left = point.Properties.IsLeftButtonPressed;
+        bool middle = point.Properties.IsMiddleButtonPressed;
+        if (!left && !middle) return;
 
-        _isPanning = true;
-        _lastPointerPosition = point.Position;
+        Canvas.Focus(Microsoft.UI.Xaml.FocusState.Pointer);
+
+        // Middle-drag always pans, whichever tool is active.
+        if (left && _tool == ViewerTool.SelectText)
+        {
+            BeginSelection(point.Position);
+        }
+        else
+        {
+            _isPanning = true;
+            _lastPointerPosition = point.Position;
+        }
+
         Canvas.CapturePointer(e.Pointer);
     }
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (!_isPanning || _layout is null) return;
-
+        if (_layout is null) return;
         var position = e.GetCurrentPoint(Canvas).Position;
+
+        if (_isSelecting)
+        {
+            ExtendSelection(position);
+            return;
+        }
+
+        if (!_isPanning) return;
+
         var deltaDips = new Vector2(
             (float)(position.X - _lastPointerPosition.X),
             (float)(position.Y - _lastPointerPosition.Y));
@@ -227,9 +374,49 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
-        if (!_isPanning) return;
+        if (!_isPanning && !_isSelecting) return;
         _isPanning = false;
+        _isSelecting = false;
         Canvas.ReleasePointerCapture(e.Pointer);
+    }
+
+    private void BeginSelection(Point position)
+    {
+        if (!TryHitPage(position, out var page, out float localX, out float localY)) return;
+        if (!_textLayers.TryGetValue(page.Index, out var layer)) return;
+
+        int index = layer.HitTest(localX, localY, SelectionSnapPt);
+        if (index < 0)
+        {
+            ClearSelection();
+        }
+        else
+        {
+            _selectionPage = page.Index;
+            _selectionAnchor = index;
+            _selectionFocus = index;
+            _isSelecting = true;
+        }
+
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ExtendSelection(Point position)
+    {
+        if (_selectionPage < 0) return;
+        if (!TryHitPage(position, out var page, out float localX, out float localY)) return;
+
+        // Selection stays within the page it started on.
+        if (page.Index != _selectionPage) return;
+        if (!_textLayers.TryGetValue(_selectionPage, out var layer)) return;
+
+        int index = layer.HitTest(localX, localY, float.MaxValue);
+        if (index < 0 || index == _selectionFocus) return;
+
+        _selectionFocus = index;
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // --- drawing --------------------------------------------------------
@@ -265,6 +452,12 @@ public sealed partial class PdfTiledViewer : UserControl
                 }
 
                 DrawPageTiles(ds, page, level, view, requestMissing: true);
+                DrawSelection(ds, page);
+            }
+
+            if (_tool == ViewerTool.SelectText)
+            {
+                EnsureTextLayer(page.Index);
             }
         }
     }
@@ -317,17 +510,35 @@ public sealed partial class PdfTiledViewer : UserControl
         }
     }
 
+    private void DrawSelection(CanvasDrawingSession ds, PageBox page)
+    {
+        if (!HasSelection || page.Index != _selectionPage) return;
+        if (!_textLayers.TryGetValue(_selectionPage, out var layer)) return;
+
+        foreach (var run in layer.BuildRuns(_selectionAnchor, _selectionFocus))
+        {
+            var rect = new Rect(
+                (page.XPt + run.Left - _origin.X) * _scale,
+                (page.YPt + run.Top - _origin.Y) * _scale,
+                Math.Max(0, (run.Right - run.Left) * _scale),
+                Math.Max(0, (run.Bottom - run.Top) * _scale));
+            ds.FillRectangle(rect, SelectionFill);
+        }
+    }
+
     private void RequestTile(TileKey key)
     {
         if (!_inFlight.Add(key)) return;
-        _ = LoadTileAsync(key);
+        _ = LoadTileAsync(key, _documentGeneration);
     }
 
-    private async Task LoadTileAsync(TileKey key)
+    private async Task LoadTileAsync(TileKey key, int generation)
     {
         try
         {
             var data = await _queue.RequestTileAsync(key, ZoomLevels.TileSize);
+            if (generation != _documentGeneration) return;
+
             if (data is { } tile)
             {
                 var bitmap = CanvasBitmap.CreateFromBytes(
@@ -348,6 +559,45 @@ public sealed partial class PdfTiledViewer : UserControl
         finally
         {
             _inFlight.Remove(key);
+        }
+    }
+
+    private void EnsureTextLayer(int pageIndex)
+    {
+        if (_textLayers.ContainsKey(pageIndex) || !_textInFlight.Add(pageIndex)) return;
+        _ = LoadTextLayerAsync(pageIndex, _documentGeneration);
+    }
+
+    private async Task LoadTextLayerAsync(int pageIndex, int generation)
+    {
+        try
+        {
+            var layer = await _queue.RequestTextLayerAsync(pageIndex);
+            if (generation != _documentGeneration) return;
+
+            _textLayers[pageIndex] = layer;
+            _textLru.Remove(pageIndex);
+            _textLru.AddLast(pageIndex);
+
+            while (_textLru.Count > MaxTextLayers)
+            {
+                int oldest = _textLru.First!.Value;
+                _textLru.RemoveFirst();
+                if (oldest != _selectionPage)
+                {
+                    _textLayers.Remove(oldest);
+                }
+            }
+
+            Canvas.Invalidate();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"ZenInk: fallo al extraer texto de la página {pageIndex}: {ex}");
+        }
+        finally
+        {
+            _textInFlight.Remove(pageIndex);
         }
     }
 }

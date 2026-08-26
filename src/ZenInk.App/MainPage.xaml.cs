@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml.Controls;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
+using ZenInk_App.Rendering;
 
 namespace ZenInk_App;
 
@@ -30,13 +31,13 @@ public sealed partial class MainPage : Page
         {
             await Viewer.OpenAsync(file.Path);
             DocumentNameText.Text = file.Name;
-            FitButton.IsEnabled = true;
+            SetToolButtonsEnabled(true);
             UpdateViewStatus();
         }
         catch (Exception ex)
         {
             DocumentNameText.Text = $"Error al abrir: {ex.Message}";
-            FitButton.IsEnabled = false;
+            SetToolButtonsEnabled(false);
         }
         finally
         {
@@ -44,7 +45,25 @@ public sealed partial class MainPage : Page
         }
     }
 
+    private void SetToolButtonsEnabled(bool enabled)
+    {
+        FitButton.IsEnabled = enabled;
+        PanToolButton.IsEnabled = enabled;
+        TextToolButton.IsEnabled = enabled;
+    }
+
     private void OnFitClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => Viewer.FitToWidth();
+
+    private void OnPanToolClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => SelectTool(ViewerTool.Pan);
+
+    private void OnTextToolClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => SelectTool(ViewerTool.SelectText);
+
+    private void SelectTool(ViewerTool tool)
+    {
+        Viewer.Tool = tool;
+        PanToolButton.IsChecked = tool == ViewerTool.Pan;
+        TextToolButton.IsChecked = tool == ViewerTool.SelectText;
+    }
 
     private void UpdateViewStatus()
     {
@@ -54,6 +73,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        ViewStatusText.Text = $"Hoja {Viewer.CurrentPageNumber} de {Viewer.PageCount}  ·  {Viewer.ZoomPercent:0}%";
+        string selection = Viewer.HasSelection ? "  ·  texto seleccionado" : string.Empty;
+        ViewStatusText.Text = $"Hoja {Viewer.CurrentPageNumber} de {Viewer.PageCount}  ·  {Viewer.ZoomPercent:0}%{selection}";
     }
 }

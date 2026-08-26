@@ -31,6 +31,9 @@ public sealed class PdfRenderQueue : IDisposable
     private readonly object _tileGate = new();
     private readonly Dictionary<TileKey, TileJob> _pendingTiles = new();
     private readonly List<TileKey> _tileOrder = new();
+    private readonly object _textGate = new();
+    private readonly Dictionary<int, TaskCompletionSource<PageTextLayer>> _pendingText = new();
+    private readonly List<int> _textOrder = new();
     private volatile bool _disposed;
 
     private FpdfDocumentT? _document;
@@ -86,6 +89,28 @@ public sealed class PdfRenderQueue : IDisposable
         }
     }
 
+    /// <summary>
+    /// Extracts a page's glyph boxes. Served at lower priority than tiles, so
+    /// text extraction on a dense sheet can never delay the tiles the user is
+    /// currently looking at.
+    /// </summary>
+    public Task<PageTextLayer> RequestTextLayerAsync(int pageIndex)
+    {
+        lock (_textGate)
+        {
+            if (_pendingText.TryGetValue(pageIndex, out var existing))
+            {
+                return existing.Task;
+            }
+
+            var tcs = new TaskCompletionSource<PageTextLayer>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pendingText[pageIndex] = tcs;
+            _textOrder.Add(pageIndex);
+            _signal.Release();
+            return tcs.Task;
+        }
+    }
+
     private void WorkerLoop()
     {
         fpdfview.FPDF_InitLibrary();
@@ -103,15 +128,28 @@ public sealed class PdfRenderQueue : IDisposable
                 }
 
                 TileJob? job = DequeueNewestTile();
-                if (job is null) continue;
+                if (job is not null)
+                {
+                    try
+                    {
+                        job.Completion.TrySetResult(RenderTileCore(job.Key, job.TileSize));
+                    }
+                    catch (Exception ex)
+                    {
+                        job.Completion.TrySetException(ex);
+                    }
+                    continue;
+                }
+
+                if (DequeueNewestText() is not { } textJob) continue;
 
                 try
                 {
-                    job.Completion.TrySetResult(RenderTileCore(job.Key, job.TileSize));
+                    textJob.Completion.TrySetResult(ExtractTextCore(textJob.PageIndex));
                 }
                 catch (Exception ex)
                 {
-                    job.Completion.TrySetException(ex);
+                    textJob.Completion.TrySetException(ex);
                 }
             }
         }
@@ -131,6 +169,18 @@ public sealed class PdfRenderQueue : IDisposable
             _tileOrder.RemoveAt(_tileOrder.Count - 1);
             _pendingTiles.Remove(key, out var job);
             return job;
+        }
+    }
+
+    private (int PageIndex, TaskCompletionSource<PageTextLayer> Completion)? DequeueNewestText()
+    {
+        lock (_textGate)
+        {
+            if (_textOrder.Count == 0) return null;
+            int pageIndex = _textOrder[^1];
+            _textOrder.RemoveAt(_textOrder.Count - 1);
+            if (!_pendingText.Remove(pageIndex, out var tcs)) return null;
+            return (pageIndex, tcs);
         }
     }
 
@@ -251,6 +301,97 @@ public sealed class PdfRenderQueue : IDisposable
         finally
         {
             fpdfview.FPDFBitmapDestroy(bitmap);
+        }
+    }
+
+    /// <summary>
+    /// Affine map from PDF page space (y up, unrotated) to page-local render
+    /// space (y down, top-left origin, /Rotate applied).
+    /// </summary>
+    private readonly record struct PageTransform(float A, float B, float C, float D, float E, float F)
+    {
+        public (float X, float Y) Apply(double px, double py) =>
+            ((float)(A * px + C * py + E), (float)(B * px + D * py + F));
+    }
+
+    /// <summary>
+    /// Derives the page transform by asking PDFium itself to map three widely
+    /// separated points, rather than reconstructing the rotation maths by hand.
+    /// That keeps the text layer aligned with whatever FPDF_RenderPageBitmap
+    /// draws, including any page rotation, by construction.
+    /// </summary>
+    private static PageTransform BuildPageTransform(FpdfPageT page)
+    {
+        // Sub-point precision for the integer device coordinates PDFium returns,
+        // and a long sample span so the rounding error stays negligible.
+        const int Precision = 64;
+        const double Span = 1000.0;
+
+        int sizeX = Math.Max(1, (int)Math.Round(fpdfview.FPDF_GetPageWidthF(page) * Precision));
+        int sizeY = Math.Max(1, (int)Math.Round(fpdfview.FPDF_GetPageHeightF(page) * Precision));
+
+        int x0 = 0, y0 = 0, x1 = 0, y1 = 0, x2 = 0, y2 = 0;
+        fpdfview.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, 0, 0, 0, ref x0, ref y0);
+        fpdfview.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, 0, Span, 0, ref x1, ref y1);
+        fpdfview.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, 0, 0, Span, ref x2, ref y2);
+
+        return new PageTransform(
+            (float)((x1 - x0) / Span / Precision),
+            (float)((y1 - y0) / Span / Precision),
+            (float)((x2 - x0) / Span / Precision),
+            (float)((y2 - y0) / Span / Precision),
+            x0 / (float)Precision,
+            y0 / (float)Precision);
+    }
+
+    private PageTextLayer ExtractTextCore(int pageIndex)
+    {
+        var page = LoadPageCore(pageIndex);
+        var transform = BuildPageTransform(page);
+
+        var textPage = fpdf_text.FPDFTextLoadPage(page);
+        if (textPage is null)
+        {
+            return new PageTextLayer(pageIndex, []);
+        }
+
+        try
+        {
+            int count = Math.Max(0, fpdf_text.FPDFTextCountChars(textPage));
+            var chars = new TextChar[count];
+
+            for (int i = 0; i < count; i++)
+            {
+                char value = (char)fpdf_text.FPDFTextGetUnicode(textPage, i);
+
+                double left = 0, right = 0, bottom = 0, top = 0;
+                if (fpdf_text.FPDFTextGetCharBox(textPage, i, ref left, ref right, ref bottom, ref top) == 0)
+                {
+                    chars[i] = new TextChar(value, 0, 0, 0, 0);
+                    continue;
+                }
+
+                // Transform all four corners: under a 90/270 degree page
+                // rotation the axes swap, so taking only two corners would
+                // produce an inverted box.
+                var c1 = transform.Apply(left, bottom);
+                var c2 = transform.Apply(right, bottom);
+                var c3 = transform.Apply(left, top);
+                var c4 = transform.Apply(right, top);
+
+                chars[i] = new TextChar(
+                    value,
+                    Math.Min(Math.Min(c1.X, c2.X), Math.Min(c3.X, c4.X)),
+                    Math.Min(Math.Min(c1.Y, c2.Y), Math.Min(c3.Y, c4.Y)),
+                    Math.Max(Math.Max(c1.X, c2.X), Math.Max(c3.X, c4.X)),
+                    Math.Max(Math.Max(c1.Y, c2.Y), Math.Max(c3.Y, c4.Y)));
+            }
+
+            return new PageTextLayer(pageIndex, chars);
+        }
+        finally
+        {
+            fpdf_text.FPDFTextClosePage(textPage);
         }
     }
 

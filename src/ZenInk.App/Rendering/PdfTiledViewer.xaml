@@ -8,10 +8,16 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
+    <UserControl.KeyboardAccelerators>
+        <KeyboardAccelerator Key="C" Modifiers="Control" Invoked="OnCopyAccelerator" />
+        <KeyboardAccelerator Key="A" Modifiers="Control" Invoked="OnSelectAllAccelerator" />
+    </UserControl.KeyboardAccelerators>
+
     <Grid Background="{ThemeResource LayerFillColorDefaultBrush}">
         <canvas:CanvasControl
             x:Name="Canvas"
             ClearColor="Transparent"
+            IsTabStop="True"
             Draw="OnDraw"
             SizeChanged="OnCanvasSizeChanged"
             PointerWheelChanged="OnPointerWheelChanged"

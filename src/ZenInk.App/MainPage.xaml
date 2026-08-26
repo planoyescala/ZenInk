@@ -10,7 +10,7 @@
     mc:Ignorable="d">
 
     <Grid RowDefinitions="48,*" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
-        <Grid Grid.Row="0" Padding="8,0" ColumnDefinitions="Auto,Auto,*,Auto">
+        <Grid Grid.Row="0" Padding="8,0" ColumnDefinitions="Auto,Auto,Auto,*,Auto">
             <Button Grid.Column="0" x:Name="OpenButton" Click="OnOpenClicked">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <FontIcon Glyph="&#xE8E5;" FontSize="16" />
@@ -18,10 +18,32 @@
                 </StackPanel>
             </Button>
 
-            <Button
+            <StackPanel
                 Grid.Column="1"
+                Margin="12,0,0,0"
+                Orientation="Horizontal"
+                Spacing="2">
+                <ToggleButton
+                    x:Name="PanToolButton"
+                    Click="OnPanToolClicked"
+                    IsChecked="True"
+                    IsEnabled="False"
+                    ToolTipService.ToolTip="Mano — arrastrar para desplazar">
+                    <FontIcon Glyph="&#xE7C2;" FontSize="16" />
+                </ToggleButton>
+                <ToggleButton
+                    x:Name="TextToolButton"
+                    Click="OnTextToolClicked"
+                    IsEnabled="False"
+                    ToolTipService.ToolTip="Seleccionar texto (Ctrl+C para copiar)">
+                    <FontIcon Glyph="&#xE8E9;" FontSize="16" />
+                </ToggleButton>
+            </StackPanel>
+
+            <Button
+                Grid.Column="2"
                 x:Name="FitButton"
-                Margin="4,0,0,0"
+                Margin="12,0,0,0"
                 Click="OnFitClicked"
                 IsEnabled="False"
                 ToolTipService.ToolTip="Ajustar al ancho">
@@ -30,7 +52,7 @@
 
             <TextBlock
                 x:Name="DocumentNameText"
-                Grid.Column="2"
+                Grid.Column="3"
                 Margin="12,0"
                 VerticalAlignment="Center"
                 Opacity="0.7"
@@ -38,7 +60,7 @@
 
             <TextBlock
                 x:Name="ViewStatusText"
-                Grid.Column="3"
+                Grid.Column="4"
                 Margin="0,0,4,0"
                 VerticalAlignment="Center"
                 Opacity="0.7" />
