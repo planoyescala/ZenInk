@@ -1,0 +1,32 @@
+## .NET / Visual Studio / WinUI 3
+bin/
+obj/
+Debug/
+Release/
+x64/
+x86/
+ARM64/
+AppPackages/
+BundleArtifacts/
+*.user
+*.suo
+.vs/
+*.received.*
+
+## Rider / VS Code
+.idea/
+.vscode/
+
+## MSIX / packaging
+*.appx
+*.appxbundle
+*.appxupload
+*.msix
+*.msixbundle
+*.cer
+*.pfx
+
+## OS
+Thumbs.db
+desktop.ini
+.DS_Store

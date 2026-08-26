@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "ZenInk.App (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "ZenInk.App (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
