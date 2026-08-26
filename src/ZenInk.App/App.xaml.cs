@@ -22,7 +22,11 @@ namespace ZenInk_App;
 public partial class App : Application
 {
     private Window? _window;
-    
+
+    public new static App Current => (App)Application.Current;
+
+    public Window MainWindow => _window ?? throw new InvalidOperationException("La ventana principal aún no se ha creado.");
+
     /// <summary>
     /// Initializes the singleton application object.  This is the first line of authored code
     /// executed, and as such is the logical equivalent of main() or WinMain().

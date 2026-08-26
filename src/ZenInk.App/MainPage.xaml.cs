@@ -1,20 +1,42 @@
 using Microsoft.UI.Xaml.Controls;
-
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
+using Windows.Storage;
+using Windows.Storage.Pickers;
+using WinRT.Interop;
 
 namespace ZenInk_App;
 
-/// <summary>
-/// The main content page displayed inside the application window.
-/// Add your UI logic, event handlers, and data binding here.
-/// </summary>
 public sealed partial class MainPage : Page
 {
     public MainPage()
     {
         InitializeComponent();
+    }
 
-        // TODO: Add your initialization logic here.
+    private async void OnOpenClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        var picker = new FileOpenPicker();
+        var hwnd = WindowNative.GetWindowHandle(App.Current.MainWindow);
+        InitializeWithWindow.Initialize(picker, hwnd);
+
+        picker.FileTypeFilter.Add(".pdf");
+        picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+
+        StorageFile? file = await picker.PickSingleFileAsync();
+        if (file is null) return;
+
+        OpenButton.IsEnabled = false;
+        try
+        {
+            await Viewer.OpenAsync(file.Path);
+            DocumentNameText.Text = file.Name;
+        }
+        catch (Exception ex)
+        {
+            DocumentNameText.Text = $"Error al abrir: {ex.Message}";
+        }
+        finally
+        {
+            OpenButton.IsEnabled = true;
+        }
     }
 }

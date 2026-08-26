@@ -6,13 +6,26 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:ZenInk_App"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:rendering="using:ZenInk_App.Rendering"
     mc:Ignorable="d">
 
-    <!--
-        This is the main content area of your application.
-        Add your UI elements here — for example, controls, layouts, and data-bound views.
-        Use 'dotnet new winui-page' to create additional pages and navigate to them via
-        the Frame in MainWindow (RootFrame).
-    -->
-    <Grid />
+    <Grid RowDefinitions="48,*" Background="{ThemeResource LayerFillColorDefaultBrush}">
+        <Grid Grid.Row="0" Padding="8,0" ColumnDefinitions="Auto,*">
+            <Button Grid.Column="0" x:Name="OpenButton" Click="OnOpenClicked">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE8E5;" FontSize="16" />
+                    <TextBlock Text="Abrir" />
+                </StackPanel>
+            </Button>
+            <TextBlock
+                x:Name="DocumentNameText"
+                Grid.Column="1"
+                Margin="12,0,0,0"
+                VerticalAlignment="Center"
+                Opacity="0.7"
+                TextTrimming="CharacterEllipsis" />
+        </Grid>
+
+        <rendering:PdfTiledViewer x:Name="Viewer" Grid.Row="1" />
+    </Grid>
 </Page>
