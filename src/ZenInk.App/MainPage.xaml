@@ -94,6 +94,15 @@
                 ToolTipService.ToolTip="Ajustar al ancho">
                 <FontIcon Glyph="&#xE9A6;" FontSize="16" />
             </Button>
+
+            <ToggleButton
+                x:Name="LineWeightButton"
+                Click="OnLineWeightClicked"
+                IsChecked="True"
+                IsEnabled="False"
+                ToolTipService.ToolTip="Grosores de línea — desactivar dibuja todas las líneas finas">
+                <TextBlock Text="Grosores" />
+            </ToggleButton>
         </StackPanel>
 
         <TextBlock

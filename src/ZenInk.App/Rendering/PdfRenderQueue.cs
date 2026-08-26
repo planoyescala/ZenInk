@@ -31,6 +31,9 @@ public sealed class PdfRenderQueue : IDisposable
     /// <summary>Parsed pages held open per document. Each retains its content, so this is capped.</summary>
     private const int MaxLoadedPagesPerDocument = 6;
 
+    private const int PageObjectTypePath = 2;
+    private const int PageObjectTypeForm = 5;
+
     private static readonly Lazy<PdfRenderQueue> LazyShared = new(() => new PdfRenderQueue());
 
     public static PdfRenderQueue Shared => LazyShared.Value;
@@ -51,6 +54,9 @@ public sealed class PdfRenderQueue : IDisposable
     private int _nextDocumentId;
 
     private readonly Dictionary<int, OpenDocument> _documents = new();
+
+    /// <summary>Documents currently drawing every stroke as a hairline. Worker thread only.</summary>
+    private readonly HashSet<int> _thinLineDocuments = [];
 
     private readonly record struct TileRequest(int DocumentId, TileKey Key);
 
@@ -117,6 +123,33 @@ public sealed class PdfRenderQueue : IDisposable
         DropPendingWork(documentId);
         EnqueueControl(() =>
         {
+            if (_documents.TryGetValue(documentId, out var document))
+            {
+                ClosePages(document);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Draws every stroke at hairline width, or restores the document's own
+    /// widths. Restoring works by dropping the parsed pages: reloading reparses
+    /// them from the content stream, which brings the original widths back
+    /// without having to remember them per object.
+    /// </summary>
+    public void SetThinLines(int documentId, bool enabled)
+    {
+        DropPendingWork(documentId);
+        EnqueueControl(() =>
+        {
+            if (enabled)
+            {
+                _thinLineDocuments.Add(documentId);
+            }
+            else
+            {
+                _thinLineDocuments.Remove(documentId);
+            }
+
             if (_documents.TryGetValue(documentId, out var document))
             {
                 ClosePages(document);
@@ -345,6 +378,11 @@ public sealed class PdfRenderQueue : IDisposable
             throw new InvalidOperationException($"No se pudo cargar la página {pageIndex}.");
         }
 
+        if (_thinLineDocuments.Contains(documentId))
+        {
+            ApplyHairlineStrokes(page);
+        }
+
         document.Pages[pageIndex] = page;
         document.PageLru.AddLast(pageIndex);
 
@@ -359,6 +397,46 @@ public sealed class PdfRenderQueue : IDisposable
         }
 
         return page;
+    }
+
+    /// <summary>
+    /// Forces every stroked path on the page to zero width, which PDFium draws
+    /// as a one-pixel hairline. Applied once per page load, since the parsed
+    /// objects are what rendering walks.
+    /// </summary>
+    private static void ApplyHairlineStrokes(FpdfPageT page)
+    {
+        int count = fpdf_edit.FPDFPageCountObjects(page);
+        for (int i = 0; i < count; i++)
+        {
+            if (fpdf_edit.FPDFPageGetObject(page, i) is { } pageObject)
+            {
+                ApplyHairlineToObject(pageObject);
+            }
+        }
+    }
+
+    private static void ApplyHairlineToObject(FpdfPageobjectT pageObject)
+    {
+        int type = fpdf_edit.FPDFPageObjGetType(pageObject);
+
+        if (type == PageObjectTypeForm)
+        {
+            // Drawings exported from CAD often nest their geometry inside form
+            // XObjects, so the walk has to descend rather than stop at the top.
+            int inner = fpdf_edit.FPDFFormObjCountObjects(pageObject);
+            for (int i = 0; i < inner; i++)
+            {
+                if (fpdf_edit.FPDFFormObjGetObject(pageObject, (ulong)i) is { } child)
+                {
+                    ApplyHairlineToObject(child);
+                }
+            }
+        }
+        else if (type == PageObjectTypePath)
+        {
+            fpdf_edit.FPDFPageObjSetStrokeWidth(pageObject, 0f);
+        }
     }
 
     private TileBitmapData RenderTileCore(TileRequest request, int tileSize)
@@ -518,6 +596,7 @@ public sealed class PdfRenderQueue : IDisposable
 
     private void CloseDocumentCore(int documentId)
     {
+        _thinLineDocuments.Remove(documentId);
         if (!_documents.Remove(documentId, out var document)) return;
 
         ClosePages(document);

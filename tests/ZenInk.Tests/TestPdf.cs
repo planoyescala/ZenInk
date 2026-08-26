@@ -37,6 +37,24 @@ public static class TestPdf
         return Write(name, $"0 0 0 rg\n{rectangle} re f\n", "", withFont: false);
     }
 
+    /// <summary>
+    /// A single page holding stroked lines wide enough that forcing them to
+    /// hairline is unmistakable, unlike the sub-point strokes typical of a
+    /// real drawing.
+    /// </summary>
+    public static string WriteThickLines(string name, float strokeWidth)
+    {
+        var content = new StringBuilder();
+        content.Append("0 0 0 RG\n");
+        content.Append($"{strokeWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)} w\n");
+        for (int i = 0; i < 6; i++)
+        {
+            int y = 80 + i * 80;
+            content.Append($"40 {y} m 360 {y} l S\n");
+        }
+        return Write(name, content.ToString(), "", withFont: false);
+    }
+
     private static string Write(string name, string content, string rotateEntry, bool withFont)
     {
         int contentLength = Encoding.ASCII.GetByteCount(content);

@@ -91,5 +91,56 @@ public static class RenderQueueTests
         await queue.CloseDocumentAsync(docB.DocumentId);
         File.Delete(pathA);
         File.Delete(pathB);
+
+        await ThinLinesAsync();
+    }
+
+    /// <summary>
+    /// The line-weight toggle must actually thin the strokes, and restoring it
+    /// must bring the authored widths back — which it does by reparsing the
+    /// page rather than remembering per-object widths.
+    /// </summary>
+    private static async Task ThinLinesAsync()
+    {
+        Section("Render queue — line weights");
+
+        const float strokeWidth = 8f;
+        string path = TestPdf.WriteThickLines("zenink-thick", strokeWidth);
+        var queue = PdfRenderQueue.Shared;
+        var document = await queue.OpenDocumentAsync(path);
+
+        static int InkOf(TileBitmapData? tile)
+        {
+            if (tile is not { } t) return -1;
+            int ink = 0;
+            for (int y = 0; y < t.Height; y++)
+            {
+                for (int x = 0; x < t.Width; x++)
+                {
+                    if (Bitmap.IsDark(t.Bgra, t.Width, x, y)) ink++;
+                }
+            }
+            return ink;
+        }
+
+        var key = new TileKey(0, 0, 0, 0);
+
+        int authored = InkOf(await queue.RequestTileAsync(document.DocumentId, key, 512));
+        Check("a thick-stroked page renders ink", authored > 0, $"ink={authored}");
+
+        queue.SetThinLines(document.DocumentId, true);
+        int hairline = InkOf(await queue.RequestTileAsync(document.DocumentId, key, 512));
+
+        Check($"hairline mode thins the strokes ({authored} -> {hairline} px)",
+            hairline > 0 && hairline < authored / 2);
+
+        queue.SetThinLines(document.DocumentId, false);
+        int restored = InkOf(await queue.RequestTileAsync(document.DocumentId, key, 512));
+
+        Check($"restoring brings the authored widths back ({restored} px)",
+            Math.Abs(restored - authored) <= Math.Max(2, authored / 100));
+
+        await queue.CloseDocumentAsync(document.DocumentId);
+        File.Delete(path);
     }
 }

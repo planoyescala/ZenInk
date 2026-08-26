@@ -158,6 +158,16 @@ public sealed partial class MainPage : Page
         UpdateChrome();
     }
 
+    /// <summary>Checked means the document's own line weights; unchecked draws everything hairline.</summary>
+    private void OnLineWeightClicked(object sender, RoutedEventArgs e)
+    {
+        if (ActiveViewer is { } viewer)
+        {
+            viewer.ThinLines = LineWeightButton.IsChecked != true;
+        }
+        UpdateChrome();
+    }
+
     private void OnPreviousPageClicked(object sender, RoutedEventArgs e) => ActiveViewer?.PreviousPage();
 
     private void OnNextPageClicked(object sender, RoutedEventArgs e) => ActiveViewer?.NextPage();
@@ -175,9 +185,11 @@ public sealed partial class MainPage : Page
         TextToolButton.IsEnabled = hasDocument;
         ContinuousModeButton.IsEnabled = hasDocument;
         SingleModeButton.IsEnabled = hasDocument;
+        LineWeightButton.IsEnabled = hasDocument;
         PreviousPageButton.IsEnabled = viewer?.CanGoPrevious ?? false;
         NextPageButton.IsEnabled = viewer?.CanGoNext ?? false;
 
+        LineWeightButton.IsChecked = viewer?.ThinLines != true;
         PanToolButton.IsChecked = viewer?.Tool != ViewerTool.SelectText;
         TextToolButton.IsChecked = viewer?.Tool == ViewerTool.SelectText;
         ContinuousModeButton.IsChecked = viewer?.LayoutMode != ViewerLayoutMode.SinglePage;

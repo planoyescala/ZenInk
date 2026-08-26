@@ -76,6 +76,7 @@ public sealed partial class PdfTiledViewer : UserControl
     private bool _isSelecting;
     private Point _lastPointerPosition;
     private ViewerTool _tool = ViewerTool.Pan;
+    private bool _thinLines;
 
     /// <summary>Bumped on every open, so results for a previous document are discarded.</summary>
     private int _documentGeneration;
@@ -215,6 +216,31 @@ public sealed partial class PdfTiledViewer : UserControl
     public double ZoomPercent => _scale * 100.0;
 
     public bool HasSelection => _selectionPage >= 0 && _selectionAnchor >= 0 && _selectionFocus >= 0;
+
+    /// <summary>
+    /// Draws every stroke as a hairline instead of at its authored width.
+    /// Every cached tile is discarded, since they were rasterized with the
+    /// other setting.
+    /// </summary>
+    public bool ThinLines
+    {
+        get => _thinLines;
+        set
+        {
+            if (_thinLines == value) return;
+            _thinLines = value;
+
+            if (_documentId >= 0)
+            {
+                _queue.SetThinLines(_documentId, value);
+            }
+
+            _cache.Clear();
+            _inFlight.Clear();
+            Canvas.Invalidate();
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     public ViewerTool Tool
     {
