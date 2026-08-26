@@ -33,29 +33,38 @@ public sealed partial class MainPage : Page
         StorageFile? file = await picker.PickSingleFileAsync();
         if (file is null) return;
 
+        await OpenPathInNewTabAsync(file.Path, file.Name);
+    }
+
+    private async Task OpenPathInNewTabAsync(string path, string displayName)
+    {
         OpenButton.IsEnabled = false;
+        TabViewItem? tab = null;
         try
         {
             var viewer = new PdfTiledViewer();
             viewer.ViewChanged += OnViewerViewChanged;
 
-            var tab = new TabViewItem
+            tab = new TabViewItem
             {
-                Header = file.Name,
+                Header = displayName,
                 Content = viewer,
+                // Long sheet names are the norm, so cap the tab and let the
+                // header trim rather than pushing every other tab off-screen.
+                MaxWidth = 240,
                 IconSource = new SymbolIconSource { Symbol = Symbol.Document },
             };
-            ToolTipService.SetToolTip(tab, file.Path);
+            ToolTipService.SetToolTip(tab, path);
 
             Tabs.TabItems.Add(tab);
             Tabs.SelectedItem = tab;
 
-            await viewer.OpenAsync(file.Path);
+            await viewer.OpenAsync(path);
         }
         catch (Exception ex)
         {
-            await ShowErrorAsync(file.Name, ex);
-            CloseTab(Tabs.SelectedItem as TabViewItem);
+            CloseTab(tab);
+            await ShowErrorAsync(displayName, ex);
         }
         finally
         {

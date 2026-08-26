@@ -93,6 +93,21 @@ public sealed partial class PdfTiledViewer : UserControl
     /// <summary>Raised when the visible page, zoom level or selection changes.</summary>
     public event EventHandler? ViewChanged;
 
+    /// <summary>
+    /// Claims all the space on offer. A CanvasControl reports no size of its
+    /// own, so in a host that arranges children at their desired size — a
+    /// TabView's content presenter, for one — this control would otherwise
+    /// collapse to zero height and never draw.
+    /// </summary>
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        var desired = base.MeasureOverride(availableSize);
+
+        double width = double.IsInfinity(availableSize.Width) ? desired.Width : availableSize.Width;
+        double height = double.IsInfinity(availableSize.Height) ? desired.Height : availableSize.Height;
+        return new Size(width, height);
+    }
+
     public int PageCount => _layout?.DocumentPageCount ?? 0;
 
     /// <summary>
