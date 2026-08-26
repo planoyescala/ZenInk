@@ -64,7 +64,7 @@
                 x:Name="SingleModeButton"
                 Click="OnSingleModeClicked"
                 IsEnabled="False"
-                ToolTipService.ToolTip="Hoja única — el desplazamiento no salta de hoja">
+                ToolTipService.ToolTip="Hoja única — la rueda hace zoom, sin saltar de hoja">
                 <TextBlock Text="Hoja" />
             </ToggleButton>
 

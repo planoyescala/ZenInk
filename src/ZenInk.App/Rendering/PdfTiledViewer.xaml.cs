@@ -417,12 +417,20 @@ public sealed partial class PdfTiledViewer : UserControl
 
         var modifiers = e.KeyModifiers;
         double notches = delta / 120.0;
+        bool shift = modifiers.HasFlag(VirtualKeyModifiers.Shift);
 
-        if (modifiers.HasFlag(VirtualKeyModifiers.Control))
+        // On a single sheet the wheel zooms, the way a CAD viewport behaves —
+        // there is nowhere to scroll to, since no other page shares the space.
+        // In continuous view the wheel has to scroll the strip, so zooming
+        // moves to Ctrl+wheel.
+        bool zoom = modifiers.HasFlag(VirtualKeyModifiers.Control)
+            || (_layoutMode == ViewerLayoutMode.SinglePage && !shift);
+
+        if (zoom)
         {
             ZoomAt(point.Position, delta > 0 ? ZoomStep : 1.0 / ZoomStep);
         }
-        else if (modifiers.HasFlag(VirtualKeyModifiers.Shift))
+        else if (shift)
         {
             ScrollBy(new Vector2((float)(-notches * WheelScrollDips / _scale), 0f));
         }
