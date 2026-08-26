@@ -19,6 +19,15 @@ public enum ViewerTool
     SelectText,
 }
 
+public enum ViewerLayoutMode
+{
+    /// <summary>Every sheet stacked in one scrollable strip.</summary>
+    Continuous,
+
+    /// <summary>One sheet at a time; scrolling stays on it and pages change explicitly.</summary>
+    SinglePage,
+}
+
 /// <summary>
 /// Scrolls a whole PDF as one continuous vertical strip of tiled pages.
 ///
@@ -55,6 +64,9 @@ public sealed partial class PdfTiledViewer : UserControl
     private readonly HashSet<int> _textInFlight = new();
 
     private DocumentLayout? _layout;
+    private IReadOnlyList<PdfPageSize> _pageSizes = [];
+    private ViewerLayoutMode _layoutMode = ViewerLayoutMode.Continuous;
+    private int _currentPageIndex;
     private double _scale = 1.0;
     private Vector2 _origin;
     private bool _pendingFit;
@@ -80,16 +92,108 @@ public sealed partial class PdfTiledViewer : UserControl
     /// <summary>Raised when the visible page, zoom level or selection changes.</summary>
     public event EventHandler? ViewChanged;
 
-    public int PageCount => _layout?.PageCount ?? 0;
+    public int PageCount => _layout?.DocumentPageCount ?? 0;
 
-    public int CurrentPageNumber
+    /// <summary>
+    /// In single-sheet mode the page is whichever one is laid out; in
+    /// continuous mode it is whichever fills most of the viewport.
+    /// </summary>
+    public int CurrentPageIndex
     {
         get
         {
             if (_layout is not { } layout) return 0;
+            if (_layoutMode == ViewerLayoutMode.SinglePage) return _currentPageIndex;
+
             var view = ViewportInDocSpace();
-            return layout.DominantPageIndex(view.Top, view.Bottom) + 1;
+            return layout.DominantPageIndex(view.Top, view.Bottom);
         }
+    }
+
+    public int CurrentPageNumber => _layout is null ? 0 : CurrentPageIndex + 1;
+
+    public bool CanGoPrevious => _layout is not null && CurrentPageIndex > 0;
+
+    public bool CanGoNext => _layout is not null && CurrentPageIndex < PageCount - 1;
+
+    public ViewerLayoutMode LayoutMode
+    {
+        get => _layoutMode;
+        set
+        {
+            if (_layoutMode == value) return;
+
+            // Carry the sheet you were looking at across the switch.
+            int page = CurrentPageIndex;
+            _layoutMode = value;
+            _currentPageIndex = page;
+            RebuildLayout();
+        }
+    }
+
+    public void GoToPage(int pageIndex)
+    {
+        if (_pageSizes.Count == 0 || _layout is null) return;
+
+        int target = Math.Clamp(pageIndex, 0, _pageSizes.Count - 1);
+        if (target == CurrentPageIndex && _layoutMode == ViewerLayoutMode.SinglePage) return;
+
+        _currentPageIndex = target;
+
+        if (_layoutMode == ViewerLayoutMode.SinglePage)
+        {
+            RebuildLayout();
+            return;
+        }
+
+        foreach (var page in _layout.Pages)
+        {
+            if (page.Index != target) continue;
+            _origin = new Vector2(_origin.X, page.YPt);
+            break;
+        }
+
+        ClampOrigin();
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void NextPage() => GoToPage(CurrentPageIndex + 1);
+
+    public void PreviousPage() => GoToPage(CurrentPageIndex - 1);
+
+    /// <summary>Rebuilds document space for the current mode, keeping the zoom level.</summary>
+    private void RebuildLayout()
+    {
+        if (_pageSizes.Count == 0)
+        {
+            _layout = null;
+            return;
+        }
+
+        ClearSelection();
+
+        _layout = _layoutMode == ViewerLayoutMode.SinglePage
+            ? DocumentLayout.SinglePage(_pageSizes, _currentPageIndex)
+            : DocumentLayout.Continuous(_pageSizes);
+
+        if (_layoutMode == ViewerLayoutMode.SinglePage)
+        {
+            _origin = Vector2.Zero;
+        }
+        else
+        {
+            foreach (var page in _layout.Pages)
+            {
+                if (page.Index != _currentPageIndex) continue;
+                _origin = new Vector2(_origin.X, page.YPt);
+                break;
+            }
+        }
+
+        ClampOrigin();
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public double ZoomPercent => _scale * 100.0;
@@ -125,7 +229,11 @@ public sealed partial class PdfTiledViewer : UserControl
         _textInFlight.Clear();
         ClearSelection();
 
-        _layout = new DocumentLayout(info.Pages);
+        _pageSizes = info.Pages;
+        _currentPageIndex = 0;
+        _layout = _layoutMode == ViewerLayoutMode.SinglePage
+            ? DocumentLayout.SinglePage(_pageSizes, 0)
+            : DocumentLayout.Continuous(_pageSizes);
         _origin = Vector2.Zero;
         _pendingFit = true;
 
@@ -182,9 +290,9 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private void OnSelectAllAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (_layout is not { } layout || _tool != ViewerTool.SelectText) return;
+        if (_layout is null || _tool != ViewerTool.SelectText) return;
 
-        int pageIndex = layout.DominantPageIndex(ViewportInDocSpace().Top, ViewportInDocSpace().Bottom);
+        int pageIndex = CurrentPageIndex;
         if (_textLayers.TryGetValue(pageIndex, out var layer) && layer.Count > 0)
         {
             _selectionPage = pageIndex;

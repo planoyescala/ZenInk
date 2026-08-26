@@ -9,62 +9,110 @@
     xmlns:rendering="using:ZenInk_App.Rendering"
     mc:Ignorable="d">
 
+    <Page.Resources>
+        <Style x:Key="ToolbarSeparatorStyle" TargetType="Rectangle">
+            <Setter Property="Width" Value="1" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Margin" Value="8,0" />
+            <Setter Property="Fill" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+        </Style>
+    </Page.Resources>
+
     <Grid RowDefinitions="48,*" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
-        <Grid Grid.Row="0" Padding="8,0" ColumnDefinitions="Auto,Auto,Auto,*,Auto">
-            <Button Grid.Column="0" x:Name="OpenButton" Click="OnOpenClicked">
+        <StackPanel
+            Grid.Row="0"
+            Padding="8,0"
+            Orientation="Horizontal"
+            Spacing="2">
+
+            <Button x:Name="OpenButton" Click="OnOpenClicked">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <FontIcon Glyph="&#xE8E5;" FontSize="16" />
                     <TextBlock Text="Abrir" />
                 </StackPanel>
             </Button>
 
-            <StackPanel
-                Grid.Column="1"
-                Margin="12,0,0,0"
-                Orientation="Horizontal"
-                Spacing="2">
-                <ToggleButton
-                    x:Name="PanToolButton"
-                    Click="OnPanToolClicked"
-                    IsChecked="True"
-                    IsEnabled="False"
-                    ToolTipService.ToolTip="Mano — arrastrar para desplazar">
-                    <FontIcon Glyph="&#xE7C2;" FontSize="16" />
-                </ToggleButton>
-                <ToggleButton
-                    x:Name="TextToolButton"
-                    Click="OnTextToolClicked"
-                    IsEnabled="False"
-                    ToolTipService.ToolTip="Seleccionar texto (Ctrl+C para copiar)">
-                    <FontIcon Glyph="&#xE8E9;" FontSize="16" />
-                </ToggleButton>
-            </StackPanel>
+            <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+            <ToggleButton
+                x:Name="PanToolButton"
+                Click="OnPanToolClicked"
+                IsChecked="True"
+                IsEnabled="False"
+                ToolTipService.ToolTip="Mano — arrastrar para desplazar">
+                <FontIcon Glyph="&#xE7C2;" FontSize="16" />
+            </ToggleButton>
+            <ToggleButton
+                x:Name="TextToolButton"
+                Click="OnTextToolClicked"
+                IsEnabled="False"
+                ToolTipService.ToolTip="Seleccionar texto">
+                <FontIcon Glyph="&#xE8E9;" FontSize="16" />
+            </ToggleButton>
+
+            <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+            <ToggleButton
+                x:Name="ContinuousModeButton"
+                Click="OnContinuousModeClicked"
+                IsChecked="True"
+                IsEnabled="False"
+                ToolTipService.ToolTip="Vista continua — todas las hojas en una tira">
+                <TextBlock Text="Continuo" />
+            </ToggleButton>
+            <ToggleButton
+                x:Name="SingleModeButton"
+                Click="OnSingleModeClicked"
+                IsEnabled="False"
+                ToolTipService.ToolTip="Hoja única — el desplazamiento no salta de hoja">
+                <TextBlock Text="Hoja" />
+            </ToggleButton>
+
+            <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
 
             <Button
-                Grid.Column="2"
+                x:Name="PreviousPageButton"
+                Click="OnPreviousPageClicked"
+                IsEnabled="False"
+                ToolTipService.ToolTip="Hoja anterior">
+                <FontIcon Glyph="&#xE70E;" FontSize="16" />
+            </Button>
+            <Button
+                x:Name="NextPageButton"
+                Click="OnNextPageClicked"
+                IsEnabled="False"
+                ToolTipService.ToolTip="Hoja siguiente">
+                <FontIcon Glyph="&#xE70D;" FontSize="16" />
+            </Button>
+
+            <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+            <Button
                 x:Name="FitButton"
-                Margin="12,0,0,0"
                 Click="OnFitClicked"
                 IsEnabled="False"
                 ToolTipService.ToolTip="Ajustar al ancho">
                 <FontIcon Glyph="&#xE9A6;" FontSize="16" />
             </Button>
+        </StackPanel>
 
+        <StackPanel
+            Grid.Row="0"
+            Margin="0,0,12,0"
+            HorizontalAlignment="Right"
+            Orientation="Horizontal"
+            Spacing="12">
             <TextBlock
                 x:Name="DocumentNameText"
-                Grid.Column="3"
-                Margin="12,0"
                 VerticalAlignment="Center"
+                MaxWidth="280"
                 Opacity="0.7"
                 TextTrimming="CharacterEllipsis" />
-
             <TextBlock
                 x:Name="ViewStatusText"
-                Grid.Column="4"
-                Margin="0,0,4,0"
                 VerticalAlignment="Center"
                 Opacity="0.7" />
-        </Grid>
+        </StackPanel>
 
         <rendering:PdfTiledViewer x:Name="Viewer" Grid.Row="1" />
     </Grid>

@@ -20,8 +20,38 @@ public sealed class DocumentLayout
 
     private readonly PageBox[] _pages;
 
-    public DocumentLayout(IReadOnlyList<PdfPageSize> sizes)
+    /// <summary>Every page stacked into one scrollable strip.</summary>
+    public static DocumentLayout Continuous(IReadOnlyList<PdfPageSize> sizes) => new(sizes, null);
+
+    /// <summary>
+    /// Just one sheet, alone in document space, so scrolling can never carry
+    /// the view onto a neighbouring page — moving between sheets becomes an
+    /// explicit action instead of a side effect of panning.
+    /// </summary>
+    public static DocumentLayout SinglePage(IReadOnlyList<PdfPageSize> sizes, int pageIndex) => new(sizes, pageIndex);
+
+    private DocumentLayout(IReadOnlyList<PdfPageSize> sizes, int? onlyPageIndex)
     {
+        DocumentPageCount = sizes.Count;
+
+        if (onlyPageIndex is { } only)
+        {
+            if (sizes.Count == 0)
+            {
+                _pages = [];
+                return;
+            }
+
+            int index = Math.Clamp(only, 0, sizes.Count - 1);
+            var single = sizes[index];
+            // The PageBox keeps the real PDF page index, so tile keys and text
+            // layers stay valid across a mode switch.
+            _pages = [new PageBox(index, 0f, 0f, single.WidthPt, single.HeightPt)];
+            WidthPt = single.WidthPt;
+            HeightPt = single.HeightPt;
+            return;
+        }
+
         _pages = new PageBox[sizes.Count];
 
         float widest = 0f;
@@ -53,7 +83,11 @@ public sealed class DocumentLayout
 
     public float HeightPt { get; }
 
+    /// <summary>Pages actually laid out — the whole document, or one sheet.</summary>
     public int PageCount => _pages.Length;
+
+    /// <summary>Pages in the PDF, regardless of how many are laid out.</summary>
+    public int DocumentPageCount { get; }
 
     /// <summary>
     /// Pages overlapping the given document-space band. Pages are stacked in

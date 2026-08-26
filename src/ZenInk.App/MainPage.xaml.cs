@@ -31,13 +31,13 @@ public sealed partial class MainPage : Page
         {
             await Viewer.OpenAsync(file.Path);
             DocumentNameText.Text = file.Name;
-            SetToolButtonsEnabled(true);
+            SetDocumentControlsEnabled(true);
             UpdateViewStatus();
         }
         catch (Exception ex)
         {
             DocumentNameText.Text = $"Error al abrir: {ex.Message}";
-            SetToolButtonsEnabled(false);
+            SetDocumentControlsEnabled(false);
         }
         finally
         {
@@ -45,11 +45,13 @@ public sealed partial class MainPage : Page
         }
     }
 
-    private void SetToolButtonsEnabled(bool enabled)
+    private void SetDocumentControlsEnabled(bool enabled)
     {
         FitButton.IsEnabled = enabled;
         PanToolButton.IsEnabled = enabled;
         TextToolButton.IsEnabled = enabled;
+        ContinuousModeButton.IsEnabled = enabled;
+        SingleModeButton.IsEnabled = enabled;
     }
 
     private void OnFitClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => Viewer.FitToWidth();
@@ -65,8 +67,29 @@ public sealed partial class MainPage : Page
         TextToolButton.IsChecked = tool == ViewerTool.SelectText;
     }
 
+    private void OnContinuousModeClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) =>
+        SelectLayoutMode(ViewerLayoutMode.Continuous);
+
+    private void OnSingleModeClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) =>
+        SelectLayoutMode(ViewerLayoutMode.SinglePage);
+
+    private void SelectLayoutMode(ViewerLayoutMode mode)
+    {
+        Viewer.LayoutMode = mode;
+        ContinuousModeButton.IsChecked = mode == ViewerLayoutMode.Continuous;
+        SingleModeButton.IsChecked = mode == ViewerLayoutMode.SinglePage;
+        UpdateViewStatus();
+    }
+
+    private void OnPreviousPageClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => Viewer.PreviousPage();
+
+    private void OnNextPageClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => Viewer.NextPage();
+
     private void UpdateViewStatus()
     {
+        PreviousPageButton.IsEnabled = Viewer.CanGoPrevious;
+        NextPageButton.IsEnabled = Viewer.CanGoNext;
+
         if (Viewer.PageCount == 0)
         {
             ViewStatusText.Text = string.Empty;
