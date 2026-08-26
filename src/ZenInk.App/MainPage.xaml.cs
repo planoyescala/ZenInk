@@ -10,6 +10,7 @@ public sealed partial class MainPage : Page
     public MainPage()
     {
         InitializeComponent();
+        Viewer.ViewChanged += (_, _) => UpdateViewStatus();
     }
 
     private async void OnOpenClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
@@ -29,14 +30,30 @@ public sealed partial class MainPage : Page
         {
             await Viewer.OpenAsync(file.Path);
             DocumentNameText.Text = file.Name;
+            FitButton.IsEnabled = true;
+            UpdateViewStatus();
         }
         catch (Exception ex)
         {
             DocumentNameText.Text = $"Error al abrir: {ex.Message}";
+            FitButton.IsEnabled = false;
         }
         finally
         {
             OpenButton.IsEnabled = true;
         }
+    }
+
+    private void OnFitClicked(object sender, Microsoft.UI.Xaml.RoutedEventArgs e) => Viewer.FitToWidth();
+
+    private void UpdateViewStatus()
+    {
+        if (Viewer.PageCount == 0)
+        {
+            ViewStatusText.Text = string.Empty;
+            return;
+        }
+
+        ViewStatusText.Text = $"Hoja {Viewer.CurrentPageNumber} de {Viewer.PageCount}  ·  {Viewer.ZoomPercent:0}%";
     }
 }

@@ -4,7 +4,9 @@ using PDFiumCore;
 
 namespace ZenInk_App.Rendering;
 
-public readonly record struct PdfDocumentInfo(int PageCount, float WidthPt, float HeightPt);
+public readonly record struct PdfPageSize(float WidthPt, float HeightPt);
+
+public sealed record PdfDocumentInfo(IReadOnlyList<PdfPageSize> Pages);
 
 public readonly record struct TileBitmapData(byte[] Bgra, int Width, int Height);
 
@@ -20,6 +22,9 @@ public readonly record struct TileBitmapData(byte[] Bgra, int Width, int Height)
 /// </summary>
 public sealed class PdfRenderQueue : IDisposable
 {
+    /// <summary>Parsed pages held open. Each one retains its parsed content, so this is capped.</summary>
+    private const int MaxLoadedPages = 8;
+
     private readonly Thread _worker;
     private readonly SemaphoreSlim _signal = new(0);
     private readonly ConcurrentQueue<Action> _controlActions = new();
@@ -29,8 +34,8 @@ public sealed class PdfRenderQueue : IDisposable
     private volatile bool _disposed;
 
     private FpdfDocumentT? _document;
-    private string? _documentPath;
     private readonly Dictionary<int, FpdfPageT> _pages = new();
+    private readonly LinkedList<int> _pageLru = new();
 
     private sealed record TileJob(TileKey Key, int TileSize, TaskCompletionSource<TileBitmapData?> Completion);
 
@@ -102,8 +107,7 @@ public sealed class PdfRenderQueue : IDisposable
 
                 try
                 {
-                    var data = RenderTileCore(job.Key, job.TileSize);
-                    job.Completion.TrySetResult(data);
+                    job.Completion.TrySetResult(RenderTileCore(job.Key, job.TileSize));
                 }
                 catch (Exception ex)
                 {
@@ -143,14 +147,23 @@ public sealed class PdfRenderQueue : IDisposable
         }
 
         _document = doc;
-        _documentPath = path;
 
         int pageCount = fpdfview.FPDF_GetPageCount(doc);
-        var firstPage = LoadPageCore(0);
-        float width = fpdfview.FPDF_GetPageWidthF(firstPage);
-        float height = fpdfview.FPDF_GetPageHeightF(firstPage);
+        var sizes = new List<PdfPageSize>(pageCount);
+        for (int i = 0; i < pageCount; i++)
+        {
+            double width = 0, height = 0;
+            // Reports the size after the page's /Rotate is applied, matching
+            // what FPDF_RenderPageBitmap will actually rasterize.
+            if (fpdfview.FPDF_GetPageSizeByIndex(doc, i, ref width, ref height) == 0)
+            {
+                width = 612;
+                height = 792;
+            }
+            sizes.Add(new PdfPageSize((float)width, (float)height));
+        }
 
-        return new PdfDocumentInfo(pageCount, width, height);
+        return new PdfDocumentInfo(sizes);
     }
 
     private FpdfPageT LoadPageCore(int pageIndex)
@@ -162,6 +175,8 @@ public sealed class PdfRenderQueue : IDisposable
 
         if (_pages.TryGetValue(pageIndex, out var cached))
         {
+            _pageLru.Remove(pageIndex);
+            _pageLru.AddLast(pageIndex);
             return cached;
         }
 
@@ -172,6 +187,18 @@ public sealed class PdfRenderQueue : IDisposable
         }
 
         _pages[pageIndex] = page;
+        _pageLru.AddLast(pageIndex);
+
+        while (_pageLru.Count > MaxLoadedPages)
+        {
+            int oldest = _pageLru.First!.Value;
+            _pageLru.RemoveFirst();
+            if (_pages.Remove(oldest, out var stale))
+            {
+                fpdfview.FPDF_ClosePage(stale);
+            }
+        }
+
         return page;
     }
 
@@ -179,7 +206,9 @@ public sealed class PdfRenderQueue : IDisposable
     {
         var page = LoadPageCore(key.PageIndex);
         double levelScale = ZoomLevels.ScaleForLevel(key.Level);
-        float pageHeightPt = fpdfview.FPDF_GetPageHeightF(page);
+
+        int scaledWidth = Math.Max(1, (int)Math.Ceiling(fpdfview.FPDF_GetPageWidthF(page) * levelScale));
+        int scaledHeight = Math.Max(1, (int)Math.Ceiling(fpdfview.FPDF_GetPageHeightF(page) * levelScale));
 
         var bitmap = fpdfview.FPDFBitmapCreateEx(tileSize, tileSize, (int)FPDFBitmapFormat.BGRA, IntPtr.Zero, tileSize * 4);
         if (bitmap is null)
@@ -191,24 +220,19 @@ public sealed class PdfRenderQueue : IDisposable
         {
             fpdfview.FPDFBitmapFillRect(bitmap, 0, 0, tileSize, tileSize, 0xFFFFFFFFUL);
 
-            var matrix = new FS_MATRIX_
-            {
-                A = (float)levelScale,
-                B = 0f,
-                C = 0f,
-                D = -(float)levelScale,
-                E = -(key.Col * tileSize),
-                F = (float)(pageHeightPt * levelScale) - key.Row * tileSize,
-            };
-            var clip = new FS_RECTF_
-            {
-                Left = 0f,
-                Top = 0f,
-                Right = tileSize,
-                Bottom = tileSize,
-            };
-
-            fpdfview.FPDF_RenderPageBitmapWithMatrix(bitmap, page, matrix, clip, 0);
+            // Place the whole scaled page so that the requested tile lands on the
+            // bitmap, and let PDFium clip away everything outside it. Unlike the
+            // matrix variant, this applies the page's own /Rotate and uses a
+            // top-left origin, so no hand-built axis flip is involved.
+            fpdfview.FPDF_RenderPageBitmap(
+                bitmap,
+                page,
+                -key.Col * tileSize,
+                -key.Row * tileSize,
+                scaledWidth,
+                scaledHeight,
+                0,
+                (int)RenderFlags.RenderAnnotations);
 
             int stride = fpdfview.FPDFBitmapGetStride(bitmap);
             IntPtr buffer = fpdfview.FPDFBitmapGetBuffer(bitmap);
@@ -237,13 +261,13 @@ public sealed class PdfRenderQueue : IDisposable
             fpdfview.FPDF_ClosePage(page);
         }
         _pages.Clear();
+        _pageLru.Clear();
 
         if (_document is not null)
         {
             fpdfview.FPDF_CloseDocument(_document);
             _document = null;
         }
-        _documentPath = null;
     }
 
     public void Dispose()

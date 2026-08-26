@@ -9,21 +9,39 @@
     xmlns:rendering="using:ZenInk_App.Rendering"
     mc:Ignorable="d">
 
-    <Grid RowDefinitions="48,*" Background="{ThemeResource LayerFillColorDefaultBrush}">
-        <Grid Grid.Row="0" Padding="8,0" ColumnDefinitions="Auto,*">
+    <Grid RowDefinitions="48,*" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
+        <Grid Grid.Row="0" Padding="8,0" ColumnDefinitions="Auto,Auto,*,Auto">
             <Button Grid.Column="0" x:Name="OpenButton" Click="OnOpenClicked">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <FontIcon Glyph="&#xE8E5;" FontSize="16" />
                     <TextBlock Text="Abrir" />
                 </StackPanel>
             </Button>
+
+            <Button
+                Grid.Column="1"
+                x:Name="FitButton"
+                Margin="4,0,0,0"
+                Click="OnFitClicked"
+                IsEnabled="False"
+                ToolTipService.ToolTip="Ajustar al ancho">
+                <FontIcon Glyph="&#xE9A6;" FontSize="16" />
+            </Button>
+
             <TextBlock
                 x:Name="DocumentNameText"
-                Grid.Column="1"
-                Margin="12,0,0,0"
+                Grid.Column="2"
+                Margin="12,0"
                 VerticalAlignment="Center"
                 Opacity="0.7"
                 TextTrimming="CharacterEllipsis" />
+
+            <TextBlock
+                x:Name="ViewStatusText"
+                Grid.Column="3"
+                Margin="0,0,4,0"
+                VerticalAlignment="Center"
+                Opacity="0.7" />
         </Grid>
 
         <rendering:PdfTiledViewer x:Name="Viewer" Grid.Row="1" />

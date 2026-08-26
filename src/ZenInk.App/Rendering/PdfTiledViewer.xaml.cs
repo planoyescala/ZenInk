@@ -1,107 +1,211 @@
 using System.Numerics;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.UI.Xaml;
+using Microsoft.UI;
 using Microsoft.UI.Xaml.Controls;
-using Windows.Graphics.DirectX;
 using Microsoft.UI.Xaml.Input;
 using Windows.Foundation;
+using Windows.Graphics.DirectX;
+using Windows.System;
 
 namespace ZenInk_App.Rendering;
 
 /// <summary>
-/// Pans and zooms a PDF page rendered as a grid of cached tiles. Coordinates
-/// are tracked in PDF points (<see cref="_origin"/> = the page point at the
-/// viewport's top-left corner, top-left/y-down for on-screen convenience) so
-/// the math is independent of which discrete zoom level is currently backing
-/// the tiles on screen.
+/// Scrolls a whole PDF as one continuous vertical strip of tiled pages.
 ///
-/// Draw() renders progressively: it first paints whatever coarser-level tiles
-/// are already cached (so panning into new territory shows a soft, previously
-/// seen version immediately) and then overpaints with exact tiles at the
-/// current level, requesting from <see cref="PdfRenderQueue"/> whichever ones
-/// are missing.
+/// Coordinates live in "document space" — PDF points, y down, every page
+/// stacked by <see cref="DocumentLayout"/> — so scrolling is a single vector
+/// and the math never depends on which discrete zoom level currently backs the
+/// tiles on screen. <see cref="_origin"/> is the document point sitting at the
+/// viewport's top-left corner; <see cref="_scale"/> is DIPs per point.
+///
+/// Drawing is progressive: coarser cached tiles are painted first (so panning
+/// into new territory shows a soft, already-seen version immediately) and the
+/// current level is painted over them, requesting whatever is missing.
 /// </summary>
 public sealed partial class PdfTiledViewer : UserControl
 {
-    private const double MinScale = 0.05;
-    private const double MaxScale = 12.0;
-    private const int FallbackLevels = 6;
-    private const long CacheBudgetBytes = 256L * 1024 * 1024;
+    private const double MinScale = 0.02;
+    private const double MaxScale = 16.0;
+    private const int FallbackLevels = 5;
+    private const long CacheBudgetBytes = 384L * 1024 * 1024;
+    private const double WheelScrollDips = 90.0;
+    private const double ZoomStep = 1.15;
 
     private readonly PdfRenderQueue _queue = new();
     private readonly TileCache _cache = new(CacheBudgetBytes);
     private readonly HashSet<TileKey> _inFlight = new();
 
-    private PdfDocumentInfo? _document;
-    private int _pageIndex;
+    private DocumentLayout? _layout;
     private double _scale = 1.0;
     private Vector2 _origin;
+    private bool _pendingFit;
     private bool _isPanning;
     private Point _lastPointerPosition;
 
     public PdfTiledViewer()
     {
         InitializeComponent();
-        Unloaded += (_, _) => _queue.Dispose();
+        Unloaded += OnUnloaded;
     }
+
+    /// <summary>Raised when the visible page or zoom level changes.</summary>
+    public event EventHandler? ViewChanged;
+
+    public int PageCount => _layout?.PageCount ?? 0;
+
+    public int CurrentPageNumber
+    {
+        get
+        {
+            if (_layout is not { } layout) return 0;
+            var view = ViewportInDocSpace();
+            return layout.DominantPageIndex(view.Top, view.Bottom) + 1;
+        }
+    }
+
+    public double ZoomPercent => _scale * 100.0;
 
     public async Task OpenAsync(string path)
     {
-        _document = await _queue.OpenDocumentAsync(path);
-        _pageIndex = 0;
+        var info = await _queue.OpenDocumentAsync(path);
+
         _cache.Clear();
         _inFlight.Clear();
-        FitToWidth();
+        _layout = new DocumentLayout(info.Pages);
+        _origin = Vector2.Zero;
+        _pendingFit = true;
+
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void FitToWidth()
+    {
+        _pendingFit = true;
         Canvas.Invalidate();
     }
 
-    private void FitToWidth()
+    private void OnUnloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
-        if (_document is not { } doc || Canvas.ActualWidth <= 0)
-        {
-            return;
-        }
-
-        _scale = Math.Clamp(Canvas.ActualWidth / doc.WidthPt, MinScale, MaxScale);
-        _origin = Vector2.Zero;
+        _cache.Clear();
+        _queue.Dispose();
+        Canvas.RemoveFromVisualTree();
     }
+
+    // --- viewport -------------------------------------------------------
+
+    private Rect ViewportInDocSpace()
+    {
+        double width = Canvas.ActualWidth / _scale;
+        double height = Canvas.ActualHeight / _scale;
+        return new Rect(_origin.X, _origin.Y, Math.Max(width, 0), Math.Max(height, 0));
+    }
+
+    /// <summary>
+    /// Applies a deferred fit-to-width once the canvas actually has a size.
+    /// Fitting straight after the document loads is unreliable — the canvas may
+    /// still be zero-sized or mid-layout, which is what produced inconsistent
+    /// side margins before.
+    /// </summary>
+    private void ApplyPendingFit()
+    {
+        if (!_pendingFit || _layout is not { } layout) return;
+        if (Canvas.ActualWidth <= 0 || Canvas.ActualHeight <= 0 || layout.WidthPt <= 0) return;
+
+        _scale = Math.Clamp(Canvas.ActualWidth / layout.WidthPt, MinScale, MaxScale);
+        _origin = Vector2.Zero;
+        _pendingFit = false;
+        ClampOrigin();
+    }
+
+    /// <summary>
+    /// Keeps the viewport inside the document, and centers whichever axis has
+    /// slack instead of letting the content drift to one side.
+    /// </summary>
+    private void ClampOrigin()
+    {
+        if (_layout is not { } layout) return;
+
+        double viewWidth = Canvas.ActualWidth / _scale;
+        double viewHeight = Canvas.ActualHeight / _scale;
+
+        float x = layout.WidthPt <= viewWidth
+            ? (float)((layout.WidthPt - viewWidth) / 2.0)
+            : (float)Math.Clamp(_origin.X, 0, layout.WidthPt - viewWidth);
+
+        float y = layout.HeightPt <= viewHeight
+            ? (float)((layout.HeightPt - viewHeight) / 2.0)
+            : (float)Math.Clamp(_origin.Y, 0, layout.HeightPt - viewHeight);
+
+        _origin = new Vector2(x, y);
+    }
+
+    private void ScrollBy(Vector2 deltaPt)
+    {
+        _origin += deltaPt;
+        ClampOrigin();
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ZoomAt(Point anchor, double factor)
+    {
+        double newScale = Math.Clamp(_scale * factor, MinScale, MaxScale);
+        if (Math.Abs(newScale - _scale) < double.Epsilon) return;
+
+        var anchorPx = new Vector2((float)anchor.X, (float)anchor.Y);
+        var docUnderAnchor = _origin + anchorPx / (float)_scale;
+
+        _scale = newScale;
+        _origin = docUnderAnchor - anchorPx / (float)_scale;
+
+        ClampOrigin();
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // --- input ----------------------------------------------------------
 
     private void OnCanvasSizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
     {
-        if (_document is not null && e.PreviousSize.Width == 0)
-        {
-            FitToWidth();
-        }
+        ClampOrigin();
         Canvas.Invalidate();
     }
 
     private void OnPointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
-        if (_document is not { } doc) return;
+        if (_layout is null) return;
 
         var point = e.GetCurrentPoint(Canvas);
-        int wheelDelta = point.Properties.MouseWheelDelta;
-        double factor = wheelDelta > 0 ? 1.15 : 1 / 1.15;
+        int delta = point.Properties.MouseWheelDelta;
+        if (delta == 0) return;
 
-        double newScale = Math.Clamp(_scale * factor, MinScale, MaxScale);
-        if (newScale == _scale) return;
+        var modifiers = e.KeyModifiers;
+        double notches = delta / 120.0;
 
-        var cursorPx = new Vector2((float)point.Position.X, (float)point.Position.Y);
-        var pageUnderCursor = _origin + cursorPx / (float)_scale;
+        if (modifiers.HasFlag(VirtualKeyModifiers.Control))
+        {
+            ZoomAt(point.Position, delta > 0 ? ZoomStep : 1.0 / ZoomStep);
+        }
+        else if (modifiers.HasFlag(VirtualKeyModifiers.Shift))
+        {
+            ScrollBy(new Vector2((float)(-notches * WheelScrollDips / _scale), 0f));
+        }
+        else
+        {
+            ScrollBy(new Vector2(0f, (float)(-notches * WheelScrollDips / _scale)));
+        }
 
-        _scale = newScale;
-        _origin = pageUnderCursor - cursorPx / (float)_scale;
-        ClampOrigin(doc);
-
-        Canvas.Invalidate();
         e.Handled = true;
     }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (_document is null) return;
+        if (_layout is null) return;
+
         var point = e.GetCurrentPoint(Canvas);
-        if (!point.Properties.IsLeftButtonPressed) return;
+        if (!point.Properties.IsLeftButtonPressed && !point.Properties.IsMiddleButtonPressed) return;
 
         _isPanning = true;
         _lastPointerPosition = point.Position;
@@ -110,15 +214,15 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (!_isPanning || _document is not { } doc) return;
+        if (!_isPanning || _layout is null) return;
 
         var position = e.GetCurrentPoint(Canvas).Position;
-        var deltaPx = new Vector2((float)(position.X - _lastPointerPosition.X), (float)(position.Y - _lastPointerPosition.Y));
-        _origin -= deltaPx / (float)_scale;
+        var deltaDips = new Vector2(
+            (float)(position.X - _lastPointerPosition.X),
+            (float)(position.Y - _lastPointerPosition.Y));
         _lastPointerPosition = position;
-        ClampOrigin(doc);
 
-        Canvas.Invalidate();
+        ScrollBy(-deltaDips / (float)_scale);
     }
 
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
@@ -128,66 +232,82 @@ public sealed partial class PdfTiledViewer : UserControl
         Canvas.ReleasePointerCapture(e.Pointer);
     }
 
-    private void ClampOrigin(PdfDocumentInfo doc)
-    {
-        double viewWidthPt = Canvas.ActualWidth / _scale;
-        double viewHeightPt = Canvas.ActualHeight / _scale;
-
-        // Allow a bit of overscroll (half a viewport) rather than hard-clamping
-        // exactly to the page edge, which feels stiff during fast pans.
-        float maxX = (float)Math.Max(doc.WidthPt - viewWidthPt * 0.5, -viewWidthPt * 0.5);
-        float minX = (float)(-viewWidthPt * 0.5);
-        float maxY = (float)Math.Max(doc.HeightPt - viewHeightPt * 0.5, -viewHeightPt * 0.5);
-        float minY = (float)(-viewHeightPt * 0.5);
-
-        _origin = new Vector2(Math.Clamp(_origin.X, minX, maxX), Math.Clamp(_origin.Y, minY, maxY));
-    }
+    // --- drawing --------------------------------------------------------
 
     private void OnDraw(CanvasControl sender, CanvasDrawEventArgs args)
     {
-        if (_document is not { } doc) return;
+        ApplyPendingFit();
+        if (_layout is not { } layout) return;
 
-        int level = ZoomLevels.LevelForScale(_scale);
         var ds = args.DrawingSession;
+        var view = ViewportInDocSpace();
 
-        for (int fallback = Math.Max(0, level - FallbackLevels); fallback < level; fallback++)
+        // Tiles are rasterized in physical device pixels, so the level has to
+        // account for the display's scaling factor. Choosing it from DIPs alone
+        // renders every tile short of the panel's real resolution, which is what
+        // made a 150%-scaled display look permanently soft.
+        double dpiScale = sender.Dpi / 96.0;
+        int level = ZoomLevels.LevelForScale(_scale * dpiScale);
+
+        foreach (var page in layout.PagesInBand(view.Top, view.Bottom))
         {
-            DrawLevel(ds, doc, fallback, requestMissing: false);
-        }
+            var pageRect = ToScreenRect(page);
+            if (pageRect.Width <= 0 || pageRect.Height <= 0) continue;
 
-        DrawLevel(ds, doc, level, requestMissing: true);
+            ds.FillRectangle(pageRect, Colors.White);
+
+            using (ds.CreateLayer(1f, pageRect))
+            {
+                int floor = Math.Max(ZoomLevels.MinLevel, level - FallbackLevels);
+                for (int fallback = floor; fallback < level; fallback++)
+                {
+                    DrawPageTiles(ds, page, fallback, view, requestMissing: false);
+                }
+
+                DrawPageTiles(ds, page, level, view, requestMissing: true);
+            }
+        }
     }
 
-    private void DrawLevel(CanvasDrawingSession ds, PdfDocumentInfo doc, int level, bool requestMissing)
+    private Rect ToScreenRect(PageBox page) => new(
+        (page.XPt - _origin.X) * _scale,
+        (page.YPt - _origin.Y) * _scale,
+        Math.Max(0, page.WidthPt * _scale),
+        Math.Max(0, page.HeightPt * _scale));
+
+    private void DrawPageTiles(CanvasDrawingSession ds, PageBox page, int level, Rect view, bool requestMissing)
     {
-        int ts = ZoomLevels.TileSize;
+        int tileSize = ZoomLevels.TileSize;
         double levelScale = ZoomLevels.ScaleForLevel(level);
-        double tilePtSize = ts / levelScale;
+        double tilePt = tileSize / levelScale;
+        if (tilePt <= 0) return;
 
-        double viewWidthPt = Canvas.ActualWidth / _scale;
-        double viewHeightPt = Canvas.ActualHeight / _scale;
+        // Visible slice of this page, in page-local points.
+        double left = Math.Max(0, view.Left - page.XPt);
+        double top = Math.Max(0, view.Top - page.YPt);
+        double right = Math.Min(page.WidthPt, view.Right - page.XPt);
+        double bottom = Math.Min(page.HeightPt, view.Bottom - page.YPt);
+        if (right <= left || bottom <= top) return;
 
-        int maxCol = Math.Max(0, (int)Math.Ceiling(doc.WidthPt * levelScale / ts) - 1);
-        int maxRow = Math.Max(0, (int)Math.Ceiling(doc.HeightPt * levelScale / ts) - 1);
-
-        int colStart = Math.Clamp((int)Math.Floor(_origin.X / tilePtSize), 0, maxCol);
-        int colEnd = Math.Clamp((int)Math.Ceiling((_origin.X + viewWidthPt) / tilePtSize), 0, maxCol);
-        int rowStart = Math.Clamp((int)Math.Floor(_origin.Y / tilePtSize), 0, maxRow);
-        int rowEnd = Math.Clamp((int)Math.Ceiling((_origin.Y + viewHeightPt) / tilePtSize), 0, maxRow);
+        int colStart = (int)Math.Floor(left / tilePt);
+        int colEnd = (int)Math.Floor((right - 1e-6) / tilePt);
+        int rowStart = (int)Math.Floor(top / tilePt);
+        int rowEnd = (int)Math.Floor((bottom - 1e-6) / tilePt);
 
         for (int row = rowStart; row <= rowEnd; row++)
         {
             for (int col = colStart; col <= colEnd; col++)
             {
-                var key = new TileKey(_pageIndex, level, col, row);
-                double screenX = (col * tilePtSize - _origin.X) * _scale;
-                double screenY = (row * tilePtSize - _origin.Y) * _scale;
-                double screenSize = tilePtSize * _scale;
-                var destRect = new Rect(screenX, screenY, screenSize, screenSize);
+                var key = new TileKey(page.Index, level, col, row);
+                var dest = new Rect(
+                    (page.XPt + col * tilePt - _origin.X) * _scale,
+                    (page.YPt + row * tilePt - _origin.Y) * _scale,
+                    tilePt * _scale,
+                    tilePt * _scale);
 
                 if (_cache.TryGet(key, out var bitmap))
                 {
-                    ds.DrawImage(bitmap, destRect);
+                    ds.DrawImage(bitmap, dest);
                 }
                 else if (requestMissing)
                 {
@@ -215,7 +335,8 @@ public sealed partial class PdfTiledViewer : UserControl
                     tile.Bgra,
                     tile.Width,
                     tile.Height,
-                    DirectXPixelFormat.B8G8R8A8UIntNormalized);
+                    DirectXPixelFormat.B8G8R8A8UIntNormalized,
+                    Canvas.Dpi);
                 _cache.Add(key, bitmap);
                 Canvas.Invalidate();
             }
