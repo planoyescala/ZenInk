@@ -9,13 +9,22 @@
     mc:Ignorable="d">
 
     <Viewbox Stretch="Uniform">
-        <!--  A fixed 20x20 box keeps the stroke from being clipped by the geometry's own bounds.  -->
-        <Canvas Width="20" Height="20">
+        <!--
+            An explicit 20x20 box for both the frame and the path, so the icon
+            always occupies the whole grid it was drawn on rather than the
+            bounds of whichever strokes it happens to contain.
+        -->
+        <Grid Width="20" Height="20">
             <Path
                 x:Name="IconPath"
+                Width="20"
+                Height="20"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Stretch="None"
                 StrokeEndLineCap="Round"
                 StrokeLineJoin="Round"
                 StrokeStartLineCap="Round" />
-        </Canvas>
+        </Grid>
     </Viewbox>
 </UserControl>

@@ -58,6 +58,20 @@
             <Setter Property="CornerRadius" Value="4" />
         </Style>
 
+        <!--
+            Icon-only buttons carry no padding of their own: a fixed width plus
+            side padding leaves the icon less room than it asks for, and the
+            glyph is then clipped down its middle rather than shrunk.
+        -->
+        <Style x:Key="SlimIconButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
         <Style x:Key="SlimToggleStyle" TargetType="ToggleButton">
             <Setter Property="Height" Value="30" />
             <Setter Property="Padding" Value="10,0" />
@@ -136,10 +150,9 @@
 
                 <Button
                     x:Name="PreviousPageButton"
-                    Width="30"
                     Click="OnPreviousPageClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimButtonStyle}"
+                    Style="{StaticResource SlimIconButtonStyle}"
                     ToolTipService.ToolTip="Hoja anterior">
                     <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M5.5 12.25 L10 7.75 L14.5 12.25" />
                 </Button>
@@ -150,10 +163,9 @@
                     Opacity="0.7" />
                 <Button
                     x:Name="NextPageButton"
-                    Width="30"
                     Click="OnNextPageClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimButtonStyle}"
+                    Style="{StaticResource SlimIconButtonStyle}"
                     ToolTipService.ToolTip="Hoja siguiente">
                     <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M5.5 7.75 L10 12.25 L14.5 7.75" />
                 </Button>
@@ -162,10 +174,9 @@
 
                 <Button
                     x:Name="FitButton"
-                    Width="30"
                     Click="OnFitClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimButtonStyle}"
+                    Style="{StaticResource SlimIconButtonStyle}"
                     ToolTipService.ToolTip="Ajustar al ancho">
                     <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3 6.4V3.6h2.8 M17 6.4V3.6h-2.8 M3 13.6v2.8h2.8 M17 13.6v2.8h-2.8 M6.4 10h7.2 M6.4 10l1.8-1.8 M6.4 10l1.8 1.8 M13.6 10l-1.8-1.8 M13.6 10l-1.8 1.8" />
                 </Button>
@@ -200,10 +211,9 @@
                 Spacing="2">
                 <Button
                     x:Name="ZoomOutButton"
-                    Width="30"
                     Click="OnZoomOutClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimButtonStyle}"
+                    Style="{StaticResource SlimIconButtonStyle}"
                     ToolTipService.ToolTip="Alejar">
                     <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M4.8 10 L15.2 10" />
                 </Button>
@@ -215,10 +225,9 @@
                     TextAlignment="Center" />
                 <Button
                     x:Name="ZoomInButton"
-                    Width="30"
                     Click="OnZoomInClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimButtonStyle}"
+                    Style="{StaticResource SlimIconButtonStyle}"
                     ToolTipService.ToolTip="Acercar">
                     <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M10 4.8 L10 15.2 M4.8 10 L15.2 10" />
                 </Button>
@@ -227,8 +236,7 @@
 
                 <Button
                     x:Name="SettingsButton"
-                    Width="30"
-                    Style="{StaticResource SlimButtonStyle}"
+                    Style="{StaticResource SlimIconButtonStyle}"
                     ToolTipService.ToolTip="Preferencias">
                     <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 12.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z M15.9 12.6a1.4 1.4 0 0 0 .3 1.6l.1.1a1.7 1.7 0 1 1-2.4 2.4l-.1-.1a1.4 1.4 0 0 0-1.6-.3 1.4 1.4 0 0 0-.9 1.3v.2a1.7 1.7 0 1 1-3.4 0v-.1a1.4 1.4 0 0 0-.9-1.3 1.4 1.4 0 0 0-1.6.3l-.1.1a1.7 1.7 0 1 1-2.4-2.4l.1-.1a1.4 1.4 0 0 0 .3-1.6 1.4 1.4 0 0 0-1.3-.9h-.2a1.7 1.7 0 1 1 0-3.4h.1a1.4 1.4 0 0 0 1.3-.9 1.4 1.4 0 0 0-.3-1.6l-.1-.1a1.7 1.7 0 1 1 2.4-2.4l.1.1a1.4 1.4 0 0 0 1.6.3h.1a1.4 1.4 0 0 0 .9-1.3v-.2a1.7 1.7 0 1 1 3.4 0v.1a1.4 1.4 0 0 0 .9 1.3 1.4 1.4 0 0 0 1.6-.3l.1-.1a1.7 1.7 0 1 1 2.4 2.4l-.1.1a1.4 1.4 0 0 0-.3 1.6v.1a1.4 1.4 0 0 0 1.3.9h.2a1.7 1.7 0 1 1 0 3.4h-.1a1.4 1.4 0 0 0-1.3.9Z" />
                     <Button.Flyout>
