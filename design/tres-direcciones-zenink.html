@@ -1,0 +1,923 @@
+<title>Tres direcciones para ZenInk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
+
+<style>
+  /* ── Página ───────────────────────────────────────────────── */
+  :root {
+    --p-ground: #f7f7f5;
+    --p-surface: #ffffff;
+    --p-ink: #16181d;
+    --p-muted: #676c74;
+    --p-faint: #8f949c;
+    --p-rule: #dedeD9;
+    --p-rule-strong: #c4c5bf;
+    --p-accent: #1f4e79;
+    --p-accent-soft: #eaeff5;
+    --p-good: #2f6b45;
+    --p-warn: #8a5a1e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --p-ground: #121418;
+      --p-surface: #191c21;
+      --p-ink: #e8e9e6;
+      --p-muted: #a0a5ad;
+      --p-faint: #7c828b;
+      --p-rule: #2a2e35;
+      --p-rule-strong: #3b414a;
+      --p-accent: #7fa9d4;
+      --p-accent-soft: #1d2833;
+      --p-good: #7fc39a;
+      --p-warn: #d8ab6a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --p-ground: #121418;
+    --p-surface: #191c21;
+    --p-ink: #e8e9e6;
+    --p-muted: #a0a5ad;
+    --p-faint: #7c828b;
+    --p-rule: #2a2e35;
+    --p-rule-strong: #3b414a;
+    --p-accent: #7fa9d4;
+    --p-accent-soft: #1d2833;
+    --p-good: #7fc39a;
+    --p-warn: #d8ab6a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--p-ground);
+    color: var(--p-ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 56px 28px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--p-faint);
+  }
+
+  h1 {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(34px, 5vw, 52px);
+    line-height: 1.06;
+    letter-spacing: -0.015em;
+    margin: 12px 0 0;
+    text-wrap: balance;
+  }
+
+  .lede {
+    max-width: 62ch;
+    color: var(--p-muted);
+    margin: 18px 0 0;
+  }
+
+  .lede strong { color: var(--p-ink); font-weight: 500; }
+
+  header .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    margin-top: 26px;
+    padding-top: 20px;
+    border-top: 1px solid var(--p-rule);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12.5px;
+    color: var(--p-faint);
+  }
+  header .meta b { color: var(--p-muted); font-weight: 400; }
+
+  /* ── Opción ───────────────────────────────────────────────── */
+  .option {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    padding-top: 30px;
+    border-top: 2px solid var(--p-rule-strong);
+  }
+
+  .option-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 18px;
+  }
+
+  .option-head .tag {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    color: var(--p-accent);
+    padding: 3px 8px;
+    border: 1px solid var(--p-accent);
+    line-height: 1.2;
+  }
+
+  .option-head h2 {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+    font-weight: 600;
+    font-size: 28px;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+
+  .option-head .thesis {
+    color: var(--p-muted);
+    font-size: 15px;
+    flex-basis: 100%;
+    max-width: 74ch;
+  }
+
+  .pick {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.1em;
+    color: var(--p-surface);
+    background: var(--p-accent);
+    padding: 4px 9px;
+    line-height: 1.2;
+  }
+
+  /* ── Marco del mockup ─────────────────────────────────────── */
+  .frame {
+    /* Un mockup de una app clara: su fondo no cambia con el tema. */
+    background: #e9e9e7;
+    border: 1px solid var(--p-rule-strong);
+    overflow: hidden;
+    position: relative;
+  }
+  .frame > .mock { transform-origin: top left; }
+
+  body.actual-size .frame { overflow: auto; }
+  body.actual-size .frame > .mock { transform: none !important; }
+
+  /* ── Argumentos ───────────────────────────────────────────── */
+  .args {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px;
+  }
+  @media (max-width: 720px) { .args { grid-template-columns: minmax(0, 1fr); } }
+
+  .args section { display: flex; flex-direction: column; gap: 8px; }
+
+  .args h3 {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin: 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--p-rule);
+  }
+  .args .for h3 { color: var(--p-good); }
+  .args .against h3 { color: var(--p-warn); }
+
+  .args ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; }
+  .args li { color: var(--p-muted); font-size: 15px; }
+  .args li strong { color: var(--p-ink); font-weight: 500; }
+
+  /* ── Cierre ───────────────────────────────────────────────── */
+  .close {
+    background: var(--p-surface);
+    border: 1px solid var(--p-rule);
+    padding: 30px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .close h2 {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+    font-weight: 600;
+    font-size: 24px;
+    margin: 0;
+  }
+  .close p { margin: 0; color: var(--p-muted); max-width: 68ch; }
+  .close p strong { color: var(--p-ink); font-weight: 500; }
+
+  /* ── Control de tamaño ────────────────────────────────────── */
+  .sizebar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    justify-content: flex-end;
+    padding: 10px 0;
+    background: linear-gradient(var(--p-ground) 62%, transparent);
+  }
+  .toggle {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--p-muted);
+    background: var(--p-surface);
+    border: 1px solid var(--p-rule-strong);
+    padding: 7px 13px;
+    cursor: pointer;
+  }
+  .toggle:hover { color: var(--p-ink); border-color: var(--p-accent); }
+  .toggle:focus-visible { outline: 2px solid var(--p-accent); outline-offset: 2px; }
+  body.actual-size .toggle { color: var(--p-surface); background: var(--p-accent); border-color: var(--p-accent); }
+
+  /* ── Tokens internos de los mockups (app clara, fijos) ────── */
+  .mock {
+    --bg-base: #f3f3f3;
+    --bg-mica: #f9f9f9;
+    --layer: #ffffff;
+    --divider: rgba(0,0,0,0.0803);
+    --card-stroke: rgba(0,0,0,0.0578);
+    --text-1: rgba(0,0,0,0.8956);
+    --text-2: rgba(0,0,0,0.6063);
+    --text-3: rgba(0,0,0,0.4458);
+    --accent: #005fb8;
+    --accent-soft: #eaf1fb;
+    --control: rgba(255,255,255,0.7);
+    --canvas-bg: #ebebeb;
+    --float: rgba(252,252,252,0.86);
+    --shadow: 0 8px 28px rgba(0,0,0,0.14), 0 1px 3px rgba(0,0,0,0.08);
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    color: var(--text-1);
+  }
+  .mock .ic { width: 16px; height: 16px; display: block; }
+  .mock .ic-sm { width: 14px; height: 14px; display: block; }
+  .mock .ic-lg { width: 18px; height: 18px; display: block; }
+  .mock .rail-btn { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: var(--text-1); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<svg style="display:none" aria-hidden="true">
+  <symbol id="ic-open" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2.5 5.5A1.5 1.5 0 0 1 4 4h3.4l1.6 2H16a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5Z"/>
+  </symbol>
+  <symbol id="ic-hand" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 9V4.6a1.1 1.1 0 0 1 2.2 0V9m0-.6V3.8a1.1 1.1 0 0 1 2.2 0v4.6m0-.3V5.3a1.1 1.1 0 0 1 2.2 0V11m-8.6-1.6a1.1 1.1 0 0 1 2.2 0v2.2"/>
+    <path d="M4.8 11.6c0 3 2.2 5.4 5.2 5.4s5.4-2 5.4-5.4V8"/>
+  </symbol>
+  <symbol id="ic-text" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.5h4M8 16.5h4M10 3.5v13"/></symbol>
+  <symbol id="ic-pen" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M13.6 3.6a1.9 1.9 0 0 1 2.8 2.8L7.6 15.2l-3.6 1 1-3.6Z"/><path d="M12.2 5l2.8 2.8"/>
+  </symbol>
+  <symbol id="ic-mark" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 13.4 12.6 4.8a1.7 1.7 0 0 1 2.4 2.4L6.4 15.8H4Z"/><path d="M3.2 17.6h13.6"/>
+  </symbol>
+  <symbol id="ic-shape" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2.8" y="6.6" width="8" height="8" rx="1"/><circle cx="13.4" cy="7.2" r="3.8"/>
+  </symbol>
+  <symbol id="ic-note" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.2 5.4A1.6 1.6 0 0 1 4.8 3.8h10.4a1.6 1.6 0 0 1 1.6 1.6v6.4a1.6 1.6 0 0 1-1.6 1.6H8.4L4.6 16.4v-2.9a1.6 1.6 0 0 1-1.4-1.6Z"/>
+  </symbol>
+  <symbol id="ic-eraser" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m10.6 3.8 5.6 5.6a1.4 1.4 0 0 1 0 2L12 15.6H7.4L3.8 12a1.4 1.4 0 0 1 0-2l4.8-4.8a1.4 1.4 0 0 1 2 0Z"/><path d="m7 8.4 4.6 4.6"/>
+  </symbol>
+  <symbol id="ic-scroll" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="5" y="1.8" width="10" height="7" rx="1"/><rect x="5" y="11.2" width="10" height="7" rx="1"/>
+  </symbol>
+  <symbol id="ic-single" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4.6" y="3" width="10.8" height="14" rx="1.2"/></symbol>
+  <symbol id="ic-pages" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">
+    <rect x="2.6" y="3.4" width="6" height="6" rx="0.8"/><rect x="11.4" y="3.4" width="6" height="6" rx="0.8"/>
+    <rect x="2.6" y="11.6" width="6" height="6" rx="0.8"/><rect x="11.4" y="11.6" width="6" height="6" rx="0.8"/>
+  </symbol>
+  <symbol id="ic-up" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5.5 12 4.5-4.5L14.5 12"/></symbol>
+  <symbol id="ic-down" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5.5 8 4.5 4.5L14.5 8"/></symbol>
+  <symbol id="ic-fit" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 6.4V3.6h2.8M17 6.4V3.6h-2.8M3 13.6v2.8h2.8M17 13.6v2.8h-2.8"/><path d="M6.4 10h7.2M6.4 10l1.8-1.8M6.4 10l1.8 1.8M13.6 10l-1.8-1.8M13.6 10l-1.8 1.8"/>
+  </symbol>
+  <symbol id="ic-weight" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-linecap="round">
+    <path d="M3 5.5h14" stroke-width="1"/><path d="M3 10h14" stroke-width="2.2"/><path d="M3 14.8h14" stroke-width="3.4"/>
+  </symbol>
+  <symbol id="ic-panel" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">
+    <rect x="2.8" y="3.6" width="14.4" height="12.8" rx="1.4"/><path d="M8 3.6v12.8"/>
+  </symbol>
+  <symbol id="ic-minus" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5.5 10h9"/></symbol>
+  <symbol id="ic-plus" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M10 5.5v9M5.5 10h9"/></symbol>
+  <symbol id="ic-more" viewBox="0 0 20 20" fill="currentColor"><circle cx="5" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/></symbol>
+  <symbol id="ic-doc" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M5 3.4h6l4 4v9.2H5Z"/><path d="M11 3.4v4h4"/></symbol>
+  <symbol id="ic-close" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6 6l8 8M14 6l-8 8"/></symbol>
+
+  <defs>
+    <pattern id="hatchwall" width="5" height="5" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="5" stroke="#1a1a1a" stroke-width="0.9"/>
+    </pattern>
+  </defs>
+
+  <!-- Grupo, no symbol: un <use> de un grupo no reasigna el sistema de
+       coordenadas, así que cada vista elige su encuadre con su propio viewBox. -->
+  <g id="plan-full">
+    <g stroke="#c2c2c2" stroke-width="0.7" stroke-dasharray="18 5 3 5">
+      <path d="M120 74v420M260 74v420M400 74v420M540 74v420M672 74v420"/>
+      <path d="M104 108h584M104 250h584M104 392h584"/>
+    </g>
+    <g fill="#fff" stroke="#9b9b9b" stroke-width="0.9">
+      <circle cx="120" cy="74" r="11"/><circle cx="260" cy="74" r="11"/><circle cx="400" cy="74" r="11"/><circle cx="540" cy="74" r="11"/><circle cx="672" cy="74" r="11"/>
+      <circle cx="104" cy="108" r="11"/><circle cx="104" cy="250" r="11"/><circle cx="104" cy="392" r="11"/>
+    </g>
+    <g fill="#6a6a6a" font-family="Segoe UI, sans-serif" font-size="10" text-anchor="middle" dominant-baseline="middle">
+      <text x="120" y="74">1</text><text x="260" y="74">2</text><text x="400" y="74">3</text><text x="540" y="74">4</text><text x="672" y="74">5</text>
+      <text x="104" y="108">A</text><text x="104" y="250">B</text><text x="104" y="392">C</text>
+    </g>
+    <path d="M120 108h552v320H120Z M132 120v296h528V120Z" fill="url(#hatchwall)" fill-rule="evenodd" stroke="#1a1a1a" stroke-width="1.1"/>
+    <g stroke="#2b2b2b" stroke-width="4" fill="none">
+      <path d="M132 268h528M312 120v148M470 120v148M300 268v148M440 268v148"/>
+    </g>
+    <g stroke="#fff" stroke-width="6"><path d="M312 190v34M470 200v34M300 330v34M440 320v34M132 200v36M660 300v36"/></g>
+    <g stroke="#6f6f6f" stroke-width="1" fill="none">
+      <path d="M312 190a34 34 0 0 1 34 34M300 330a34 34 0 0 0-34 34M470 200a34 34 0 0 1 34 34"/>
+    </g>
+    <g stroke="#8f8f8f" stroke-width="1.3" fill="none">
+      <rect x="160" y="150" width="120" height="18" rx="2"/><rect x="160" y="182" width="120" height="18" rx="2"/><rect x="160" y="214" width="120" height="18" rx="2"/>
+      <circle cx="360" cy="170" r="16"/><circle cx="412" cy="170" r="16"/><circle cx="360" cy="216" r="16"/><circle cx="412" cy="216" r="16"/>
+      <rect x="510" y="150" width="128" height="86" rx="2"/><path d="M510 178h128M510 206h128"/>
+      <rect x="160" y="300" width="112" height="96" rx="2"/><path d="M160 340h112"/>
+      <rect x="330" y="300" width="86" height="42" rx="2"/><rect x="330" y="352" width="86" height="42" rx="2"/>
+      <rect x="470" y="296" width="176" height="100" rx="2"/><path d="M470 340h176M558 296v100"/>
+    </g>
+    <g fill="#3a3a3a" font-family="Segoe UI, sans-serif" font-size="11" letter-spacing="0.4">
+      <text x="152" y="140">SALA DE DESPIECE</text>
+      <text x="336" y="140">CÁMARA 1</text>
+      <text x="506" y="140">CÁMARA 2</text>
+      <text x="152" y="292">MUELLE DE CARGA</text>
+      <text x="326" y="292">VESTUARIOS</text>
+      <text x="466" y="288">SALA DE MÁQUINAS</text>
+    </g>
+    <g fill="#8a8a8a" font-family="Segoe UI, sans-serif" font-size="8">
+      <text x="164" y="163">CINTA 01</text><text x="164" y="195">CINTA 02</text><text x="164" y="227">CINTA 03</text>
+      <text x="516" y="172">EVAPORADOR</text><text x="516" y="200">EVAPORADOR</text>
+    </g>
+    <g stroke="#9a9a9a" stroke-width="0.8" fill="none">
+      <path d="M120 470h552M120 462v16M260 462v16M400 462v16M540 462v16M672 462v16"/>
+    </g>
+    <g fill="#7a7a7a" font-family="Segoe UI, sans-serif" font-size="9" text-anchor="middle">
+      <text x="190" y="459">8.400</text><text x="330" y="459">8.400</text><text x="470" y="459">8.400</text><text x="606" y="459">7.900</text>
+    </g>
+    <g stroke="#b03a3a" stroke-width="1" stroke-dasharray="20 4 3 4"><path d="M112 320h568"/></g>
+    <g fill="#b03a3a" font-family="Segoe UI, sans-serif" font-size="9"><text x="686" y="323">A'</text></g>
+  </g>
+</svg>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">ZenInk · Pasada de interfaz</div>
+    <h1>Tres direcciones para ZenInk</h1>
+    <p class="lede">
+      Las tres llevan exactamente los mismos controles que la app ya tiene, más los tres que faltan
+      —barra de desplazamiento, control de zoom y miniaturas— y dejan sitio hecho para las anotaciones
+      que vienen. Lo que cambia es <strong>dónde vive cada cosa</strong>, y de eso depende cuánto habrá
+      que rehacer cuando lleguen el lápiz, las formas y los comentarios.
+    </p>
+    <div class="meta">
+      <span><b>Tokens:</b> Fluent WinUI 3, tema claro</span>
+      <span><b>Acento:</b> #005FB8</span>
+      <span><b>Ventana:</b> 1360 × 860</span>
+      <span><b>Plano:</b> planta industrial, 12 hojas</span>
+    </div>
+  </header>
+
+  <div class="sizebar">
+    <button class="toggle" id="sizeToggle" type="button">Ver a tamaño real</button>
+  </div>
+
+  <!-- ══ OPCIÓN A ══════════════════════════════════════════════ -->
+  <article class="option">
+    <div class="option-head">
+      <span class="tag">OPCIÓN A</span>
+      <h2>Fluent nativo</h2>
+      <p class="thesis">
+        Pestañas arriba, una barra de comandos fija debajo, miniaturas a la izquierda y la píldora de
+        zoom flotando sobre el plano. Es la app de Windows 11 que cualquiera sabe usar sin que se lo expliquen.
+      </p>
+    </div>
+
+    <div class="frame" data-frame>
+      <div class="mock" style="width: 1360px; height: 860px; background: var(--bg-mica); display: flex; flex-direction: column;">
+
+        <div style="height: 40px; display: flex; align-items: flex-end; gap: 8px; padding-left: 12px; flex-shrink: 0;">
+          <div style="display: flex; align-items: center; gap: 8px; padding-bottom: 9px;">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><rect x="2.5" y="2.5" width="15" height="15" rx="3.5" fill="#005fb8"/><path d="M6.4 7.2h7.2L6.4 12.8h7.2" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span style="font-size: 12px; color: var(--text-2);">ZenInk</span>
+          </div>
+          <div style="display: flex; align-items: flex-end; gap: 2px; flex-grow: 1; margin-left: 4px;">
+            <div style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px 0 12px; background: var(--layer); border: 1px solid var(--card-stroke); border-bottom: none; border-radius: 7px 7px 0 0; max-width: 230px;">
+              <svg class="ic-sm" style="color: var(--accent);"><use href="#ic-doc"/></svg>
+              <span style="font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">01GN-001A-S-E0420-PLANTA GENERAL</span>
+              <svg class="ic-sm" style="color: var(--text-3); flex-shrink: 0;"><use href="#ic-close"/></svg>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 7px 7px 0 0; max-width: 210px; opacity: 0.72;">
+              <svg class="ic-sm" style="color: var(--text-3);"><use href="#ic-doc"/></svg>
+              <span style="font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">02AR-002B-L-E0420-PLANTA BAJA PRODUCCIÓN</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 7px 7px 0 0; max-width: 190px; opacity: 0.72;">
+              <svg class="ic-sm" style="color: var(--text-3);"><use href="#ic-doc"/></svg>
+              <span style="font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">02AR-004C-B-E0420-ALZADOS</span>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 4px; color: var(--text-2);"><svg class="ic"><use href="#ic-plus"/></svg></div>
+          </div>
+          <div style="display: flex; align-self: flex-start;">
+            <div style="width: 46px; height: 32px; display: flex; align-items: center; justify-content: center;"><svg width="10" height="10" viewBox="0 0 10 10" stroke="rgba(0,0,0,0.7)" stroke-width="1"><path d="M0 5h10"/></svg></div>
+            <div style="width: 46px; height: 32px; display: flex; align-items: center; justify-content: center;"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="rgba(0,0,0,0.7)" stroke-width="1"><rect x="0.5" y="0.5" width="9" height="9"/></svg></div>
+            <div style="width: 46px; height: 32px; display: flex; align-items: center; justify-content: center;"><svg width="10" height="10" viewBox="0 0 10 10" stroke="rgba(0,0,0,0.7)" stroke-width="1"><path d="M0 0l10 10M10 0L0 10"/></svg></div>
+          </div>
+        </div>
+
+        <div style="height: 48px; display: flex; align-items: center; gap: 4px; padding: 0 12px; background: var(--layer); border-top: 1px solid var(--card-stroke); border-bottom: 1px solid var(--divider); flex-shrink: 0;">
+          <div style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 4px; background: var(--control); border: 1px solid var(--card-stroke);">
+            <svg class="ic"><use href="#ic-open"/></svg><span style="font-size: 14px;">Abrir</span>
+          </div>
+          <div style="width: 1px; height: 20px; background: var(--divider); margin: 0 6px;"></div>
+          <div style="display: flex; align-items: center; gap: 2px;">
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: var(--accent-soft); border: 1px solid rgba(0,95,184,0.18); color: var(--accent);"><svg class="ic"><use href="#ic-hand"/></svg></div>
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic"><use href="#ic-text"/></svg></div>
+          </div>
+          <div style="width: 1px; height: 20px; background: var(--divider); margin: 0 6px;"></div>
+          <div style="display: flex; align-items: center; gap: 2px;">
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic"><use href="#ic-pen"/></svg></div>
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic"><use href="#ic-mark"/></svg></div>
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic"><use href="#ic-shape"/></svg></div>
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic"><use href="#ic-note"/></svg></div>
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic"><use href="#ic-eraser"/></svg></div>
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;">
+              <div style="width: 16px; height: 16px; border-radius: 3px; background: #d13438; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15);"></div>
+            </div>
+          </div>
+          <div style="width: 1px; height: 20px; background: var(--divider); margin: 0 6px;"></div>
+          <div style="display: flex; align-items: center; gap: 2px;">
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: var(--accent-soft); border: 1px solid rgba(0,95,184,0.18); color: var(--accent);"><svg class="ic"><use href="#ic-scroll"/></svg></div>
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic"><use href="#ic-single"/></svg></div>
+          </div>
+          <div style="width: 1px; height: 20px; background: var(--divider); margin: 0 6px;"></div>
+          <div style="display: flex; align-items: center; gap: 2px;">
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic"><use href="#ic-up"/></svg></div>
+            <div style="display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 4px; background: rgba(0,0,0,0.03);">
+              <span style="font-size: 13px; font-variant-numeric: tabular-nums;">3</span><span style="font-size: 13px; color: var(--text-3);">/ 12</span>
+            </div>
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic"><use href="#ic-down"/></svg></div>
+          </div>
+          <div style="width: 1px; height: 20px; background: var(--divider); margin: 0 6px;"></div>
+          <div style="display: flex; align-items: center; gap: 2px;">
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic"><use href="#ic-fit"/></svg></div>
+            <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: var(--accent-soft); border: 1px solid rgba(0,95,184,0.18); color: var(--accent);"><svg class="ic"><use href="#ic-weight"/></svg></div>
+          </div>
+          <div style="flex-grow: 1;"></div>
+          <div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: var(--text-2);"><svg class="ic"><use href="#ic-more"/></svg></div>
+        </div>
+
+        <div style="flex-grow: 1; display: flex; min-height: 0;">
+          <div style="width: 208px; flex-shrink: 0; background: var(--layer); border-right: 1px solid var(--divider); display: flex; flex-direction: column;">
+            <div style="height: 40px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 14px; flex-shrink: 0;">
+              <span style="font-size: 12px; font-weight: 600; color: var(--text-2); letter-spacing: 0.2px;">HOJAS</span>
+              <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: var(--text-2);"><svg class="ic"><use href="#ic-panel"/></svg></div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px; padding: 4px 14px 14px;">
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="height: 104px; border-radius: 4px; background: #fff; border: 1px solid var(--card-stroke); overflow: hidden;">
+                  <svg viewBox="0 0 200 130" style="width: 100%; height: 100%;"><rect width="200" height="130" fill="#fff"/><g stroke="#9a9a9a" stroke-width="1.6" fill="none"><rect x="24" y="20" width="152" height="86"/><path d="M92 20v52M140 20v52M24 72h152M62 72v34M116 72v34"/></g><g stroke="#c9c9c9" stroke-width="0.8"><path d="M24 112h152M24 108v8M176 108v8"/></g></svg>
+                </div>
+                <span style="font-size: 11px; color: var(--text-3); text-align: center;">1</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="height: 104px; border-radius: 4px; background: #fff; border: 1px solid var(--card-stroke); overflow: hidden;">
+                  <svg viewBox="0 0 200 130" style="width: 100%; height: 100%;"><rect width="200" height="130" fill="#fff"/><g stroke="#9a9a9a" stroke-width="1.6" fill="none"><rect x="18" y="26" width="164" height="74"/><path d="M70 26v74M126 26v74"/></g><g stroke="#c9c9c9" stroke-width="0.8"><path d="M18 110h164"/></g></svg>
+                </div>
+                <span style="font-size: 11px; color: var(--text-3); text-align: center;">2</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="height: 104px; border-radius: 4px; background: #fff; border: 2px solid var(--accent); box-shadow: 0 0 0 2px rgba(0,95,184,0.14); overflow: hidden;">
+                  <svg viewBox="0 0 200 130" style="width: 100%; height: 100%;"><rect width="200" height="130" fill="#fff"/><g stroke="#5c5c5c" stroke-width="2" fill="none"><rect x="22" y="18" width="156" height="90"/><path d="M86 18v50M128 18v50M22 68h156M74 68v40M118 68v40"/></g><g stroke="#b8b8b8" stroke-width="0.8"><path d="M22 116h156M22 112v8M178 112v8"/></g></svg>
+                </div>
+                <span style="font-size: 11px; color: var(--accent); font-weight: 600; text-align: center;">3</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="height: 104px; border-radius: 4px; background: #fff; border: 1px solid var(--card-stroke); overflow: hidden;">
+                  <svg viewBox="0 0 200 130" style="width: 100%; height: 100%;"><rect width="200" height="130" fill="#fff"/><g stroke="#9a9a9a" stroke-width="1.6" fill="none"><rect x="26" y="30" width="148" height="66"/><path d="M26 60h148M100 30v66"/></g></svg>
+                </div>
+                <span style="font-size: 11px; color: var(--text-3); text-align: center;">4</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="flex-grow: 1; position: relative; background: var(--canvas-bg); display: flex; align-items: center; justify-content: center; min-width: 0;">
+            <div style="width: 1000px; height: 700px; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.06);">
+              <svg viewBox="60 60 700 500" style="width: 100%; height: 100%;"><use href="#plan-full"/></svg>
+            </div>
+            <div style="position: absolute; right: 3px; top: 6px; bottom: 6px; width: 12px; display: flex; justify-content: center;">
+              <div style="width: 6px; background: rgba(0,0,0,0.06); border-radius: 3px; position: relative;">
+                <div style="position: absolute; top: 26%; height: 30%; left: 0; right: 0; background: rgba(0,0,0,0.32); border-radius: 3px;"></div>
+              </div>
+            </div>
+            <div style="position: absolute; right: 26px; bottom: 20px; display: flex; align-items: center; gap: 2px; height: 36px; padding: 0 4px; background: rgba(255,255,255,0.92); border: 1px solid var(--card-stroke); border-radius: 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.10);">
+              <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 14px;"><svg class="ic"><use href="#ic-minus"/></svg></div>
+              <span style="font-size: 13px; min-width: 44px; text-align: center; font-variant-numeric: tabular-nums;">87 %</span>
+              <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 14px;"><svg class="ic"><use href="#ic-plus"/></svg></div>
+              <div style="width: 1px; height: 18px; background: var(--divider); margin: 0 3px;"></div>
+              <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 14px;"><svg class="ic"><use href="#ic-fit"/></svg></div>
+            </div>
+            <div style="position: absolute; left: 20px; bottom: 20px; display: flex; align-items: center; height: 30px; padding: 0 12px; background: rgba(255,255,255,0.9); border: 1px solid var(--card-stroke); border-radius: 15px;">
+              <span style="font-size: 12px; color: var(--text-2);">Hoja 3 de 12</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="args">
+      <section class="for">
+        <h3>A favor</h3>
+        <ul>
+          <li><strong>Cero curva de aprendizaje.</strong> Es exactamente la gramática de Windows 11: todo visible, todo etiquetable, nada escondido.</li>
+          <li>Las miniaturas viven en un sitio fijo, así que saltar a la hoja 9 de un set es un vistazo y un clic.</li>
+          <li>Es lo más cerca de lo que ya está construido: la reforma es la más pequeña de las tres.</li>
+        </ul>
+      </section>
+      <section class="against">
+        <h3>En contra</h3>
+        <ul>
+          <li><strong>Aquí ya está dibujada con las anotaciones dentro: son quince controles en una fila.</strong> Y aún faltan las opciones de cada herramienta.</li>
+          <li>Come 88 px de altura permanentes. Con planos apaisados en un monitor ancho, el alto es justo lo escaso.</li>
+          <li>El color y el grosor del lápiz no caben; acabarían en menús desplegables, que es un clic de más en algo que se toca constantemente.</li>
+        </ul>
+      </section>
+    </div>
+  </article>
+
+  <!-- ══ OPCIÓN B ══════════════════════════════════════════════ -->
+  <article class="option">
+    <div class="option-head">
+      <span class="tag">OPCIÓN B</span>
+      <h2>Drawboard</h2>
+      <p class="thesis">
+        El plano a sangre, de borde a borde. Todo lo demás flota encima y las opciones de cada
+        herramienta aparecen solo cuando la eliges —aquí, el lápiz con sus colores y grosores.
+      </p>
+    </div>
+
+    <div class="frame" data-frame>
+      <div class="mock" style="width: 1360px; height: 860px; position: relative; background: #e9e9e9;">
+
+        <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
+          <div style="width: 1290px; height: 900px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.05);">
+            <svg viewBox="110 100 580 400" style="width: 100%; height: 100%;">
+              <use href="#plan-full"/>
+              <g stroke="#d13438" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.92">
+                <path d="M336 296c22-9 52-11 78-3 20 6 24 22 8 32-20 12-62 14-84 4-16-7-14-25-2-33Z"/>
+              </g>
+              <g fill="#d13438" font-family="Segoe UI, sans-serif" font-size="9" opacity="0.92"><text x="336" y="352">revisar cota</text></g>
+            </svg>
+          </div>
+        </div>
+
+        <div style="position: absolute; left: 16px; top: 14px; display: flex; align-items: center; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; background: var(--float); border: 1px solid var(--card-stroke); border-radius: 17px; box-shadow: var(--shadow); max-width: 240px;">
+            <div style="width: 6px; height: 6px; border-radius: 3px; background: var(--accent); flex-shrink: 0;"></div>
+            <span style="font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">01GN-001A-S-E0420-PLANTA GENERAL</span>
+          </div>
+          <div style="display: flex; align-items: center; height: 34px; padding: 0 14px; background: rgba(252,252,252,0.6); border: 1px solid var(--card-stroke); border-radius: 17px; max-width: 170px;">
+            <span style="font-size: 12.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">02AR-002B-L-E0420-PLANTA BAJA</span>
+          </div>
+          <div style="width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; background: rgba(252,252,252,0.6); border: 1px solid var(--card-stroke); border-radius: 17px; color: var(--text-2);"><svg class="ic-sm"><use href="#ic-plus"/></svg></div>
+        </div>
+
+        <div style="position: absolute; right: 0; top: 0; display: flex;">
+          <div style="width: 46px; height: 34px; display: flex; align-items: center; justify-content: center;"><svg width="10" height="10" viewBox="0 0 10 10" stroke="rgba(0,0,0,0.65)" stroke-width="1"><path d="M0 5h10"/></svg></div>
+          <div style="width: 46px; height: 34px; display: flex; align-items: center; justify-content: center;"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="rgba(0,0,0,0.65)" stroke-width="1"><rect x="0.5" y="0.5" width="9" height="9"/></svg></div>
+          <div style="width: 46px; height: 34px; display: flex; align-items: center; justify-content: center;"><svg width="10" height="10" viewBox="0 0 10 10" stroke="rgba(0,0,0,0.65)" stroke-width="1"><path d="M0 0l10 10M10 0L0 10"/></svg></div>
+        </div>
+
+        <div style="position: absolute; left: 50%; transform: translateX(-50%); bottom: 24px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 14px; height: 46px; padding: 0 16px; background: var(--float); border: 1px solid var(--card-stroke); border-radius: 23px; box-shadow: var(--shadow);">
+            <div style="display: flex; align-items: center; gap: 7px;">
+              <div style="width: 22px; height: 22px; border-radius: 11px; background: #d13438; box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px #d13438;"></div>
+              <div style="width: 22px; height: 22px; border-radius: 11px; background: #1a1a1a;"></div>
+              <div style="width: 22px; height: 22px; border-radius: 11px; background: #005fb8;"></div>
+              <div style="width: 22px; height: 22px; border-radius: 11px; background: #107c10;"></div>
+              <div style="width: 22px; height: 22px; border-radius: 11px; background: #f7a600;"></div>
+            </div>
+            <div style="width: 1px; height: 22px; background: var(--divider);"></div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;"><div style="width: 18px; height: 2px; border-radius: 1px; background: var(--text-2);"></div></div>
+              <div style="width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.05); border-radius: 6px;"><div style="width: 18px; height: 4px; border-radius: 2px; background: var(--text-1);"></div></div>
+              <div style="width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;"><div style="width: 18px; height: 7px; border-radius: 3.5px; background: var(--text-2);"></div></div>
+            </div>
+            <div style="width: 1px; height: 22px; background: var(--divider);"></div>
+            <span style="font-size: 12px; color: var(--text-2);">Lápiz</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 3px; height: 54px; padding: 0 8px; background: var(--float); border: 1px solid var(--card-stroke); border-radius: 27px; box-shadow: var(--shadow);">
+            <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 20px;"><svg class="ic-lg"><use href="#ic-open"/></svg></div>
+            <div style="width: 1px; height: 22px; background: var(--divider); margin: 0 5px;"></div>
+            <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 20px;"><svg class="ic-lg"><use href="#ic-hand"/></svg></div>
+            <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 20px;"><svg class="ic-lg"><use href="#ic-text"/></svg></div>
+            <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 20px; background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(0,95,184,0.35);"><svg class="ic-lg"><use href="#ic-pen"/></svg></div>
+            <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 20px;"><svg class="ic-lg"><use href="#ic-mark"/></svg></div>
+            <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 20px;"><svg class="ic-lg"><use href="#ic-shape"/></svg></div>
+            <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 20px;"><svg class="ic-lg"><use href="#ic-note"/></svg></div>
+            <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 20px;"><svg class="ic-lg"><use href="#ic-eraser"/></svg></div>
+            <div style="width: 1px; height: 22px; background: var(--divider); margin: 0 5px;"></div>
+            <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 20px;"><svg class="ic-lg"><use href="#ic-pages"/></svg></div>
+            <div style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 20px;"><svg class="ic-lg"><use href="#ic-weight"/></svg></div>
+          </div>
+        </div>
+
+        <div style="position: absolute; left: 16px; bottom: 24px; display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 6px; background: var(--float); border: 1px solid var(--card-stroke); border-radius: 20px; box-shadow: var(--shadow);">
+          <div style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 15px;"><svg class="ic-sm"><use href="#ic-up"/></svg></div>
+          <span style="font-size: 12.5px; padding: 0 6px; color: var(--text-2);">Hoja <span style="color: var(--text-1); font-weight: 600;">3</span> de 12</span>
+          <div style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 15px;"><svg class="ic-sm"><use href="#ic-down"/></svg></div>
+        </div>
+
+        <div style="position: absolute; right: 16px; bottom: 24px; display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 6px; background: var(--float); border: 1px solid var(--card-stroke); border-radius: 20px; box-shadow: var(--shadow);">
+          <div style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 15px;"><svg class="ic-sm"><use href="#ic-minus"/></svg></div>
+          <span style="font-size: 12.5px; min-width: 42px; text-align: center; font-variant-numeric: tabular-nums;">87 %</span>
+          <div style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 15px;"><svg class="ic-sm"><use href="#ic-plus"/></svg></div>
+          <div style="width: 1px; height: 18px; background: var(--divider); margin: 0 3px;"></div>
+          <div style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 15px;"><svg class="ic-sm"><use href="#ic-fit"/></svg></div>
+        </div>
+
+        <div style="position: absolute; right: 5px; top: 60px; bottom: 80px; width: 6px; display: flex; justify-content: center;">
+          <div style="width: 5px; background: rgba(0,0,0,0.05); border-radius: 3px; position: relative;">
+            <div style="position: absolute; top: 22%; height: 34%; left: 0; right: 0; background: rgba(0,0,0,0.26); border-radius: 3px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="args">
+      <section class="for">
+        <h3>A favor</h3>
+        <ul>
+          <li><strong>El plano manda.</strong> Es la que más superficie de dibujo deja: nada de cromo permanente.</li>
+          <li>Las opciones aparecen donde estás mirando, no en la esquina de la pantalla.</li>
+          <li>Es, con diferencia, la más bonita de las tres.</li>
+        </ul>
+      </section>
+      <section class="against">
+        <h3>En contra</h3>
+        <ul>
+          <li><strong>La barra tapa dibujo.</strong> En un A0 lleno hasta el borde, molesta justo cuando más detalle hay.</li>
+          <li>No hay hueco fijo para las miniaturas; en un set de 12 hojas se echa en falta.</li>
+          <li>Lo que no está a la vista cuesta encontrarlo. Es cómoda cuando ya sabes dónde está todo, no mientras lo aprendes.</li>
+        </ul>
+      </section>
+    </div>
+  </article>
+
+  <!-- ══ OPCIÓN C ══════════════════════════════════════════════ -->
+  <article class="option">
+    <div class="option-head">
+      <span class="tag">OPCIÓN C</span>
+      <h2>Híbrido</h2>
+      <span class="pick">MI RECOMENDACIÓN</span>
+      <p class="thesis">
+        Arriba solo lo que afecta al documento y a la vista. Las herramientas, en un raíl vertical.
+        Y un panel a la derecha que cambia según la herramienta activa —aquí, las propiedades del lápiz.
+      </p>
+    </div>
+
+    <div class="frame" data-frame>
+      <div class="mock" style="width: 1360px; height: 860px; background: var(--bg-mica); display: flex; flex-direction: column;">
+
+        <div style="height: 40px; display: flex; align-items: flex-end; gap: 8px; padding-left: 12px; flex-shrink: 0;">
+          <div style="display: flex; align-items: center; padding-bottom: 9px;">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><rect x="2.5" y="2.5" width="15" height="15" rx="3.5" fill="#005fb8"/><path d="M6.4 7.2h7.2L6.4 12.8h7.2" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div style="display: flex; align-items: flex-end; gap: 2px; flex-grow: 1;">
+            <div style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px 0 12px; background: var(--layer); border: 1px solid var(--card-stroke); border-bottom: none; border-radius: 7px 7px 0 0; max-width: 250px;">
+              <svg class="ic-sm" style="color: var(--accent);"><use href="#ic-doc"/></svg>
+              <span style="font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">01GN-001A-S-E0420-PLANTA GENERAL</span>
+              <svg class="ic-sm" style="color: var(--text-3); flex-shrink: 0;"><use href="#ic-close"/></svg>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 7px 7px 0 0; max-width: 210px; opacity: 0.72;">
+              <svg class="ic-sm" style="color: var(--text-3);"><use href="#ic-doc"/></svg>
+              <span style="font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">02AR-002B-L-E0420-PLANTA BAJA PRODUCCIÓN</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 7px 7px 0 0; max-width: 180px; opacity: 0.72;">
+              <svg class="ic-sm" style="color: var(--text-3);"><use href="#ic-doc"/></svg>
+              <span style="font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">02AR-004C-B-E0420-ALZADOS</span>
+            </div>
+            <div style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: var(--text-2);"><svg class="ic-sm"><use href="#ic-plus"/></svg></div>
+          </div>
+          <div style="display: flex; align-self: flex-start;">
+            <div style="width: 46px; height: 32px; display: flex; align-items: center; justify-content: center;"><svg width="10" height="10" viewBox="0 0 10 10" stroke="rgba(0,0,0,0.7)" stroke-width="1"><path d="M0 5h10"/></svg></div>
+            <div style="width: 46px; height: 32px; display: flex; align-items: center; justify-content: center;"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="rgba(0,0,0,0.7)" stroke-width="1"><rect x="0.5" y="0.5" width="9" height="9"/></svg></div>
+            <div style="width: 46px; height: 32px; display: flex; align-items: center; justify-content: center;"><svg width="10" height="10" viewBox="0 0 10 10" stroke="rgba(0,0,0,0.7)" stroke-width="1"><path d="M0 0l10 10M10 0L0 10"/></svg></div>
+          </div>
+        </div>
+
+        <div style="height: 44px; display: flex; align-items: center; gap: 4px; padding: 0 12px; background: var(--layer); border-top: 1px solid var(--card-stroke); border-bottom: 1px solid var(--divider); flex-shrink: 0;">
+          <div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 4px; background: var(--control); border: 1px solid var(--card-stroke);">
+            <svg class="ic-sm"><use href="#ic-open"/></svg><span style="font-size: 13.5px;">Abrir</span>
+          </div>
+          <div style="width: 1px; height: 18px; background: var(--divider); margin: 0 8px;"></div>
+          <div style="display: flex; align-items: center; gap: 2px; padding: 2px; background: rgba(0,0,0,0.026); border-radius: 6px;">
+            <div style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 4px; background: var(--layer); box-shadow: 0 1px 2px rgba(0,0,0,0.08);">
+              <svg class="ic-sm"><use href="#ic-scroll"/></svg><span style="font-size: 12.5px;">Continuo</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 4px; color: var(--text-2);">
+              <svg class="ic-sm"><use href="#ic-single"/></svg><span style="font-size: 12.5px;">Hoja</span>
+            </div>
+          </div>
+          <div style="width: 1px; height: 18px; background: var(--divider); margin: 0 8px;"></div>
+          <div style="display: flex; align-items: center; gap: 2px;">
+            <div style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic-sm"><use href="#ic-up"/></svg></div>
+            <span style="font-size: 12.5px; color: var(--text-2); padding: 0 4px;">Hoja <span style="color: var(--text-1); font-weight: 600; font-variant-numeric: tabular-nums;">3</span> de 12</span>
+            <div style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic-sm"><use href="#ic-down"/></svg></div>
+          </div>
+          <div style="width: 1px; height: 18px; background: var(--divider); margin: 0 8px;"></div>
+          <div style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic-sm"><use href="#ic-fit"/></svg></div>
+          <div style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 4px; background: var(--accent-soft); border: 1px solid rgba(0,95,184,0.18); color: var(--accent);">
+            <svg class="ic-sm"><use href="#ic-weight"/></svg><span style="font-size: 12.5px;">Grosores</span>
+          </div>
+          <div style="flex-grow: 1;"></div>
+          <div style="display: flex; align-items: center; gap: 2px;">
+            <div style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic-sm"><use href="#ic-minus"/></svg></div>
+            <span style="font-size: 12.5px; min-width: 44px; text-align: center; font-variant-numeric: tabular-nums;">87 %</span>
+            <div style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg class="ic-sm"><use href="#ic-plus"/></svg></div>
+          </div>
+        </div>
+
+        <div style="flex-grow: 1; display: flex; min-height: 0;">
+          <div style="width: 56px; flex-shrink: 0; background: var(--layer); border-right: 1px solid var(--divider); display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 3px;">
+            <div class="rail-btn"><svg class="ic-lg"><use href="#ic-hand"/></svg></div>
+            <div class="rail-btn"><svg class="ic-lg"><use href="#ic-text"/></svg></div>
+            <div style="width: 24px; height: 1px; background: var(--divider); margin: 6px 0;"></div>
+            <div class="rail-btn" style="background: var(--accent); color: #fff; box-shadow: 0 1px 4px rgba(0,95,184,0.3);"><svg class="ic-lg"><use href="#ic-pen"/></svg></div>
+            <div class="rail-btn"><svg class="ic-lg"><use href="#ic-mark"/></svg></div>
+            <div class="rail-btn"><svg class="ic-lg"><use href="#ic-shape"/></svg></div>
+            <div class="rail-btn"><svg class="ic-lg"><use href="#ic-note"/></svg></div>
+            <div class="rail-btn"><svg class="ic-lg"><use href="#ic-eraser"/></svg></div>
+            <div style="flex-grow: 1;"></div>
+            <div class="rail-btn" style="color: var(--text-2);"><svg class="ic-lg"><use href="#ic-pages"/></svg></div>
+          </div>
+
+          <div style="flex-grow: 1; position: relative; background: var(--canvas-bg); display: flex; align-items: center; justify-content: center; min-width: 0;">
+            <div style="width: 940px; height: 660px; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.06);">
+              <svg viewBox="88 62 616 440" style="width: 100%; height: 100%;">
+                <use href="#plan-full"/>
+                <g stroke="#d13438" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+                  <path d="M330 296c20-8 48-10 72-3 18 5 22 20 7 29-18 11-57 13-77 4-15-7-13-23-2-30Z"/>
+                </g>
+                <g fill="#d13438" font-family="Segoe UI, sans-serif" font-size="9" opacity="0.9"><text x="332" y="348">revisar cota</text></g>
+                <g stroke="#f7a600" stroke-width="7" stroke-linecap="round" opacity="0.34"><path d="M512 168h120"/></g>
+              </svg>
+            </div>
+            <div style="position: absolute; right: 3px; top: 6px; bottom: 6px; width: 12px; display: flex; justify-content: center;">
+              <div style="width: 6px; background: rgba(0,0,0,0.06); border-radius: 3px; position: relative;">
+                <div style="position: absolute; top: 26%; height: 30%; left: 0; right: 0; background: rgba(0,0,0,0.32); border-radius: 3px;"></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="width: 280px; flex-shrink: 0; background: var(--layer); border-left: 1px solid var(--divider); display: flex; flex-direction: column;">
+            <div style="height: 46px; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--divider); flex-shrink: 0;">
+              <svg class="ic-sm" style="color: var(--accent);"><use href="#ic-pen"/></svg>
+              <span style="font-size: 14px; font-weight: 600;">Lápiz</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 22px; padding: 20px 16px;">
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <span style="font-size: 12px; font-weight: 600; color: var(--text-2); letter-spacing: 0.2px;">COLOR</span>
+                <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px;">
+                  <div style="aspect-ratio: 1; border-radius: 6px; background: #d13438; box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--accent);"></div>
+                  <div style="aspect-ratio: 1; border-radius: 6px; background: #1a1a1a;"></div>
+                  <div style="aspect-ratio: 1; border-radius: 6px; background: #005fb8;"></div>
+                  <div style="aspect-ratio: 1; border-radius: 6px; background: #107c10;"></div>
+                  <div style="aspect-ratio: 1; border-radius: 6px; background: #f7a600;"></div>
+                  <div style="aspect-ratio: 1; border-radius: 6px; background: #8764b8;"></div>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; align-items: baseline; justify-content: space-between;">
+                  <span style="font-size: 12px; font-weight: 600; color: var(--text-2); letter-spacing: 0.2px;">GROSOR</span>
+                  <span style="font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums;">2,5 mm</span>
+                </div>
+                <div style="display: flex; align-items: center; height: 20px;">
+                  <div style="flex-grow: 1; height: 4px; border-radius: 2px; background: rgba(0,0,0,0.08); position: relative;">
+                    <div style="position: absolute; left: 0; width: 42%; top: 0; bottom: 0; background: var(--accent); border-radius: 2px;"></div>
+                    <div style="position: absolute; left: 42%; top: 50%; transform: translate(-50%, -50%); width: 18px; height: 18px; border-radius: 9px; background: #fff; border: 1px solid rgba(0,0,0,0.12); box-shadow: 0 1px 3px rgba(0,0,0,0.16); display: flex; align-items: center; justify-content: center;">
+                      <div style="width: 9px; height: 9px; border-radius: 5px; background: var(--accent);"></div>
+                    </div>
+                  </div>
+                </div>
+                <div style="height: 34px; border-radius: 6px; background: rgba(0,0,0,0.026); display: flex; align-items: center; justify-content: center;">
+                  <svg viewBox="0 0 120 24" style="width: 100%; height: 24px;"><path d="M8 12c14-9 28 9 42 0s28-9 42 0" fill="none" stroke="#d13438" stroke-width="5" stroke-linecap="round"/></svg>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <div style="display: flex; align-items: baseline; justify-content: space-between;">
+                  <span style="font-size: 12px; font-weight: 600; color: var(--text-2); letter-spacing: 0.2px;">OPACIDAD</span>
+                  <span style="font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums;">100 %</span>
+                </div>
+                <div style="display: flex; align-items: center; height: 20px;">
+                  <div style="flex-grow: 1; height: 4px; border-radius: 2px; background: rgba(0,0,0,0.08); position: relative;">
+                    <div style="position: absolute; inset: 0; background: var(--accent); border-radius: 2px;"></div>
+                    <div style="position: absolute; left: 100%; top: 50%; transform: translate(-50%, -50%); width: 18px; height: 18px; border-radius: 9px; background: #fff; border: 1px solid rgba(0,0,0,0.12); box-shadow: 0 1px 3px rgba(0,0,0,0.16); display: flex; align-items: center; justify-content: center;">
+                      <div style="width: 9px; height: 9px; border-radius: 5px; background: var(--accent);"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <span style="font-size: 12px; font-weight: 600; color: var(--text-2); letter-spacing: 0.2px;">LÁPIZ DIGITAL</span>
+                <div style="display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 12px; border-radius: 6px; background: rgba(0,0,0,0.026);">
+                  <span style="font-size: 13px;">Sensible a la presión</span>
+                  <div style="width: 40px; height: 20px; border-radius: 10px; background: var(--accent); position: relative;">
+                    <div style="position: absolute; right: 3px; top: 3px; width: 14px; height: 14px; border-radius: 7px; background: #fff;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="args">
+      <section class="for">
+        <h3>A favor</h3>
+        <ul>
+          <li><strong>Gasta ancho, que te sobra, y devuelve alto, que te falta.</strong> En un monitor panorámico con planos A0 apaisados, el raíl vertical es prácticamente gratis.</li>
+          <li><strong>Crece sin rediseñar.</strong> Cada herramienta nueva es un icono más en el raíl y su propio panel. Nunca vuelve a haber una fila que se queda corta.</li>
+          <li>El color y el grosor están siempre a un clic, no dentro de un desplegable: es lo que más se toca al anotar.</li>
+          <li>La barra de arriba queda para el documento y la vista, y no se mezcla con las herramientas de dibujo.</li>
+        </ul>
+      </section>
+      <section class="against">
+        <h3>En contra</h3>
+        <ul>
+          <li><strong>Es la que menos se parece a una app corriente de Windows.</strong> Se parece más a Illustrator o a Figma.</li>
+          <li>El panel derecho se come 280 px cuando está abierto; habría que poder plegarlo.</li>
+          <li>Es la reforma más grande de las tres respecto a lo ya construido.</li>
+        </ul>
+      </section>
+    </div>
+  </article>
+
+  <!-- ══ CIERRE ════════════════════════════════════════════════ -->
+  <div class="close">
+    <h2>Por qué la C</h2>
+    <p>
+      Las tres se ven bien. La diferencia está en qué pasa cuando lleguen las anotaciones.
+      <strong>En A ya son quince controles en una fila, y todavía faltan las opciones de cada herramienta.</strong>
+      En B no hay sitio fijo para nada. En C, cada herramienta nueva es un icono en el raíl y un panel propio,
+      así que la estructura no se vuelve a tocar.
+    </p>
+    <p>
+      Y hay un argumento que solo aplica a tu caso: <strong>tus planos son A0 apaisados en un monitor panorámico</strong>.
+      Ahí sobra ancho y falta alto. Una barra horizontal cobra en la dimensión escasa; un raíl vertical, en la que sobra.
+    </p>
+    <p>
+      Dicho esto, si lo que te tira es lo de B —el plano a sangre, sin nada fijo alrededor— se puede
+      hacer un punto medio: el raíl y el panel de C, pero que se retiren solos mientras dibujas.
+      Dime cuál te convence y la construyo.
+    </p>
+  </div>
+</div>
+
+<script>
+  const frames = document.querySelectorAll('[data-frame]');
+  const NATURAL_W = 1360, NATURAL_H = 860;
+
+  function fit() {
+    if (document.body.classList.contains('actual-size')) {
+      frames.forEach(f => { f.style.height = NATURAL_H + 'px'; });
+      return;
+    }
+    frames.forEach(f => {
+      const scale = f.clientWidth / NATURAL_W;
+      f.firstElementChild.style.transform = 'scale(' + scale + ')';
+      f.style.height = Math.round(NATURAL_H * scale) + 'px';
+    });
+  }
+
+  const toggle = document.getElementById('sizeToggle');
+  toggle.addEventListener('click', () => {
+    const on = document.body.classList.toggle('actual-size');
+    toggle.textContent = on ? 'Ajustar al ancho' : 'Ver a tamaño real';
+    fit();
+  });
+
+  addEventListener('resize', fit);
+  fit();
+  document.fonts && document.fonts.ready.then(fit);
+</script>

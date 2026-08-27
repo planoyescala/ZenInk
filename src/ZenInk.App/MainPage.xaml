@@ -12,131 +12,335 @@
     <Page.Resources>
         <Style x:Key="ToolbarSeparatorStyle" TargetType="Rectangle">
             <Setter Property="Width" Value="1" />
-            <Setter Property="Height" Value="20" />
+            <Setter Property="Height" Value="18" />
             <Setter Property="Margin" Value="8,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Fill" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+        </Style>
+
+        <!-- Botón del raíl: cuadrado, icono solo, con estado marcado bien visible. -->
+        <Style x:Key="RailToolStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="SlimButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="9,0" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+
+        <Style x:Key="SlimToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="CornerRadius" Value="4" />
         </Style>
     </Page.Resources>
 
-    <Grid RowDefinitions="48,*" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
-        <StackPanel
-            Grid.Row="0"
-            Padding="8,0"
-            Orientation="Horizontal"
-            Spacing="2">
+    <Grid Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" RowDefinitions="Auto,Auto,*">
 
-            <Button x:Name="OpenButton" Click="OnOpenClicked">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <FontIcon Glyph="&#xE8E5;" FontSize="16" />
-                    <TextBlock Text="Abrir" />
-                </StackPanel>
-            </Button>
-
-            <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
-
-            <ToggleButton
-                x:Name="PanToolButton"
-                Click="OnPanToolClicked"
-                IsChecked="True"
-                IsEnabled="False"
-                ToolTipService.ToolTip="Mano — arrastrar para desplazar">
-                <FontIcon Glyph="&#xE7C2;" FontSize="16" />
-            </ToggleButton>
-            <ToggleButton
-                x:Name="TextToolButton"
-                Click="OnTextToolClicked"
-                IsEnabled="False"
-                ToolTipService.ToolTip="Seleccionar texto">
-                <FontIcon Glyph="&#xE8E9;" FontSize="16" />
-            </ToggleButton>
-
-            <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
-
-            <ToggleButton
-                x:Name="ContinuousModeButton"
-                Click="OnContinuousModeClicked"
-                IsChecked="True"
-                IsEnabled="False"
-                ToolTipService.ToolTip="Vista continua — todas las hojas en una tira">
-                <TextBlock Text="Continuo" />
-            </ToggleButton>
-            <ToggleButton
-                x:Name="SingleModeButton"
-                Click="OnSingleModeClicked"
-                IsEnabled="False"
-                ToolTipService.ToolTip="Hoja única — la rueda hace zoom, sin saltar de hoja">
-                <TextBlock Text="Hoja" />
-            </ToggleButton>
-
-            <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
-
-            <Button
-                x:Name="PreviousPageButton"
-                Click="OnPreviousPageClicked"
-                IsEnabled="False"
-                ToolTipService.ToolTip="Hoja anterior">
-                <FontIcon Glyph="&#xE70E;" FontSize="16" />
-            </Button>
-            <Button
-                x:Name="NextPageButton"
-                Click="OnNextPageClicked"
-                IsEnabled="False"
-                ToolTipService.ToolTip="Hoja siguiente">
-                <FontIcon Glyph="&#xE70D;" FontSize="16" />
-            </Button>
-
-            <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
-
-            <Button
-                x:Name="FitButton"
-                Click="OnFitClicked"
-                IsEnabled="False"
-                ToolTipService.ToolTip="Ajustar al ancho">
-                <FontIcon Glyph="&#xE9A6;" FontSize="16" />
-            </Button>
-
-            <ToggleButton
-                x:Name="LineWeightButton"
-                Click="OnLineWeightClicked"
-                IsChecked="True"
-                IsEnabled="False"
-                ToolTipService.ToolTip="Grosores de línea — desactivar dibuja todas las líneas finas">
-                <TextBlock Text="Grosores" />
-            </ToggleButton>
-        </StackPanel>
-
-        <TextBlock
-            x:Name="ViewStatusText"
-            Grid.Row="0"
-            Margin="0,0,12,0"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Center"
-            Opacity="0.7" />
-
+        <!--  Pestañas  -->
         <TabView
             x:Name="Tabs"
-            Grid.Row="1"
+            Grid.Row="0"
             AddTabButtonClick="OnAddTabClicked"
             IsAddTabButtonVisible="True"
             SelectionChanged="OnTabSelectionChanged"
             TabCloseRequested="OnTabCloseRequested"
-            TabWidthMode="SizeToContent" />
+            TabWidthMode="SizeToContent">
+            <TabView.TabStripFooter>
+                <Grid MinWidth="8" />
+            </TabView.TabStripFooter>
+        </TabView>
 
-        <StackPanel
-            x:Name="EmptyState"
+        <!--  Barra slim: solo documento y vista. Las herramientas viven en el raíl.  -->
+        <Grid
             Grid.Row="1"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center"
-            Spacing="12">
-            <FontIcon
-                HorizontalAlignment="Center"
-                FontSize="40"
-                Glyph="&#xEA90;"
-                Opacity="0.35" />
+            Height="44"
+            Padding="12,0"
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,1"
+            ColumnDefinitions="Auto,*,Auto">
+
+            <StackPanel
+                Grid.Column="0"
+                Orientation="Horizontal"
+                Spacing="2">
+
+                <Button
+                    x:Name="OpenButton"
+                    Click="OnOpenClicked"
+                    Style="{StaticResource SlimButtonStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="15" Glyph="&#xE8E5;" />
+                        <TextBlock Text="Abrir" />
+                    </StackPanel>
+                </Button>
+
+                <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                <ToggleButton
+                    x:Name="ContinuousModeButton"
+                    Click="OnContinuousModeClicked"
+                    IsChecked="True"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimToggleStyle}"
+                    ToolTipService.ToolTip="Vista continua — todas las hojas en una tira">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <FontIcon FontSize="15" Glyph="&#xE8A4;" />
+                        <TextBlock Text="Continuo" />
+                    </StackPanel>
+                </ToggleButton>
+                <ToggleButton
+                    x:Name="SingleModeButton"
+                    Click="OnSingleModeClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimToggleStyle}"
+                    ToolTipService.ToolTip="Hoja única — la rueda hace zoom, sin saltar de hoja">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <FontIcon FontSize="15" Glyph="&#xE7C3;" />
+                        <TextBlock Text="Hoja" />
+                    </StackPanel>
+                </ToggleButton>
+
+                <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                <Button
+                    x:Name="PreviousPageButton"
+                    Width="30"
+                    Click="OnPreviousPageClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimButtonStyle}"
+                    ToolTipService.ToolTip="Hoja anterior">
+                    <FontIcon FontSize="14" Glyph="&#xE70E;" />
+                </Button>
+                <TextBlock
+                    x:Name="PageIndicator"
+                    Margin="6,0"
+                    VerticalAlignment="Center"
+                    Opacity="0.7" />
+                <Button
+                    x:Name="NextPageButton"
+                    Width="30"
+                    Click="OnNextPageClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimButtonStyle}"
+                    ToolTipService.ToolTip="Hoja siguiente">
+                    <FontIcon FontSize="14" Glyph="&#xE70D;" />
+                </Button>
+
+                <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                <Button
+                    x:Name="FitButton"
+                    Width="30"
+                    Click="OnFitClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimButtonStyle}"
+                    ToolTipService.ToolTip="Ajustar al ancho">
+                    <FontIcon FontSize="15" Glyph="&#xE9A6;" />
+                </Button>
+                <ToggleButton
+                    x:Name="LineWeightButton"
+                    Click="OnLineWeightClicked"
+                    IsChecked="True"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimToggleStyle}"
+                    ToolTipService.ToolTip="Grosores de línea — desactivar dibuja todas las líneas finas">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <FontIcon FontSize="15" Glyph="&#xE9E9;" />
+                        <TextBlock Text="Grosores" />
+                    </StackPanel>
+                </ToggleButton>
+            </StackPanel>
+
             <TextBlock
-                HorizontalAlignment="Center"
-                Opacity="0.6"
-                Text="Abre un plano para empezar" />
-        </StackPanel>
+                x:Name="DocumentNameText"
+                Grid.Column="1"
+                Margin="16,0"
+                VerticalAlignment="Center"
+                Opacity="0.55"
+                TextTrimming="CharacterEllipsis" />
+
+            <StackPanel
+                Grid.Column="2"
+                Orientation="Horizontal"
+                Spacing="2">
+                <Button
+                    x:Name="ZoomOutButton"
+                    Width="30"
+                    Click="OnZoomOutClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimButtonStyle}"
+                    ToolTipService.ToolTip="Alejar">
+                    <FontIcon FontSize="14" Glyph="&#xE71F;" />
+                </Button>
+                <TextBlock
+                    x:Name="ZoomIndicator"
+                    MinWidth="52"
+                    VerticalAlignment="Center"
+                    Opacity="0.7"
+                    TextAlignment="Center" />
+                <Button
+                    x:Name="ZoomInButton"
+                    Width="30"
+                    Click="OnZoomInClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimButtonStyle}"
+                    ToolTipService.ToolTip="Acercar">
+                    <FontIcon FontSize="14" Glyph="&#xE8A3;" />
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!--  Cuerpo: raíl · miniaturas · lienzo · propiedades  -->
+        <Grid Grid.Row="2" ColumnDefinitions="56,Auto,*,Auto">
+
+            <!--  Raíl de herramientas  -->
+            <Grid
+                Grid.Column="0"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                BorderThickness="0,0,1,0"
+                RowDefinitions="Auto,*,Auto">
+                <StackPanel
+                    Grid.Row="0"
+                    Padding="0,8"
+                    HorizontalAlignment="Center"
+                    Spacing="3">
+                    <ToggleButton
+                        x:Name="PanToolButton"
+                        Click="OnPanToolClicked"
+                        IsChecked="True"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Mano — arrastrar para desplazar">
+                        <FontIcon FontSize="17" Glyph="&#xE7C2;" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="TextToolButton"
+                        Click="OnTextToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Seleccionar texto">
+                        <FontIcon FontSize="17" Glyph="&#xE8E9;" />
+                    </ToggleButton>
+                </StackPanel>
+
+                <StackPanel
+                    Grid.Row="2"
+                    Padding="0,8"
+                    HorizontalAlignment="Center">
+                    <ToggleButton
+                        x:Name="ThumbnailsButton"
+                        Click="OnThumbnailsClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Miniaturas de hojas">
+                        <FontIcon FontSize="17" Glyph="&#xE8FD;" />
+                    </ToggleButton>
+                </StackPanel>
+            </Grid>
+
+            <!--  Miniaturas  -->
+            <rendering:PageThumbnailStrip
+                x:Name="Thumbnails"
+                Grid.Column="1"
+                Width="196"
+                Visibility="Collapsed" />
+
+            <!--  Lienzo  -->
+            <Grid Grid.Column="2">
+                <!--  Las pestañas son solo la tira; el visor de la activa se aloja aquí.  -->
+                <ContentControl
+                    x:Name="ViewerPresenter"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch" />
+
+                <StackPanel
+                    x:Name="EmptyState"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="12">
+                    <FontIcon
+                        HorizontalAlignment="Center"
+                        FontSize="40"
+                        Glyph="&#xEA90;"
+                        Opacity="0.3" />
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        Opacity="0.55"
+                        Text="Abre un plano para empezar" />
+                </StackPanel>
+            </Grid>
+
+            <!--  Propiedades de la herramienta activa  -->
+            <Grid
+                x:Name="PropertiesPanel"
+                Grid.Column="3"
+                Width="280"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                BorderThickness="1,0,0,0"
+                RowDefinitions="46,*"
+                Visibility="Collapsed">
+
+                <StackPanel
+                    Grid.Row="0"
+                    Padding="16,0"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,0,1"
+                    Orientation="Horizontal"
+                    Spacing="10">
+                    <FontIcon
+                        VerticalAlignment="Center"
+                        FontSize="15"
+                        Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                        Glyph="&#xE8E9;" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Text="Selección de texto" />
+                </StackPanel>
+
+                <StackPanel
+                    Grid.Row="1"
+                    Padding="16,20"
+                    Spacing="14">
+                    <TextBlock
+                        x:Name="SelectionStatus"
+                        Opacity="0.6"
+                        Text="Arrastra sobre el plano para seleccionar."
+                        TextWrapping="Wrap" />
+                    <Button
+                        x:Name="CopySelectionButton"
+                        HorizontalAlignment="Stretch"
+                        Click="OnCopySelectionClicked"
+                        IsEnabled="False">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="15" Glyph="&#xE8C8;" />
+                            <TextBlock Text="Copiar" />
+                        </StackPanel>
+                    </Button>
+                    <Button
+                        x:Name="SelectAllButton"
+                        HorizontalAlignment="Stretch"
+                        Click="OnSelectAllClicked">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="15" Glyph="&#xE8B3;" />
+                            <TextBlock Text="Seleccionar la hoja" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Grid>
     </Grid>
 </Page>

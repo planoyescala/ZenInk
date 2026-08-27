@@ -93,6 +93,54 @@ public static class RenderQueueTests
         File.Delete(pathB);
 
         await ThinLinesAsync();
+        await PagePreviewsAsync();
+    }
+
+    /// <summary>
+    /// Sheet thumbnails come from a whole-page render sized to a box. It has to
+    /// preserve the sheet's proportions, or the strip shows every drawing
+    /// stretched.
+    /// </summary>
+    private static async Task PagePreviewsAsync()
+    {
+        Section("Render queue — sheet previews");
+
+        string path = TestPdf.WriteRectangle("zenink-preview", "0 450 100 150");
+        var queue = PdfRenderQueue.Shared;
+        var document = await queue.OpenDocumentAsync(path);
+
+        const int maxEdge = 220;
+        var preview = await queue.RequestPagePreviewAsync(document.DocumentId, 0, maxEdge);
+
+        if (preview is not { } image)
+        {
+            Check("a preview is produced", false);
+            await queue.CloseDocumentAsync(document.DocumentId);
+            File.Delete(path);
+            return;
+        }
+
+        Check($"the long edge fits the box ({image.Width}x{image.Height})",
+            Math.Max(image.Width, image.Height) == maxEdge);
+
+        double sourceRatio = TestPdf.PageHeight / (double)TestPdf.PageWidth;
+        double previewRatio = image.Height / (double)image.Width;
+        CheckClose("proportions are preserved", previewRatio, sourceRatio, 0.02);
+
+        Check("the buffer matches the reported size", image.Bgra.Length == image.Width * image.Height * 4);
+
+        // Same corner mark as the tiling checks: ink top-left, blank bottom-right.
+        Check("the preview draws the page's content",
+            Bitmap.IsDark(image.Bgra, image.Width, image.Width / 8, image.Height / 8));
+        Check("the preview leaves blank areas blank",
+            !Bitmap.IsDark(image.Bgra, image.Width, image.Width * 7 / 8, image.Height * 7 / 8));
+
+        // Previews must not disturb the tiles they are queued behind.
+        var tile = await queue.RequestTileAsync(document.DocumentId, new TileKey(0, 0, 0, 0), 512);
+        Check("tiles still render after a preview", tile is { } t && Bitmap.IsDark(t.Bgra, t.Width, 50, 50));
+
+        await queue.CloseDocumentAsync(document.DocumentId);
+        File.Delete(path);
     }
 
     /// <summary>

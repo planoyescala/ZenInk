@@ -9,21 +9,27 @@ namespace ZenInk_App;
 
 public sealed partial class MainPage : Page
 {
+    private const double ZoomStep = 1.25;
+
     public MainPage()
     {
         InitializeComponent();
         UpdateChrome();
     }
 
-    /// <summary>The viewer of the selected tab, or null when nothing is open.</summary>
-    private PdfTiledViewer? ActiveViewer =>
-        (Tabs.SelectedItem as TabViewItem)?.Content as PdfTiledViewer;
+    /// <summary>
+    /// The viewer of the selected tab. Tabs carry their viewer in Tag rather
+    /// than Content: the TabView here is only the strip, and the viewer is
+    /// hosted in the canvas cell so the rail, thumbnails and properties panel
+    /// can sit alongside it.
+    /// </summary>
+    private PdfTiledViewer? ActiveViewer => (Tabs.SelectedItem as TabViewItem)?.Tag as PdfTiledViewer;
 
-    private async void OnOpenClicked(object sender, RoutedEventArgs e) => await OpenDocumentInNewTabAsync();
+    private async void OnOpenClicked(object sender, RoutedEventArgs e) => await PickAndOpenAsync();
 
-    private async void OnAddTabClicked(TabView sender, object args) => await OpenDocumentInNewTabAsync();
+    private async void OnAddTabClicked(TabView sender, object args) => await PickAndOpenAsync();
 
-    private async Task OpenDocumentInNewTabAsync()
+    private async Task PickAndOpenAsync()
     {
         var picker = new FileOpenPicker();
         InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(App.Current.MainWindow));
@@ -48,16 +54,17 @@ public sealed partial class MainPage : Page
             tab = new TabViewItem
             {
                 Header = displayName,
-                Content = viewer,
                 // Long sheet names are the norm, so cap the tab and let the
                 // header trim rather than pushing every other tab off-screen.
                 MaxWidth = 240,
                 IconSource = new SymbolIconSource { Symbol = Symbol.Document },
+                Tag = viewer,
             };
             ToolTipService.SetToolTip(tab, path);
 
             Tabs.TabItems.Add(tab);
             Tabs.SelectedItem = tab;
+            ShowViewer(viewer);
 
             await viewer.OpenAsync(path);
         }
@@ -73,6 +80,13 @@ public sealed partial class MainPage : Page
         }
     }
 
+    private void ShowViewer(PdfTiledViewer? viewer)
+    {
+        ViewerPresenter.Content = viewer;
+        Thumbnails.Attach(viewer);
+        viewer?.SetActive(true);
+    }
+
     private async Task ShowErrorAsync(string fileName, Exception ex)
     {
         var dialog = new ContentDialog
@@ -85,22 +99,25 @@ public sealed partial class MainPage : Page
         await dialog.ShowAsync();
     }
 
-    private void OnTabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args) =>
-        CloseTab(args.Tab);
+    private void OnTabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args) => CloseTab(args.Tab);
 
     private void CloseTab(TabViewItem? tab)
     {
         if (tab is null) return;
 
-        if (tab.Content is PdfTiledViewer viewer)
+        if (tab.Tag is PdfTiledViewer viewer)
         {
+            if (ReferenceEquals(ViewerPresenter.Content, viewer))
+            {
+                ViewerPresenter.Content = null;
+                Thumbnails.Attach(null);
+            }
+
             viewer.ViewChanged -= OnViewerViewChanged;
-            // Explicit teardown: the viewer must not rely on Unloaded, which a
-            // TabView also raises when merely switching away from a tab.
             viewer.CloseDocument();
+            tab.Tag = null;
         }
 
-        tab.Content = null;
         Tabs.TabItems.Remove(tab);
         UpdateChrome();
     }
@@ -109,47 +126,38 @@ public sealed partial class MainPage : Page
     {
         foreach (var removed in e.RemovedItems)
         {
-            if (removed is TabViewItem { Content: PdfTiledViewer viewer })
+            if (removed is TabViewItem { Tag: PdfTiledViewer viewer })
             {
                 viewer.SetActive(false);
             }
         }
 
-        ActiveViewer?.SetActive(true);
+        ShowViewer(ActiveViewer);
         UpdateChrome();
     }
 
     private void OnViewerViewChanged(object? sender, EventArgs e)
     {
-        // Only the visible tab drives the toolbar.
+        // Only the visible tab drives the chrome.
         if (!ReferenceEquals(sender, ActiveViewer)) return;
         UpdateChrome();
     }
 
-    // --- toolbar ---------------------------------------------------------
+    // --- barra superior ---------------------------------------------------
 
     private void OnFitClicked(object sender, RoutedEventArgs e) => ActiveViewer?.FitToWidth();
 
-    private void OnPanToolClicked(object sender, RoutedEventArgs e) => SelectTool(ViewerTool.Pan);
+    private void OnZoomInClicked(object sender, RoutedEventArgs e) => ActiveViewer?.ZoomBy(ZoomStep);
 
-    private void OnTextToolClicked(object sender, RoutedEventArgs e) => SelectTool(ViewerTool.SelectText);
-
-    private void SelectTool(ViewerTool tool)
-    {
-        if (ActiveViewer is { } viewer)
-        {
-            viewer.Tool = tool;
-        }
-        UpdateChrome();
-    }
+    private void OnZoomOutClicked(object sender, RoutedEventArgs e) => ActiveViewer?.ZoomBy(1.0 / ZoomStep);
 
     private void OnContinuousModeClicked(object sender, RoutedEventArgs e) =>
-        SelectLayoutMode(ViewerLayoutMode.Continuous);
+        SetLayoutMode(ViewerLayoutMode.Continuous);
 
     private void OnSingleModeClicked(object sender, RoutedEventArgs e) =>
-        SelectLayoutMode(ViewerLayoutMode.SinglePage);
+        SetLayoutMode(ViewerLayoutMode.SinglePage);
 
-    private void SelectLayoutMode(ViewerLayoutMode mode)
+    private void SetLayoutMode(ViewerLayoutMode mode)
     {
         if (ActiveViewer is { } viewer)
         {
@@ -158,7 +166,6 @@ public sealed partial class MainPage : Page
         UpdateChrome();
     }
 
-    /// <summary>Checked means the document's own line weights; unchecked draws everything hairline.</summary>
     private void OnLineWeightClicked(object sender, RoutedEventArgs e)
     {
         if (ActiveViewer is { } viewer)
@@ -172,7 +179,28 @@ public sealed partial class MainPage : Page
 
     private void OnNextPageClicked(object sender, RoutedEventArgs e) => ActiveViewer?.NextPage();
 
-    /// <summary>Mirrors the active tab's state into the shared toolbar.</summary>
+    // --- raíl y paneles ---------------------------------------------------
+
+    private void OnPanToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Pan);
+
+    private void OnTextToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.SelectText);
+
+    private void SetTool(ViewerTool tool)
+    {
+        if (ActiveViewer is { } viewer)
+        {
+            viewer.Tool = tool;
+        }
+        UpdateChrome();
+    }
+
+    private void OnThumbnailsClicked(object sender, RoutedEventArgs e) => UpdateChrome();
+
+    private void OnCopySelectionClicked(object sender, RoutedEventArgs e) => ActiveViewer?.CopySelection();
+
+    private void OnSelectAllClicked(object sender, RoutedEventArgs e) => ActiveViewer?.SelectCurrentPage();
+
+    /// <summary>Mirrors the active tab's state into the shared chrome.</summary>
     private void UpdateChrome()
     {
         var viewer = ActiveViewer;
@@ -181,27 +209,48 @@ public sealed partial class MainPage : Page
         EmptyState.Visibility = Tabs.TabItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         FitButton.IsEnabled = hasDocument;
+        ZoomInButton.IsEnabled = hasDocument;
+        ZoomOutButton.IsEnabled = hasDocument;
         PanToolButton.IsEnabled = hasDocument;
         TextToolButton.IsEnabled = hasDocument;
         ContinuousModeButton.IsEnabled = hasDocument;
         SingleModeButton.IsEnabled = hasDocument;
         LineWeightButton.IsEnabled = hasDocument;
+        ThumbnailsButton.IsEnabled = hasDocument;
         PreviousPageButton.IsEnabled = viewer?.CanGoPrevious ?? false;
         NextPageButton.IsEnabled = viewer?.CanGoNext ?? false;
 
-        LineWeightButton.IsChecked = viewer?.ThinLines != true;
-        PanToolButton.IsChecked = viewer?.Tool != ViewerTool.SelectText;
-        TextToolButton.IsChecked = viewer?.Tool == ViewerTool.SelectText;
+        bool textTool = viewer?.Tool == ViewerTool.SelectText;
+        PanToolButton.IsChecked = !textTool;
+        TextToolButton.IsChecked = textTool;
         ContinuousModeButton.IsChecked = viewer?.LayoutMode != ViewerLayoutMode.SinglePage;
         SingleModeButton.IsChecked = viewer?.LayoutMode == ViewerLayoutMode.SinglePage;
+        LineWeightButton.IsChecked = viewer?.ThinLines != true;
+
+        Thumbnails.Visibility = hasDocument && ThumbnailsButton.IsChecked == true
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        // The panel is contextual: it appears for the tool that has options.
+        PropertiesPanel.Visibility = hasDocument && textTool ? Visibility.Visible : Visibility.Collapsed;
+
+        bool hasSelection = viewer?.HasSelection ?? false;
+        CopySelectionButton.IsEnabled = hasSelection;
+        SelectAllButton.IsEnabled = hasDocument;
+        SelectionStatus.Text = hasSelection
+            ? "Texto seleccionado. Ctrl+C también copia."
+            : "Arrastra sobre el plano para seleccionar.";
 
         if (viewer is null || !hasDocument)
         {
-            ViewStatusText.Text = string.Empty;
+            PageIndicator.Text = string.Empty;
+            ZoomIndicator.Text = string.Empty;
+            DocumentNameText.Text = string.Empty;
             return;
         }
 
-        string selection = viewer.HasSelection ? "  ·  texto seleccionado" : string.Empty;
-        ViewStatusText.Text = $"Hoja {viewer.CurrentPageNumber} de {viewer.PageCount}  ·  {viewer.ZoomPercent:0}%{selection}";
+        PageIndicator.Text = $"Hoja {viewer.CurrentPageNumber} de {viewer.PageCount}";
+        ZoomIndicator.Text = $"{viewer.ZoomPercent:0} %";
+        DocumentNameText.Text = (Tabs.SelectedItem as TabViewItem)?.Header as string ?? string.Empty;
     }
 }

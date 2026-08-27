@@ -6,6 +6,7 @@
     xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:primitives="using:Microsoft.UI.Xaml.Controls.Primitives"
     KeyboardAcceleratorPlacementMode="Hidden"
     mc:Ignorable="d">
 
@@ -14,9 +15,11 @@
         <KeyboardAccelerator Key="A" Modifiers="Control" Invoked="OnSelectAllAccelerator" />
     </UserControl.KeyboardAccelerators>
 
-    <Grid Background="{ThemeResource LayerFillColorDefaultBrush}">
+    <Grid Background="{ThemeResource LayerFillColorDefaultBrush}" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
         <canvas:CanvasControl
             x:Name="Canvas"
+            Grid.Row="0"
+            Grid.Column="0"
             ClearColor="Transparent"
             IsTabStop="True"
             Draw="OnDraw"
@@ -26,5 +29,25 @@
             PointerMoved="OnPointerMoved"
             PointerReleased="OnPointerReleased"
             PointerCanceled="OnPointerReleased" />
+
+        <primitives:ScrollBar
+            x:Name="VerticalScroll"
+            Grid.Row="0"
+            Grid.Column="1"
+            IndicatorMode="MouseIndicator"
+            Minimum="0"
+            Orientation="Vertical"
+            Scroll="OnVerticalScroll"
+            Visibility="Collapsed" />
+
+        <primitives:ScrollBar
+            x:Name="HorizontalScroll"
+            Grid.Row="1"
+            Grid.Column="0"
+            IndicatorMode="MouseIndicator"
+            Minimum="0"
+            Orientation="Horizontal"
+            Scroll="OnHorizontalScroll"
+            Visibility="Collapsed" />
     </Grid>
 </UserControl>

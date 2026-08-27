@@ -50,6 +50,10 @@ public sealed class PdfRenderQueue : IDisposable
     private readonly Dictionary<TextRequest, TaskCompletionSource<PageTextLayer>> _pendingText = new();
     private readonly List<TextRequest> _textOrder = new();
 
+    private readonly object _previewGate = new();
+    private readonly Dictionary<PreviewRequest, PreviewJob> _pendingPreviews = new();
+    private readonly List<PreviewRequest> _previewOrder = new();
+
     private volatile bool _disposed;
     private int _nextDocumentId;
 
@@ -62,7 +66,11 @@ public sealed class PdfRenderQueue : IDisposable
 
     private readonly record struct TextRequest(int DocumentId, int PageIndex);
 
+    private readonly record struct PreviewRequest(int DocumentId, int PageIndex);
+
     private sealed record TileJob(int TileSize, TaskCompletionSource<TileBitmapData?> Completion);
+
+    private sealed record PreviewJob(int MaxEdge, TaskCompletionSource<TileBitmapData?> Completion);
 
     private sealed class OpenDocument(FpdfDocumentT handle)
     {
@@ -200,6 +208,30 @@ public sealed class PdfRenderQueue : IDisposable
         }
     }
 
+    /// <summary>
+    /// Renders a whole page small enough to fit a box of <paramref name="maxEdge"/>
+    /// pixels, for the sheet thumbnails. Lowest priority of all: a dense sheet
+    /// costs the same object traversal whatever the output size, so previews
+    /// must never come before the tiles or the text of what is on screen.
+    /// </summary>
+    public Task<TileBitmapData?> RequestPagePreviewAsync(int documentId, int pageIndex, int maxEdge)
+    {
+        var request = new PreviewRequest(documentId, pageIndex);
+        lock (_previewGate)
+        {
+            if (_pendingPreviews.TryGetValue(request, out var existing))
+            {
+                return existing.Completion.Task;
+            }
+
+            var job = new PreviewJob(maxEdge, new TaskCompletionSource<TileBitmapData?>(TaskCreationOptions.RunContinuationsAsynchronously));
+            _pendingPreviews[request] = job;
+            _previewOrder.Add(request);
+            _signal.Release();
+            return job.Completion.Task;
+        }
+    }
+
     private void EnqueueControl(Action action)
     {
         _controlActions.Enqueue(action);
@@ -250,6 +282,25 @@ public sealed class PdfRenderQueue : IDisposable
         {
             tcs.TrySetResult(new PageTextLayer(0, []));
         }
+
+        List<PreviewJob> previews = [];
+        lock (_previewGate)
+        {
+            for (int i = _previewOrder.Count - 1; i >= 0; i--)
+            {
+                if (_previewOrder[i].DocumentId != documentId) continue;
+                if (_pendingPreviews.Remove(_previewOrder[i], out var job))
+                {
+                    previews.Add(job);
+                }
+                _previewOrder.RemoveAt(i);
+            }
+        }
+
+        foreach (var job in previews)
+        {
+            job.Completion.TrySetResult(null);
+        }
     }
 
     private void WorkerLoop()
@@ -281,15 +332,28 @@ public sealed class PdfRenderQueue : IDisposable
                     continue;
                 }
 
-                if (DequeueNewestText() is not { } text) continue;
+                if (DequeueNewestText() is { } text)
+                {
+                    try
+                    {
+                        text.Completion.TrySetResult(ExtractTextCore(text.Request));
+                    }
+                    catch (Exception ex)
+                    {
+                        text.Completion.TrySetException(ex);
+                    }
+                    continue;
+                }
+
+                if (DequeueNewestPreview() is not { } preview) continue;
 
                 try
                 {
-                    text.Completion.TrySetResult(ExtractTextCore(text.Request));
+                    preview.Job.Completion.TrySetResult(RenderPreviewCore(preview.Request, preview.Job.MaxEdge));
                 }
                 catch (Exception ex)
                 {
-                    text.Completion.TrySetException(ex);
+                    preview.Job.Completion.TrySetException(ex);
                 }
             }
         }
@@ -324,6 +388,18 @@ public sealed class PdfRenderQueue : IDisposable
             _textOrder.RemoveAt(_textOrder.Count - 1);
             if (!_pendingText.Remove(request, out var tcs)) return null;
             return (request, tcs);
+        }
+    }
+
+    private (PreviewRequest Request, PreviewJob Job)? DequeueNewestPreview()
+    {
+        lock (_previewGate)
+        {
+            if (_previewOrder.Count == 0) return null;
+            var request = _previewOrder[^1];
+            _previewOrder.RemoveAt(_previewOrder.Count - 1);
+            if (!_pendingPreviews.Remove(request, out var job)) return null;
+            return (request, job);
         }
     }
 
@@ -485,6 +561,45 @@ public sealed class PdfRenderQueue : IDisposable
             }
 
             return new TileBitmapData(packed, tileSize, tileSize);
+        }
+        finally
+        {
+            fpdfview.FPDFBitmapDestroy(bitmap);
+        }
+    }
+
+    private TileBitmapData RenderPreviewCore(PreviewRequest request, int maxEdge)
+    {
+        var page = LoadPageCore(request.DocumentId, request.PageIndex);
+
+        float widthPt = fpdfview.FPDF_GetPageWidthF(page);
+        float heightPt = fpdfview.FPDF_GetPageHeightF(page);
+        double scale = maxEdge / (double)Math.Max(Math.Max(widthPt, heightPt), 1f);
+
+        int width = Math.Max(1, (int)Math.Round(widthPt * scale));
+        int height = Math.Max(1, (int)Math.Round(heightPt * scale));
+
+        var bitmap = fpdfview.FPDFBitmapCreateEx(width, height, (int)FPDFBitmapFormat.BGRA, IntPtr.Zero, width * 4);
+        if (bitmap is null)
+        {
+            throw new InvalidOperationException("No se pudo crear el bitmap de la miniatura.");
+        }
+
+        try
+        {
+            fpdfview.FPDFBitmapFillRect(bitmap, 0, 0, width, height, 0xFFFFFFFFUL);
+            fpdfview.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, (int)RenderFlags.RenderAnnotations);
+
+            int stride = fpdfview.FPDFBitmapGetStride(bitmap);
+            IntPtr buffer = fpdfview.FPDFBitmapGetBuffer(bitmap);
+
+            var packed = new byte[width * 4 * height];
+            for (int row = 0; row < height; row++)
+            {
+                Marshal.Copy(buffer + row * stride, packed, row * width * 4, width * 4);
+            }
+
+            return new TileBitmapData(packed, width, height);
         }
         finally
         {

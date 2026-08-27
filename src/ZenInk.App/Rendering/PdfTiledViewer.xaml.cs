@@ -3,7 +3,9 @@ using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI;
 using Microsoft.UI.Input;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
@@ -77,6 +79,7 @@ public sealed partial class PdfTiledViewer : UserControl
     private Point _lastPointerPosition;
     private ViewerTool _tool = ViewerTool.Pan;
     private bool _thinLines;
+    private bool _suppressScrollEvents;
 
     /// <summary>Bumped on every open, so results for a previous document are discarded.</summary>
     private int _documentGeneration;
@@ -110,6 +113,15 @@ public sealed partial class PdfTiledViewer : UserControl
     }
 
     public int PageCount => _layout?.DocumentPageCount ?? 0;
+
+    /// <summary>Identifies this viewer's document to the shared render queue.</summary>
+    public int DocumentId => _documentId;
+
+    /// <summary>Every sheet's size, so the thumbnail strip can take its shape before any rendering.</summary>
+    public IReadOnlyList<PdfPageSize> PageSizes => _pageSizes;
+
+    /// <summary>Raised when a document finishes opening, so page-dependent UI can rebuild.</summary>
+    public event EventHandler? DocumentOpened;
 
     /// <summary>
     /// In single-sheet mode the page is whichever one is laid out; in
@@ -285,6 +297,7 @@ public sealed partial class PdfTiledViewer : UserControl
         _pendingFit = true;
 
         Canvas.Invalidate();
+        DocumentOpened?.Invoke(this, EventArgs.Empty);
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -292,6 +305,27 @@ public sealed partial class PdfTiledViewer : UserControl
     {
         _pendingFit = true;
         Canvas.Invalidate();
+    }
+
+    /// <summary>Zooms about the centre of the viewport, for the toolbar's zoom buttons.</summary>
+    public void ZoomBy(double factor) =>
+        ZoomAt(new Point(Canvas.ActualWidth / 2, Canvas.ActualHeight / 2), factor);
+
+    /// <summary>Selects all the text on the sheet in view, if its text layer is ready.</summary>
+    public void SelectCurrentPage()
+    {
+        if (_layout is null) return;
+
+        int pageIndex = CurrentPageIndex;
+        EnsureTextLayer(pageIndex);
+
+        if (!_textLayers.TryGetValue(pageIndex, out var layer) || layer.Count == 0) return;
+
+        _selectionPage = pageIndex;
+        _selectionAnchor = 0;
+        _selectionFocus = layer.Count - 1;
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public string? GetSelectedText()
@@ -381,18 +415,8 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private void OnSelectAllAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (_layout is null || _tool != ViewerTool.SelectText) return;
-
-        int pageIndex = CurrentPageIndex;
-        if (_textLayers.TryGetValue(pageIndex, out var layer) && layer.Count > 0)
-        {
-            _selectionPage = pageIndex;
-            _selectionAnchor = 0;
-            _selectionFocus = layer.Count - 1;
-            Canvas.Invalidate();
-            ViewChanged?.Invoke(this, EventArgs.Empty);
-        }
-
+        if (_tool != ViewerTool.SelectText) return;
+        SelectCurrentPage();
         args.Handled = true;
     }
 
@@ -442,11 +466,72 @@ public sealed partial class PdfTiledViewer : UserControl
             : (float)Math.Clamp(_origin.Y, 0, layout.HeightPt - viewHeight);
 
         _origin = new Vector2(x, y);
+        SyncScrollBars();
     }
 
     private void ScrollBy(Vector2 deltaPt)
     {
         _origin += deltaPt;
+        ClampOrigin();
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Pushes the viewport into the scroll bars. Every path that moves or
+    /// resizes the view ends up in ClampOrigin, so syncing from there is what
+    /// keeps the bars from drifting out of step with the canvas.
+    /// </summary>
+    private void SyncScrollBars()
+    {
+        if (_layout is not { } layout)
+        {
+            VerticalScroll.Visibility = Visibility.Collapsed;
+            HorizontalScroll.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _suppressScrollEvents = true;
+        try
+        {
+            double viewWidth = Canvas.ActualWidth / _scale;
+            double viewHeight = Canvas.ActualHeight / _scale;
+
+            double verticalRange = Math.Max(0, layout.HeightPt - viewHeight);
+            VerticalScroll.Maximum = verticalRange;
+            VerticalScroll.ViewportSize = viewHeight;
+            VerticalScroll.SmallChange = viewHeight * 0.1;
+            VerticalScroll.LargeChange = viewHeight * 0.9;
+            VerticalScroll.Value = Math.Clamp(_origin.Y, 0, verticalRange);
+            VerticalScroll.Visibility = verticalRange > 0.5 ? Visibility.Visible : Visibility.Collapsed;
+
+            double horizontalRange = Math.Max(0, layout.WidthPt - viewWidth);
+            HorizontalScroll.Maximum = horizontalRange;
+            HorizontalScroll.ViewportSize = viewWidth;
+            HorizontalScroll.SmallChange = viewWidth * 0.1;
+            HorizontalScroll.LargeChange = viewWidth * 0.9;
+            HorizontalScroll.Value = Math.Clamp(_origin.X, 0, horizontalRange);
+            HorizontalScroll.Visibility = horizontalRange > 0.5 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        finally
+        {
+            _suppressScrollEvents = false;
+        }
+    }
+
+    private void OnVerticalScroll(object sender, ScrollEventArgs e)
+    {
+        if (_suppressScrollEvents || _layout is null) return;
+        _origin = new Vector2(_origin.X, (float)e.NewValue);
+        ClampOrigin();
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnHorizontalScroll(object sender, ScrollEventArgs e)
+    {
+        if (_suppressScrollEvents || _layout is null) return;
+        _origin = new Vector2((float)e.NewValue, _origin.Y);
         ClampOrigin();
         Canvas.Invalidate();
         ViewChanged?.Invoke(this, EventArgs.Empty);
