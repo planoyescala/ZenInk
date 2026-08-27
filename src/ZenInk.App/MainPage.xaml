@@ -81,7 +81,7 @@
 
     <Grid Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" RowDefinitions="Auto,Auto,*">
 
-        <!--  Pestañas  -->
+        <!--  Pestañas, sobre la línea de la barra de título  -->
         <TabView
             x:Name="Tabs"
             Grid.Row="0"
@@ -90,8 +90,27 @@
             SelectionChanged="OnTabSelectionChanged"
             TabCloseRequested="OnTabCloseRequested"
             TabWidthMode="SizeToContent">
+            <TabView.TabStripHeader>
+                <!--  Marca dibujada, no un recurso de imagen: así sigue al tema y no depende de una ruta.  -->
+                <Grid Width="42" Padding="13,0,0,0">
+                    <Border
+                        Width="18"
+                        Height="18"
+                        VerticalAlignment="Center"
+                        Background="{ThemeResource AccentFillColorDefaultBrush}"
+                        CornerRadius="4">
+                        <controls:ToolIcon
+                            Width="18"
+                            Height="18"
+                            Data="M6.6 7.4 L13.4 7.4 L6.6 12.6 L13.4 12.6"
+                            Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                            Thickness="1.6" />
+                    </Border>
+                </Grid>
+            </TabView.TabStripHeader>
             <TabView.TabStripFooter>
-                <Grid MinWidth="8" />
+                <!--  Zona de arrastre; su ancho deja hueco a los botones de la ventana.  -->
+                <Grid x:Name="TitleBarDragRegion" />
             </TabView.TabStripFooter>
         </TabView>
 

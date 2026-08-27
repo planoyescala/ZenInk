@@ -16,6 +16,34 @@ public sealed partial class MainPage : Page
         InitializeComponent();
         SyncThemeMenu();
         UpdateChrome();
+        Loaded += OnLoaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        var window = App.Current.MainWindow;
+        window.SetTitleBar(TitleBarDragRegion);
+        window.AppWindow.Changed += (_, args) =>
+        {
+            if (args.DidSizeChange)
+            {
+                SizeTitleBarDragRegion();
+            }
+        };
+        SizeTitleBarDragRegion();
+        AppTheme.Apply(AppTheme.Current, persist: false);
+    }
+
+    /// <summary>
+    /// Reserves room for the caption buttons at the end of the tab strip. Their
+    /// width is reported in physical pixels and varies with the window's
+    /// scaling, so it is converted rather than assumed.
+    /// </summary>
+    private void SizeTitleBarDragRegion()
+    {
+        var titleBar = App.Current.MainWindow.AppWindow.TitleBar;
+        double scale = XamlRoot?.RasterizationScale ?? 1.0;
+        TitleBarDragRegion.MinWidth = (titleBar.RightInset / Math.Max(scale, 0.1)) + 16;
     }
 
     // --- preferencias -----------------------------------------------------

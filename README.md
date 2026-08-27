@@ -49,7 +49,21 @@ alterar a otro al cerrarse o fallar.
 
 ## Hitos
 
-- [ ] **Hito 1**: abrir un PDF/plano grande y renderizarlo por tiles con zoom/pan fluido.
+- [x] **Hito 1**: abrir un PDF/plano grande y renderizarlo por tiles con zoom/pan fluido.
 - [ ] Hito 2: anotaciones (lápiz, formas, comentarios).
 - [ ] Hito 3: gestión de páginas.
 - [ ] Hito 4: captura de pantalla integrada.
+
+## Pendiente
+
+**Firma digital de PDF.** Poder firmar un plano con certificado de la FNMT y
+con DNIe, y producir firmas CMS/CAdES. Requisito de trabajo, no un extra:
+un plano visado o entregado a cliente se firma.
+
+Sin decidir todavía, y con un punto que conviene mirar antes de elegir
+librería: PDFsharp no firma, e iText —la opción habitual— es AGPL, lo que
+choca con la condición de que todo el stack sea libre para uso comercial y
+cerrado. La vía probable es BouncyCastle (MIT) para el CMS más construir a
+mano el diccionario de firma del PDF, pero hay que verificarlo. El acceso al
+DNIe y a los certificados de la FNMT va por el almacén de certificados de
+Windows (CNG/CAPI), que no es problema de licencia pero sí de integración.
