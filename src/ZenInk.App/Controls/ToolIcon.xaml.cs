@@ -32,6 +32,13 @@ public sealed partial class ToolIcon : UserControl
         // visual state — checked, disabled, pointer-over — so the icon has to
         // follow it rather than sample it once.
         RegisterPropertyChangedCallback(ForegroundProperty, (_, _) => Apply());
+
+        // A theme switch re-resolves the ThemeResource behind Foreground
+        // without raising the change notification above, so an icon whose
+        // brush comes from a visual state — a disabled or unchecked button —
+        // would otherwise keep painting itself in the outgoing theme's colour.
+        ActualThemeChanged += (_, _) => Apply();
+
         Loaded += (_, _) => Apply();
     }
 
