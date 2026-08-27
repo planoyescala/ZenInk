@@ -27,6 +27,9 @@ public partial class App : Application
 
     public Window MainWindow => _window ?? throw new InvalidOperationException("La ventana principal aún no se ha creado.");
 
+    /// <summary>The main window, or null before it exists — for startup-time callers.</summary>
+    public Window? MainWindowOrNull => _window;
+
     /// <summary>
     /// Initializes the singleton application object.  This is the first line of authored code
     /// executed, and as such is the logical equivalent of main() or WinMain().
@@ -43,6 +46,7 @@ public partial class App : Application
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
         _window = new MainWindow();
+        AppTheme.Apply(AppTheme.Current, persist: false);
         _window.Activate();
     }
 }

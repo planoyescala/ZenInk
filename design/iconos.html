@@ -1,0 +1,45 @@
+<title>Iconos de ZenInk</title>
+<style>
+  body { margin: 0; background: #fafafa; color: #1a1a1a; font-family: "Segoe UI", system-ui, sans-serif; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 20px; padding: 28px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px 8px; background: #fff; border: 1px solid #e6e6e6; border-radius: 8px; }
+  .cell svg { width: 76px; height: 76px; }
+  .cell .small { width: 19px; height: 19px; }
+  .row { display: flex; align-items: center; gap: 14px; }
+  .name { font-size: 12px; color: #666; }
+  h1 { font-size: 18px; margin: 0; padding: 24px 28px 0; }
+</style>
+
+<h1>Iconos de ZenInk — trazado a 20×20, tal cual van en la barra</h1>
+<div class="grid" id="grid"></div>
+
+<script>
+  const icons = [
+    ["Abrir", "M2.5 5.5A1.5 1.5 0 0 1 4 4h3.4l1.6 2H16a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5Z", 1.4, false],
+    ["Continuo", "M5 2.4h10v6.2H5Z M5 11.4h10v6.2H5Z", 1.4, false],
+    ["Hoja", "M5.4 3h9.2v14H5.4Z", 1.4, false],
+    ["Hoja anterior", "M5.5 12 10 7.5 14.5 12", 1.6, false],
+    ["Hoja siguiente", "M5.5 8 10 12.5 14.5 8", 1.6, false],
+    ["Ajustar al ancho", "M3 6.4V3.6h2.8 M17 6.4V3.6h-2.8 M3 13.6v2.8h2.8 M17 13.6v2.8h-2.8 M6.4 10h7.2 M6.4 10l1.8-1.8 M6.4 10l1.8 1.8 M13.6 10l-1.8-1.8 M13.6 10l-1.8 1.8", 1.4, false],
+    ["Grosores (relleno)", "M3 4.5h14v1.1H3Z M3 8.9h14v2.2H3Z M3 14.1h14v3.4H3Z", 0, true],
+    ["Alejar", "M5 10h10", 1.6, false],
+    ["Acercar", "M10 5v10 M5 10h10", 1.6, false],
+    ["Preferencias", "M10 12.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z M15.9 12.6a1.4 1.4 0 0 0 .3 1.6l.1.1a1.7 1.7 0 1 1-2.4 2.4l-.1-.1a1.4 1.4 0 0 0-1.6-.3 1.4 1.4 0 0 0-.9 1.3v.2a1.7 1.7 0 1 1-3.4 0v-.1a1.4 1.4 0 0 0-.9-1.3 1.4 1.4 0 0 0-1.6.3l-.1.1a1.7 1.7 0 1 1-2.4-2.4l.1-.1a1.4 1.4 0 0 0 .3-1.6 1.4 1.4 0 0 0-1.3-.9h-.2a1.7 1.7 0 1 1 0-3.4h.1a1.4 1.4 0 0 0 1.3-.9 1.4 1.4 0 0 0-.3-1.6l-.1-.1a1.7 1.7 0 1 1 2.4-2.4l.1.1a1.4 1.4 0 0 0 1.6.3h.1a1.4 1.4 0 0 0 .9-1.3v-.2a1.7 1.7 0 1 1 3.4 0v.1a1.4 1.4 0 0 0 .9 1.3 1.4 1.4 0 0 0 1.6-.3l.1-.1a1.7 1.7 0 1 1 2.4 2.4l-.1.1a1.4 1.4 0 0 0-.3 1.6v.1a1.4 1.4 0 0 0 1.3.9h.2a1.7 1.7 0 1 1 0 3.4h-.1a1.4 1.4 0 0 0-1.3.9Z", 1.4, false],
+    ["Mano", "M7 9V4.6a1.1 1.1 0 0 1 2.2 0V9 M9.2 8.4V3.8a1.1 1.1 0 0 1 2.2 0v4.6 M11.4 8.1V5.3a1.1 1.1 0 0 1 2.2 0V11 M4.8 9.4a1.1 1.1 0 0 1 2.2 0v2.2 M4.8 11.6c0 3 2.2 5.4 5.2 5.4s5.4-2 5.4-5.4V8", 1.4, false],
+    ["Texto", "M8 3.5h4 M8 16.5h4 M10 3.5v13", 1.4, false],
+    ["Miniaturas", "M2.8 3.6h6v6h-6Z M11.2 3.6h6v6h-6Z M2.8 11.4h6v6h-6Z M11.2 11.4h6v6h-6Z", 1.4, false],
+    ["Copiar", "M7 2.8h8.2a1.4 1.4 0 0 1 1.4 1.4v8.2 M4.8 5.6h7.6a1.4 1.4 0 0 1 1.4 1.4v8.2a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4V7a1.4 1.4 0 0 1 1.4-1.4Z", 1.4, false],
+    ["Seleccionar hoja", "M3.4 6.2V4.6a1.2 1.2 0 0 1 1.2-1.2h1.6 M16.6 6.2V4.6a1.2 1.2 0 0 0-1.2-1.2h-1.6 M3.4 13.8v1.6a1.2 1.2 0 0 0 1.2 1.2h1.6 M16.6 13.8v1.6a1.2 1.2 0 0 1-1.2 1.2h-1.6 M6.6 6.8h6.8v6.4H6.6Z", 1.4, false],
+    ["Documento (vacío)", "M5 3.4h6l4 4v9.2H5Z M11 3.4v4h4", 1.1, false],
+  ];
+
+  const svg = (d, w, filled, cls) =>
+    `<svg class="${cls}" viewBox="0 0 20 20" fill="${filled ? 'currentColor' : 'none'}" stroke="${filled ? 'none' : 'currentColor'}"
+       stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>`;
+
+  document.getElementById('grid').innerHTML = icons.map(([name, d, w, filled]) => `
+    <div class="cell">
+      ${svg(d, w, filled, '')}
+      <div class="row">${svg(d, w, filled, 'small')}<span class="name">${name}</span></div>
+    </div>`).join('');
+</script>

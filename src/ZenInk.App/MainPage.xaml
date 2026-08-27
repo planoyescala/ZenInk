@@ -3,6 +3,7 @@
     x:Class="ZenInk_App.MainPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:ZenInk_App.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:ZenInk_App"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -18,7 +19,17 @@
             <Setter Property="Fill" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
         </Style>
 
-        <!-- Botón del raíl: cuadrado, icono solo, con estado marcado bien visible. -->
+        <Style x:Key="BarIconStyle" TargetType="controls:ToolIcon">
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
+        </Style>
+
+        <Style x:Key="RailIconStyle" TargetType="controls:ToolIcon">
+            <Setter Property="Width" Value="19" />
+            <Setter Property="Height" Value="19" />
+        </Style>
+
+        <!--  Raíl: botón cuadrado, icono solo.  -->
         <Style x:Key="RailToolStyle" TargetType="ToggleButton">
             <Setter Property="Width" Value="40" />
             <Setter Property="Height" Value="40" />
@@ -77,7 +88,7 @@
                     Click="OnOpenClicked"
                     Style="{StaticResource SlimButtonStyle}">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon FontSize="15" Glyph="&#xE8E5;" />
+                        <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.5 5.5A1.5 1.5 0 0 1 4 4h3.4l1.6 2H16a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5Z" />
                         <TextBlock Text="Abrir" />
                     </StackPanel>
                 </Button>
@@ -92,7 +103,7 @@
                     Style="{StaticResource SlimToggleStyle}"
                     ToolTipService.ToolTip="Vista continua — todas las hojas en una tira">
                     <StackPanel Orientation="Horizontal" Spacing="7">
-                        <FontIcon FontSize="15" Glyph="&#xE8A4;" />
+                        <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M5 2.4h10v6.2H5Z M5 11.4h10v6.2H5Z" />
                         <TextBlock Text="Continuo" />
                     </StackPanel>
                 </ToggleButton>
@@ -103,7 +114,7 @@
                     Style="{StaticResource SlimToggleStyle}"
                     ToolTipService.ToolTip="Hoja única — la rueda hace zoom, sin saltar de hoja">
                     <StackPanel Orientation="Horizontal" Spacing="7">
-                        <FontIcon FontSize="15" Glyph="&#xE7C3;" />
+                        <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M5.4 3h9.2v14H5.4Z" />
                         <TextBlock Text="Hoja" />
                     </StackPanel>
                 </ToggleButton>
@@ -117,7 +128,10 @@
                     IsEnabled="False"
                     Style="{StaticResource SlimButtonStyle}"
                     ToolTipService.ToolTip="Hoja anterior">
-                    <FontIcon FontSize="14" Glyph="&#xE70E;" />
+                    <controls:ToolIcon
+                        Style="{StaticResource BarIconStyle}"
+                        Data="M5.5 12 10 7.5 14.5 12"
+                        Thickness="1.6" />
                 </Button>
                 <TextBlock
                     x:Name="PageIndicator"
@@ -131,7 +145,10 @@
                     IsEnabled="False"
                     Style="{StaticResource SlimButtonStyle}"
                     ToolTipService.ToolTip="Hoja siguiente">
-                    <FontIcon FontSize="14" Glyph="&#xE70D;" />
+                    <controls:ToolIcon
+                        Style="{StaticResource BarIconStyle}"
+                        Data="M5.5 8 10 12.5 14.5 8"
+                        Thickness="1.6" />
                 </Button>
 
                 <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
@@ -143,7 +160,7 @@
                     IsEnabled="False"
                     Style="{StaticResource SlimButtonStyle}"
                     ToolTipService.ToolTip="Ajustar al ancho">
-                    <FontIcon FontSize="15" Glyph="&#xE9A6;" />
+                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3 6.4V3.6h2.8 M17 6.4V3.6h-2.8 M3 13.6v2.8h2.8 M17 13.6v2.8h-2.8 M6.4 10h7.2 M6.4 10l1.8-1.8 M6.4 10l1.8 1.8 M13.6 10l-1.8-1.8 M13.6 10l-1.8 1.8" />
                 </Button>
                 <ToggleButton
                     x:Name="LineWeightButton"
@@ -153,7 +170,10 @@
                     Style="{StaticResource SlimToggleStyle}"
                     ToolTipService.ToolTip="Grosores de línea — desactivar dibuja todas las líneas finas">
                     <StackPanel Orientation="Horizontal" Spacing="7">
-                        <FontIcon FontSize="15" Glyph="&#xE9E9;" />
+                        <controls:ToolIcon
+                            Style="{StaticResource BarIconStyle}"
+                            Data="M3 4.5h14v1.1H3Z M3 8.9h14v2.2H3Z M3 14.1h14v3.4H3Z"
+                            Filled="True" />
                         <TextBlock Text="Grosores" />
                     </StackPanel>
                 </ToggleButton>
@@ -178,7 +198,10 @@
                     IsEnabled="False"
                     Style="{StaticResource SlimButtonStyle}"
                     ToolTipService.ToolTip="Alejar">
-                    <FontIcon FontSize="14" Glyph="&#xE71F;" />
+                    <controls:ToolIcon
+                        Style="{StaticResource BarIconStyle}"
+                        Data="M5 10h10"
+                        Thickness="1.6" />
                 </Button>
                 <TextBlock
                     x:Name="ZoomIndicator"
@@ -193,7 +216,41 @@
                     IsEnabled="False"
                     Style="{StaticResource SlimButtonStyle}"
                     ToolTipService.ToolTip="Acercar">
-                    <FontIcon FontSize="14" Glyph="&#xE8A3;" />
+                    <controls:ToolIcon
+                        Style="{StaticResource BarIconStyle}"
+                        Data="M10 5v10 M5 10h10"
+                        Thickness="1.6" />
+                </Button>
+
+                <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                <Button
+                    x:Name="SettingsButton"
+                    Width="30"
+                    Style="{StaticResource SlimButtonStyle}"
+                    ToolTipService.ToolTip="Preferencias">
+                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 12.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z M15.9 12.6a1.4 1.4 0 0 0 .3 1.6l.1.1a1.7 1.7 0 1 1-2.4 2.4l-.1-.1a1.4 1.4 0 0 0-1.6-.3 1.4 1.4 0 0 0-.9 1.3v.2a1.7 1.7 0 1 1-3.4 0v-.1a1.4 1.4 0 0 0-.9-1.3 1.4 1.4 0 0 0-1.6.3l-.1.1a1.7 1.7 0 1 1-2.4-2.4l.1-.1a1.4 1.4 0 0 0 .3-1.6 1.4 1.4 0 0 0-1.3-.9h-.2a1.7 1.7 0 1 1 0-3.4h.1a1.4 1.4 0 0 0 1.3-.9 1.4 1.4 0 0 0-.3-1.6l-.1-.1a1.7 1.7 0 1 1 2.4-2.4l.1.1a1.4 1.4 0 0 0 1.6.3h.1a1.4 1.4 0 0 0 .9-1.3v-.2a1.7 1.7 0 1 1 3.4 0v.1a1.4 1.4 0 0 0 .9 1.3 1.4 1.4 0 0 0 1.6-.3l.1-.1a1.7 1.7 0 1 1 2.4 2.4l-.1.1a1.4 1.4 0 0 0-.3 1.6v.1a1.4 1.4 0 0 0 1.3.9h.2a1.7 1.7 0 1 1 0 3.4h-.1a1.4 1.4 0 0 0-1.3.9Z" />
+                    <Button.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <MenuFlyoutSubItem Text="Tema">
+                                <RadioMenuFlyoutItem
+                                    x:Name="ThemeSystemItem"
+                                    Click="OnThemeSystemClicked"
+                                    GroupName="AppTheme"
+                                    Text="Según el sistema" />
+                                <RadioMenuFlyoutItem
+                                    x:Name="ThemeLightItem"
+                                    Click="OnThemeLightClicked"
+                                    GroupName="AppTheme"
+                                    Text="Claro" />
+                                <RadioMenuFlyoutItem
+                                    x:Name="ThemeDarkItem"
+                                    Click="OnThemeDarkClicked"
+                                    GroupName="AppTheme"
+                                    Text="Oscuro" />
+                            </MenuFlyoutSubItem>
+                        </MenuFlyout>
+                    </Button.Flyout>
                 </Button>
             </StackPanel>
         </Grid>
@@ -221,7 +278,7 @@
                         Style="{StaticResource RailToolStyle}"
                         ToolTipService.Placement="Right"
                         ToolTipService.ToolTip="Mano — arrastrar para desplazar">
-                        <FontIcon FontSize="17" Glyph="&#xE7C2;" />
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M7 9V4.6a1.1 1.1 0 0 1 2.2 0V9 M9.2 8.4V3.8a1.1 1.1 0 0 1 2.2 0v4.6 M11.4 8.1V5.3a1.1 1.1 0 0 1 2.2 0V11 M4.8 9.4a1.1 1.1 0 0 1 2.2 0v2.2 M4.8 11.6c0 3 2.2 5.4 5.2 5.4s5.4-2 5.4-5.4V8" />
                     </ToggleButton>
                     <ToggleButton
                         x:Name="TextToolButton"
@@ -230,7 +287,7 @@
                         Style="{StaticResource RailToolStyle}"
                         ToolTipService.Placement="Right"
                         ToolTipService.ToolTip="Seleccionar texto">
-                        <FontIcon FontSize="17" Glyph="&#xE8E9;" />
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M8 3.5h4 M8 16.5h4 M10 3.5v13" />
                     </ToggleButton>
                 </StackPanel>
 
@@ -245,7 +302,7 @@
                         Style="{StaticResource RailToolStyle}"
                         ToolTipService.Placement="Right"
                         ToolTipService.ToolTip="Miniaturas de hojas">
-                        <FontIcon FontSize="17" Glyph="&#xE8FD;" />
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M2.8 3.6h6v6h-6Z M11.2 3.6h6v6h-6Z M2.8 11.4h6v6h-6Z M11.2 11.4h6v6h-6Z" />
                     </ToggleButton>
                 </StackPanel>
             </Grid>
@@ -269,12 +326,14 @@
                     x:Name="EmptyState"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
-                    Spacing="12">
-                    <FontIcon
+                    Spacing="14">
+                    <controls:ToolIcon
+                        Width="44"
+                        Height="44"
                         HorizontalAlignment="Center"
-                        FontSize="40"
-                        Glyph="&#xEA90;"
-                        Opacity="0.3" />
+                        Data="M5 3.4h6l4 4v9.2H5Z M11 3.4v4h4"
+                        Opacity="0.3"
+                        Thickness="1.1" />
                     <TextBlock
                         HorizontalAlignment="Center"
                         Opacity="0.55"
@@ -300,11 +359,12 @@
                     BorderThickness="0,0,0,1"
                     Orientation="Horizontal"
                     Spacing="10">
-                    <FontIcon
+                    <controls:ToolIcon
+                        Width="15"
+                        Height="15"
                         VerticalAlignment="Center"
-                        FontSize="15"
-                        Foreground="{ThemeResource AccentFillColorDefaultBrush}"
-                        Glyph="&#xE8E9;" />
+                        Data="M8 3.5h4 M8 16.5h4 M10 3.5v13"
+                        Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
                     <TextBlock
                         VerticalAlignment="Center"
                         FontWeight="SemiBold"
@@ -326,7 +386,7 @@
                         Click="OnCopySelectionClicked"
                         IsEnabled="False">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon FontSize="15" Glyph="&#xE8C8;" />
+                            <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M7 2.8h8.2a1.4 1.4 0 0 1 1.4 1.4v8.2 M4.8 5.6h7.6a1.4 1.4 0 0 1 1.4 1.4v8.2a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4V7a1.4 1.4 0 0 1 1.4-1.4Z" />
                             <TextBlock Text="Copiar" />
                         </StackPanel>
                     </Button>
@@ -335,7 +395,7 @@
                         HorizontalAlignment="Stretch"
                         Click="OnSelectAllClicked">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon FontSize="15" Glyph="&#xE8B3;" />
+                            <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.4 6.2V4.6a1.2 1.2 0 0 1 1.2-1.2h1.6 M16.6 6.2V4.6a1.2 1.2 0 0 0-1.2-1.2h-1.6 M3.4 13.8v1.6a1.2 1.2 0 0 0 1.2 1.2h1.6 M16.6 13.8v1.6a1.2 1.2 0 0 1-1.2 1.2h-1.6 M6.6 6.8h6.8v6.4H6.6Z" />
                             <TextBlock Text="Seleccionar la hoja" />
                         </StackPanel>
                     </Button>

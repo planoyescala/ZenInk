@@ -14,7 +14,29 @@ public sealed partial class MainPage : Page
     public MainPage()
     {
         InitializeComponent();
+        SyncThemeMenu();
         UpdateChrome();
+    }
+
+    // --- preferencias -----------------------------------------------------
+
+    private void OnThemeSystemClicked(object sender, RoutedEventArgs e) => SetTheme(ElementTheme.Default);
+
+    private void OnThemeLightClicked(object sender, RoutedEventArgs e) => SetTheme(ElementTheme.Light);
+
+    private void OnThemeDarkClicked(object sender, RoutedEventArgs e) => SetTheme(ElementTheme.Dark);
+
+    private void SetTheme(ElementTheme theme)
+    {
+        AppTheme.Apply(theme);
+        SyncThemeMenu();
+    }
+
+    private void SyncThemeMenu()
+    {
+        ThemeSystemItem.IsChecked = AppTheme.Current == ElementTheme.Default;
+        ThemeLightItem.IsChecked = AppTheme.Current == ElementTheme.Light;
+        ThemeDarkItem.IsChecked = AppTheme.Current == ElementTheme.Dark;
     }
 
     /// <summary>

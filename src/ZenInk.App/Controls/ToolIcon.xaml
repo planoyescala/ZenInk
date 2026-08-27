@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="ZenInk_App.Controls.ToolIcon"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    IsHitTestVisible="False"
+    mc:Ignorable="d">
+
+    <Viewbox Stretch="Uniform">
+        <!--  A fixed 20x20 box keeps the stroke from being clipped by the geometry's own bounds.  -->
+        <Canvas Width="20" Height="20">
+            <Path
+                x:Name="IconPath"
+                StrokeEndLineCap="Round"
+                StrokeLineJoin="Round"
+                StrokeStartLineCap="Round" />
+        </Canvas>
+    </Viewbox>
+</UserControl>
