@@ -12,7 +12,10 @@ pantalla integrada en una sola herramienta.
 3. **Gestión de páginas** — añadir, quitar, unir.
 4. **Captura de pantalla integrada** — recortar y pegar como imagen en el documento.
 
-Fuera de alcance: mediciones calibradas a escala y comparación de revisiones.
+Fuera de alcance: comparación y superposición de revisiones de planos.
+
+La medición calibrada estaba fuera de alcance en el planteamiento inicial y
+**se ha vuelto a incluir**; está en "Pendiente".
 
 ## Stack
 
@@ -67,3 +70,13 @@ cerrado. La vía probable es BouncyCastle (MIT) para el CMS más construir a
 mano el diccionario de firma del PDF, pero hay que verificarlo. El acceso al
 DNIe y a los certificados de la FNMT va por el almacén de certificados de
 Windows (CNG/CAPI), que no es problema de licencia pero sí de integración.
+
+**Medición sobre el plano.** Distancias, áreas, perímetros y ángulos, con la
+escala calibrada por hoja. Revierte la exclusión del planteamiento inicial.
+
+Cada hoja se calibra por separado — dos hojas del mismo set pueden ir a escalas
+distintas, y el PDF rara vez trae la suya de forma fiable, así que el camino
+normal es que el usuario marque una distancia conocida. Una medición es una
+anotación: se guarda con el documento y se vuelve a dibujar, así que conviene
+que entre después del hito 2 y no antes, para no montar dos veces la capa que
+persiste sobre el plano.
