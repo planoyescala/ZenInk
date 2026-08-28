@@ -7,6 +7,8 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.UI.Text;
 
+using ZenInk.Core;
+
 namespace ZenInk_App.Rendering;
 
 /// <summary>

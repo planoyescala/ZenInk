@@ -1,0 +1,235 @@
+using Microsoft.Graphics.Canvas;
+using Windows.Foundation;
+using Windows.Graphics.DirectX;
+using ZenInk.Core;
+
+namespace ZenInk_App.Printing;
+
+/// <summary>
+/// One print job: the drawing, the paper, and what lands on each sheet.
+///
+/// It opens its <em>own</em> handle on the file rather than borrowing the
+/// viewer's, for the same reason saving does: the line-weight toggle works by
+/// rewriting stroke widths on the parsed page, and printing through that handle
+/// would put a screen-reading aid onto paper. The reader's sheet turns do come
+/// along, because those are what they are looking at.
+/// </summary>
+public sealed class PdfPrintJob : IAsyncDisposable
+{
+    /// <summary>
+    /// Ceiling on one band, in pixels. An A0 at 300 dpi is 139 megapixels; this
+    /// keeps any single allocation to about 64 MB however big the sheet is.
+    /// </summary>
+    private const long MaxBandPixels = 16L * 1024 * 1024;
+
+    /// <summary>PDF points to device-independent pixels.</summary>
+    public const double PointsToDips = 96.0 / 72.0;
+
+    private readonly PdfRenderQueue _queue = PdfRenderQueue.Shared;
+    private readonly int[] _rotations;
+
+    private int _documentId = -1;
+    private IReadOnlyList<PdfPageSize> _sheets = [];
+    private IReadOnlyList<PrintPiece> _pieces = [];
+
+    private PdfPrintJob(string path, int[] rotations)
+    {
+        SourcePath = path;
+        _rotations = rotations;
+    }
+
+    public string SourcePath { get; }
+
+    public PrintSettings Settings { get; private set; } = new();
+
+    /// <summary>The paper in use, in points, already turned to suit the drawing.</summary>
+    public PdfPageSize Paper { get; private set; } = new(595f, 842f);
+
+    /// <summary>Which sheets of the document to print, in order.</summary>
+    public IReadOnlyList<int> Pages { get; private set; } = [];
+
+    /// <summary>Sheets of paper this job will produce.</summary>
+    public IReadOnlyList<PrintPiece> Pieces => _pieces;
+
+    /// <summary>Output resolution in dots per inch.</summary>
+    public float Dpi { get; set; } = 300f;
+
+    /// <summary>Why a sheet came out blank, when one did.</summary>
+    public string? Problem { get; private set; }
+
+    /// <summary>
+    /// Opens a private view of the document for printing. The sheet sizes come
+    /// back from the file, then the reader's own turns are applied on top.
+    /// </summary>
+    public static async Task<PdfPrintJob> OpenAsync(string path, IReadOnlyList<int> rotations)
+    {
+        var job = new PdfPrintJob(path, rotations.ToArray());
+        var info = await PdfRenderQueue.Shared.OpenDocumentAsync(path);
+
+        job._documentId = info.DocumentId;
+        job._sheets = ApplyTurns(info.Pages, job._rotations);
+        job.Pages = Enumerable.Range(0, info.Pages.Count).ToArray();
+        job.Rebuild();
+        return job;
+    }
+
+    /// <summary>Sheet sizes as the reader sees them: turned sheets swap their axes.</summary>
+    private static PdfPageSize[] ApplyTurns(IReadOnlyList<PdfPageSize> sizes, int[] rotations)
+    {
+        var turned = new PdfPageSize[sizes.Count];
+        for (int i = 0; i < turned.Length; i++)
+        {
+            var size = sizes[i];
+            int rotation = i < rotations.Length ? rotations[i] & 3 : 0;
+            turned[i] = (rotation & 1) == 1 ? new PdfPageSize(size.HeightPt, size.WidthPt) : size;
+        }
+        return turned;
+    }
+
+    public IReadOnlyList<PdfPageSize> Sheets => _sheets;
+
+    public int RotationOf(int pageIndex) =>
+        pageIndex >= 0 && pageIndex < _rotations.Length ? _rotations[pageIndex] & 3 : 0;
+
+    public void Configure(PrintSettings settings, PdfPageSize paperSize, IReadOnlyList<int>? pages = null)
+    {
+        Settings = settings;
+        Paper = paperSize;
+        if (pages is not null)
+        {
+            Pages = pages;
+        }
+        Rebuild();
+    }
+
+    private void Rebuild() => _pieces = PrintLayout.Build(_sheets, Pages, Paper, Settings);
+
+    /// <summary>
+    /// The paper this piece prints on, turned to suit its drawing. Each sheet
+    /// of a mixed set may want the paper a different way round, so this is
+    /// asked per piece rather than once for the job.
+    /// </summary>
+    public PdfPageSize PaperFor(PrintPiece piece) =>
+        PrintLayout.OrientPaper(_sheets[piece.PageIndex], Paper, Settings);
+
+    /// <summary>
+    /// Draws one sheet of paper. The destination is in device-independent
+    /// pixels, because that is the space a print drawing session works in;
+    /// everything up to here is in PDF points.
+    ///
+    /// The drawing goes down a band at a time. Nothing else would fit: a single
+    /// bitmap of an A0 at plotter resolution is half a gigabyte, and the bands
+    /// are pixel-exact slices of the same render, which is what keeps the seams
+    /// invisible.
+    /// </summary>
+    public void DrawPiece(ICanvasResourceCreator device, CanvasDrawingSession ds, PrintPiece piece)
+    {
+        // Every early exit says why. A sheet that comes out blank is the one
+        // failure that looks like success, so it must never be silent.
+        if (_documentId < 0)
+        {
+            Problem = "El documento se cerró antes de dibujar la hoja.";
+            return;
+        }
+
+        var source = piece.Source;
+        var destination = piece.Destination;
+        if (source.Width <= 0 || source.Height <= 0)
+        {
+            Problem = "La zona del plano a imprimir quedó vacía.";
+            return;
+        }
+
+        if (destination.Width <= 0 || destination.Height <= 0)
+        {
+            Problem = "El hueco disponible en el papel quedó vacío.";
+            return;
+        }
+
+        // Output pixels per PDF point, at the resolution asked for.
+        double scale = destination.Width / source.Width * (Dpi / 72.0);
+        if (scale <= 0)
+        {
+            Problem = "La escala de impresión resultó nula.";
+            return;
+        }
+
+        int startX = (int)Math.Floor(source.X * scale);
+        int startY = (int)Math.Floor(source.Y * scale);
+        int totalWidth = Math.Max(1, (int)Math.Round(source.Width * scale));
+        int totalHeight = Math.Max(1, (int)Math.Round(source.Height * scale));
+
+        int bandHeight = (int)Math.Clamp(MaxBandPixels / Math.Max(1, totalWidth), 1, totalHeight);
+
+        // Destination is in points and the drawing session works in DIPs, so
+        // the conversion belongs here too. Leaving it out shrinks every print
+        // to three quarters of the paper, since 72 points is 96 DIPs.
+        double dipsPerPixel = destination.Height * PointsToDips / totalHeight;
+
+        // Aliased, and on whole-pixel boundaries, for the same reason the
+        // viewer does it: two abutting antialiased edges leave a pale seam.
+        var antialiasing = ds.Antialiasing;
+        ds.Antialiasing = CanvasAntialiasing.Aliased;
+
+        try
+        {
+            for (int offset = 0; offset < totalHeight; offset += bandHeight)
+            {
+                int height = Math.Min(bandHeight, totalHeight - offset);
+
+                // Waited on rather than awaited, and deliberately. This runs on
+                // the thread Win2D raised the print event on, and the drawing
+                // session belongs to that thread; an await would resume the
+                // rest of this method on a thread pool thread and the drawing
+                // would go nowhere. The wait cannot deadlock: the render queue
+                // is its own thread and completes off this one.
+                var band = _queue.RequestPrintBandAsync(
+                    _documentId,
+                    piece.PageIndex,
+                    RotationOf(piece.PageIndex),
+                    scale,
+                    startX,
+                    startY + offset,
+                    totalWidth,
+                    height,
+                    Settings.Monochrome).GetAwaiter().GetResult();
+
+                if (band is not { } data)
+                {
+                    Problem = "PDFium no devolvió parte de la hoja.";
+                    continue;
+                }
+
+                using var bitmap = CanvasBitmap.CreateFromBytes(
+                    device,
+                    data.Bgra,
+                    data.Width,
+                    data.Height,
+                    DirectXPixelFormat.B8G8R8A8UIntNormalized);
+
+                double top = destination.Y * PointsToDips + offset * dipsPerPixel;
+                double bottom = destination.Y * PointsToDips + (offset + height) * dipsPerPixel;
+
+                var target = new Rect(
+                    destination.X * PointsToDips,
+                    top,
+                    destination.Width * PointsToDips,
+                    bottom - top);
+                ds.DrawImage(bitmap, target);
+            }
+        }
+        finally
+        {
+            ds.Antialiasing = antialiasing;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_documentId < 0) return;
+
+        int documentId = _documentId;
+        _documentId = -1;
+        await _queue.CloseDocumentAsync(documentId);
+    }
+}

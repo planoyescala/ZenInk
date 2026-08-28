@@ -1,5 +1,7 @@
 using Microsoft.Graphics.Canvas;
 
+using ZenInk.Core;
+
 namespace ZenInk_App.Rendering;
 
 /// <summary>

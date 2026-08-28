@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ZenInk.Core</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    The engine deliberately has no UI dependency: it knows about PDF pages,
+    tiles, text and paper, and nothing about WinUI. That is what lets the test
+    suite drive it without opening a window, and what will let a print or an
+    export path reuse it unchanged.
+  -->
+  <ItemGroup>
+    <PackageReference Include="PDFiumCore" Version="153.0.7999" />
+  </ItemGroup>
+
+</Project>

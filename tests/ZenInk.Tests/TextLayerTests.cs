@@ -1,4 +1,4 @@
-using ZenInk_App.Rendering;
+using ZenInk.Core;
 using static ZenInk.Tests.TestRunner;
 
 namespace ZenInk.Tests;
@@ -70,6 +70,92 @@ public static class TextLayerTests
         }
 
         Selection();
+        Searching();
+    }
+
+    /// <summary>
+    /// Lays a string out as glyph boxes, one line per newline. Line breaks
+    /// carry no box, exactly as PDFium reports them.
+    /// </summary>
+    private static PageTextLayer LayerOf(string text)
+    {
+        var glyphs = new TextChar[text.Length];
+        float x = 10f, top = 10f;
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\n')
+            {
+                glyphs[i] = new TextChar('\n', 0, 0, 0, 0);
+                x = 10f;
+                top += 20f;
+                continue;
+            }
+
+            glyphs[i] = new TextChar(text[i], x, top, x + 10f, top + 14f);
+            x += 10f;
+        }
+
+        return new PageTextLayer(0, glyphs);
+    }
+
+    /// <summary>
+    /// The find bar's matching. A drawing's text arrives broken by line wraps
+    /// and written however the draughtsman felt that day, so these pin the two
+    /// things that decide whether a search is useful on a real sheet: accents
+    /// and case fold away unless asked otherwise, and a caption split across
+    /// lines still answers a query typed as one.
+    /// </summary>
+    private static void Searching()
+    {
+        Section("Text layer — finding text");
+
+        var loose = new TextSearchOptions();
+        var exact = new TextSearchOptions(MatchCase: true);
+        var word = new TextSearchOptions(WholeWord: true);
+
+        var layer = LayerOf("SECCION A-A y seccion b-b");
+
+        Check("a search finds every occurrence", layer.Find("seccion", loose).Count == 2);
+        Check("case folds by default", layer.Find("SeCcIoN", loose).Count == 2);
+        Check("matching case narrows to the exact spelling", layer.Find("SECCION", exact).Count == 1);
+        Check("nothing found returns no matches", layer.Find("planta", loose).Count == 0);
+        Check("an empty query finds nothing", layer.Find("", loose).Count == 0);
+
+        var accented = LayerOf("SECCIÓN transversal");
+        Check("accents fold away in a loose search", accented.Find("seccion", loose).Count == 1);
+        Check("an accented query still finds the accented text", accented.Find("Sección", loose).Count == 1);
+        Check("matching case keeps the accent significant", accented.Find("SECCION", exact).Count == 0);
+
+        var hit = layer.Find("A-A", loose);
+        Check("a match reports an inclusive glyph range",
+            hit.Count == 1 && hit[0].EndIndex - hit[0].StartIndex == 2,
+            hit.Count == 1 ? $"got {hit[0].StartIndex}..{hit[0].EndIndex}" : $"got {hit.Count} matches");
+        Check("the range points at the matched glyphs",
+            hit.Count == 1 && layer.GetText(hit[0].StartIndex, hit[0].EndIndex) == "A-A");
+
+        var wrapped = LayerOf("PLANTA\nBAJA");
+        Check("a caption split across lines matches as one phrase",
+            wrapped.Find("PLANTA BAJA", loose).Count == 1);
+
+        var wrappedHit = wrapped.Find("PLANTA BAJA", loose);
+        Check("a wrapped match highlights on both lines",
+            wrappedHit.Count == 1 && wrapped.BuildRuns(wrappedHit[0].StartIndex, wrappedHit[0].EndIndex).Count == 2);
+
+        var spaced = LayerOf("PLANTA   BAJA");
+        Check("runs of spaces collapse on both sides of the comparison",
+            spaced.Find("PLANTA BAJA", loose).Count == 1);
+
+        var partial = LayerOf("PLANTA y REPLANTEO");
+        Check("a substring matches by default", partial.Find("PLANT", loose).Count == 2);
+        Check("whole word rejects the one inside another word", partial.Find("PLANTA", word).Count == 1);
+        Check("punctuation counts as a boundary", LayerOf("E-04, E-05").Find("E-04", word).Count == 1);
+
+        var repeated = LayerOf("aaaa");
+        Check("overlapping candidates are not double counted", repeated.Find("aa", loose).Count == 2);
+
+        Check("matches come back in reading order",
+            layer.Find("e", loose).Zip(layer.Find("e", loose).Skip(1)).All(p => p.First.StartIndex < p.Second.StartIndex));
     }
 
     private static (float Left, float Top, float Right, float Bottom)? UnionOfGlyphBoxes(PageTextLayer layer)

@@ -8,6 +8,7 @@
     xmlns:local="using:ZenInk_App"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:rendering="using:ZenInk_App.Rendering"
+    KeyboardAcceleratorPlacementMode="Hidden"
     mc:Ignorable="d">
 
     <Page.Resources>
@@ -77,9 +78,49 @@
             <Setter Property="Padding" Value="10,0" />
             <Setter Property="CornerRadius" Value="4" />
         </Style>
+
+        <Style x:Key="SlimDropDownStyle" TargetType="DropDownButton">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="9,0" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+
+        <Style x:Key="SlimSplitButtonStyle" TargetType="SplitButton">
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="9,0" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
     </Page.Resources>
 
-    <Grid Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" RowDefinitions="Auto,Auto,*">
+    <!--
+        The shortcuts live on the page, not on the menu items that name them: a
+        flyout's items are only in the visual tree while the flyout is open, so
+        an accelerator declared there would work only when the menu is already
+        showing. The items carry the text; the page carries the keys.
+    -->
+    <Page.KeyboardAccelerators>
+        <KeyboardAccelerator Key="F" Modifiers="Control" Invoked="OnFindAccelerator" />
+        <KeyboardAccelerator Key="F3" Invoked="OnFindNextAccelerator" />
+        <KeyboardAccelerator Key="F3" Modifiers="Shift" Invoked="OnFindPreviousAccelerator" />
+        <KeyboardAccelerator Key="Escape" Invoked="OnEscapeAccelerator" />
+        <KeyboardAccelerator Key="S" Modifiers="Control" Invoked="OnSaveAccelerator" />
+        <KeyboardAccelerator Key="Number1" Modifiers="Control" Invoked="OnFitWidthAccelerator" />
+        <KeyboardAccelerator Key="Number2" Modifiers="Control" Invoked="OnFitPageAccelerator" />
+        <KeyboardAccelerator Key="Number0" Modifiers="Control" Invoked="OnActualSizeAccelerator" />
+        <KeyboardAccelerator Key="P" Modifiers="Control" Invoked="OnPrintAccelerator" />
+    </Page.KeyboardAccelerators>
+
+    <!--
+        Dropping a drawing on the window opens it. A reviewer arrives with the
+        sheets already in a folder in front of them, so making them go find the
+        same file again through a picker is a step for nothing.
+    -->
+    <Grid
+        AllowDrop="True"
+        Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+        DragOver="OnDragOver"
+        Drop="OnDrop"
+        RowDefinitions="Auto,Auto,*">
 
         <!--  Pestañas, sobre la línea de la barra de título  -->
         <TabView
@@ -139,31 +180,146 @@
                     </StackPanel>
                 </Button>
 
+                <!--
+                    Saving sits beside opening because that is what it is: the
+                    other half of the document's own life, not an afterthought
+                    of whichever tool happened to change something. Today only
+                    the sheet turns reach it; comments will arrive here too, and
+                    the control does not have to move when they do.
+                -->
+                <SplitButton
+                    x:Name="SaveButton"
+                    Click="OnSaveClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimSplitButtonStyle}"
+                    ToolTipService.ToolTip="Guardar los cambios en el PDF (Ctrl+S)">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 3.4v8.4 M6.4 8.4 L10 12 L13.6 8.4 M3.6 13.2v2.2a1.2 1.2 0 0 0 1.2 1.2h10.4a1.2 1.2 0 0 0 1.2-1.2v-2.2" />
+                        <TextBlock Text="Guardar" />
+                    </StackPanel>
+                    <SplitButton.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                            <MenuFlyoutItem
+                                x:Name="SaveItem"
+                                Click="OnSaveItemClicked"
+                                KeyboardAcceleratorTextOverride="Ctrl+S"
+                                Text="Guardar en el PDF" />
+                            <MenuFlyoutItem
+                                x:Name="SaveCopyItem"
+                                Click="OnSaveCopyClicked"
+                                Text="Guardar como…" />
+                        </MenuFlyout>
+                    </SplitButton.Flyout>
+                </SplitButton>
+
                 <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
 
-                <ToggleButton
-                    x:Name="ContinuousModeButton"
-                    Click="OnContinuousModeClicked"
-                    IsChecked="True"
+                <!--
+                    One menu for the three questions that together answer "how
+                    do I want to see this": how the sheets flow, how many sit
+                    side by side, and what the zoom follows. They used to be
+                    separate toggles, which said nothing about how they combine.
+                -->
+                <DropDownButton
+                    x:Name="ViewModeButton"
                     IsEnabled="False"
-                    Style="{StaticResource SlimToggleStyle}"
-                    ToolTipService.ToolTip="Vista continua — todas las hojas en una tira">
+                    Style="{StaticResource SlimDropDownStyle}"
+                    ToolTipService.ToolTip="Cómo se ve el documento">
                     <StackPanel Orientation="Horizontal" Spacing="7">
-                        <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M5 2.4h10v6.2H5Z M5 11.4h10v6.2H5Z" />
-                        <TextBlock Text="Continuo" />
+                        <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.8 3.6h14.4v12.8H2.8Z M10 3.6v12.8" />
+                        <TextBlock x:Name="ViewModeText" Text="Vista" />
                     </StackPanel>
-                </ToggleButton>
-                <ToggleButton
-                    x:Name="SingleModeButton"
-                    Click="OnSingleModeClicked"
+                    <DropDownButton.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                            <RadioMenuFlyoutItem
+                                x:Name="FitWidthItem"
+                                Click="OnFitWidthClicked"
+                                GroupName="ZenInkFit"
+                                KeyboardAcceleratorTextOverride="Ctrl+1"
+                                Text="Ancho completo" />
+                            <RadioMenuFlyoutItem
+                                x:Name="FitPageItem"
+                                Click="OnFitPageClicked"
+                                GroupName="ZenInkFit"
+                                KeyboardAcceleratorTextOverride="Ctrl+2"
+                                Text="Página completa" />
+                            <RadioMenuFlyoutItem
+                                x:Name="FitActualItem"
+                                Click="OnActualSizeClicked"
+                                GroupName="ZenInkFit"
+                                KeyboardAcceleratorTextOverride="Ctrl+0"
+                                Text="Tamaño real (100 %)" />
+                            <RadioMenuFlyoutItem
+                                x:Name="FitFreeItem"
+                                Click="OnFitFreeClicked"
+                                GroupName="ZenInkFit"
+                                Text="Zoom libre" />
+
+                            <MenuFlyoutSeparator />
+
+                            <RadioMenuFlyoutItem
+                                x:Name="OneColumnItem"
+                                Click="OnOneColumnClicked"
+                                GroupName="ZenInkColumns"
+                                Text="A una página" />
+                            <RadioMenuFlyoutItem
+                                x:Name="TwoColumnsItem"
+                                Click="OnTwoColumnsClicked"
+                                GroupName="ZenInkColumns"
+                                Text="A dos páginas" />
+
+                            <MenuFlyoutSeparator />
+
+                            <RadioMenuFlyoutItem
+                                x:Name="ContinuousItem"
+                                Click="OnContinuousModeClicked"
+                                GroupName="ZenInkFlow"
+                                Text="Continuo — todas las hojas en una tira" />
+                            <RadioMenuFlyoutItem
+                                x:Name="SingleItem"
+                                Click="OnSingleModeClicked"
+                                GroupName="ZenInkFlow"
+                                Text="Hoja a hoja — la rueda hace zoom" />
+                        </MenuFlyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+
+                <DropDownButton
+                    x:Name="RotateButton"
                     IsEnabled="False"
-                    Style="{StaticResource SlimToggleStyle}"
-                    ToolTipService.ToolTip="Hoja única — la rueda hace zoom, sin saltar de hoja">
+                    Style="{StaticResource SlimDropDownStyle}"
+                    ToolTipService.ToolTip="Girar hojas">
                     <StackPanel Orientation="Horizontal" Spacing="7">
-                        <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M5.4 3h9.2v14H5.4Z" />
-                        <TextBlock Text="Hoja" />
+                        <!--
+                            Three quarters of a circle, drawn clockwise from
+                            the top, with the head on the end it actually
+                            arrives at. Pointing the head the other way — or
+                            giving it barbs as long as the radius — closes the
+                            gap and the whole thing reads as a filled blob at
+                            18px.
+                        -->
+                        <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 3.8 A6.2 6.2 0 1 1 3.8 10 M1.9 12.2 L3.8 10 L5.7 12.2" />
+                        <TextBlock Text="Girar" />
                     </StackPanel>
-                </ToggleButton>
+                    <DropDownButton.Flyout>
+                        <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                            <MenuFlyoutItem Click="OnRotateLeftClicked" Text="Girar la hoja a la izquierda" />
+                            <MenuFlyoutItem Click="OnRotateRightClicked" Text="Girar la hoja a la derecha" />
+
+                            <MenuFlyoutSeparator />
+
+                            <MenuFlyoutItem Click="OnRotateAllLeftClicked" Text="Girar todas las hojas a la izquierda" />
+                            <MenuFlyoutItem Click="OnRotateAllRightClicked" Text="Girar todas las hojas a la derecha" />
+
+                            <MenuFlyoutSeparator />
+
+                            <MenuFlyoutItem
+                                x:Name="DiscardRotationsItem"
+                                Click="OnDiscardRotationsClicked"
+                                Text="Descartar los giros sin guardar" />
+                        </MenuFlyout>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
 
                 <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
 
@@ -191,14 +347,6 @@
 
                 <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
 
-                <Button
-                    x:Name="FitButton"
-                    Click="OnFitClicked"
-                    IsEnabled="False"
-                    Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Ajustar al ancho">
-                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3 6.4V3.6h2.8 M17 6.4V3.6h-2.8 M3 13.6v2.8h2.8 M17 13.6v2.8h-2.8 M6.4 10h7.2 M6.4 10l1.8-1.8 M6.4 10l1.8 1.8 M13.6 10l-1.8-1.8 M13.6 10l-1.8 1.8" />
-                </Button>
                 <ToggleButton
                     x:Name="LineWeightButton"
                     Click="OnLineWeightClicked"
@@ -228,6 +376,28 @@
                 Grid.Column="2"
                 Orientation="Horizontal"
                 Spacing="2">
+                <Button
+                    x:Name="PrintButton"
+                    Click="OnPrintClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimIconButtonStyle}"
+                    ToolTipService.ToolTip="Imprimir (Ctrl+P)">
+                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M6 7.4V3.2h8v4.2 M6 13.4H4.4a1.4 1.4 0 0 1-1.4-1.4V8.8a1.4 1.4 0 0 1 1.4-1.4h11.2a1.4 1.4 0 0 1 1.4 1.4V12a1.4 1.4 0 0 1-1.4 1.4H14 M6 11.6h8v5.2H6Z" />
+                </Button>
+
+                <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                <Button
+                    x:Name="FindButton"
+                    Click="OnFindClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimIconButtonStyle}"
+                    ToolTipService.ToolTip="Buscar en el documento (Ctrl+F)">
+                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M9 15.4a6.4 6.4 0 1 0 0-12.8 6.4 6.4 0 0 0 0 12.8Z M13.6 13.6 17.2 17.2" />
+                </Button>
+
+                <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
                 <Button
                     x:Name="ZoomOutButton"
                     Click="OnZoomOutClicked"
@@ -307,6 +477,15 @@
                         ToolTipService.Placement="Right"
                         ToolTipService.ToolTip="Mano — arrastrar para desplazar">
                         <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M7 9V4.6a1.1 1.1 0 0 1 2.2 0V9 M9.2 8.4V3.8a1.1 1.1 0 0 1 2.2 0v4.6 M11.4 8.1V5.3a1.1 1.1 0 0 1 2.2 0V11 M4.8 9.4a1.1 1.1 0 0 1 2.2 0v2.2 M4.8 11.6c0 3 2.2 5.4 5.2 5.4s5.4-2 5.4-5.4V8" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="ZoomToolButton"
+                        Click="OnZoomToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Zoom por ventana — arrastra un rectángulo sobre la zona">
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M8.6 14.6a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z M13 13 17.2 17.2 M6.2 8.6h4.8 M8.6 6.2v4.8" />
                     </ToggleButton>
                     <ToggleButton
                         x:Name="TextToolButton"

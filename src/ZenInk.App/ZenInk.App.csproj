@@ -55,6 +55,9 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.6.1" />
     <PackageReference Include="PDFiumCore" Version="153.0.7999" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ZenInk.Core\ZenInk.Core.csproj" />
+  </ItemGroup>
 
   <!--
     Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution

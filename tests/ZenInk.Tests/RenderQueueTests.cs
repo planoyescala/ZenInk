@@ -1,4 +1,4 @@
-using ZenInk_App.Rendering;
+using ZenInk.Core;
 using static ZenInk.Tests.TestRunner;
 
 namespace ZenInk.Tests;

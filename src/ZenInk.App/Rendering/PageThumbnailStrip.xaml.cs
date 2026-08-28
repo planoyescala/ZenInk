@@ -4,6 +4,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Imaging;
 
+using ZenInk.Core;
+
 namespace ZenInk_App.Rendering;
 
 /// <summary>
@@ -29,7 +31,26 @@ public sealed partial class PageThumbnailStrip : UserControl
     public PageThumbnailStrip()
     {
         InitializeComponent();
+
+        // Slots are only asked for once they have been laid out, and a
+        // collapsed strip lays nothing out — so revealing it, or resizing it,
+        // is the moment to ask again. Without this the strip opens on a column
+        // of empty frames that fill in only once the reader scrolls.
+        RegisterPropertyChangedCallback(VisibilityProperty, (_, _) => QueueVisiblePreviews());
+        Scroller.SizeChanged += (_, _) => QueueVisiblePreviews();
     }
+
+    /// <summary>Asks after the current layout pass, when the slots exist to measure.</summary>
+    private void QueueVisiblePreviews() => DispatcherQueue.TryEnqueue(RequestVisiblePreviews);
+
+    /// <summary>
+    /// The repeater realising a slot is the one dependable signal that there is
+    /// something to measure. Rebuilding the list, revealing the strip and
+    /// scrolling all end here, which is what stops the strip from showing a
+    /// column of empty frames until something else happens to nudge it.
+    /// </summary>
+    private void OnElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args) =>
+        QueueVisiblePreviews();
 
     public void Attach(PdfTiledViewer? viewer)
     {
@@ -38,6 +59,7 @@ public sealed partial class PageThumbnailStrip : UserControl
         if (_viewer is { } previous)
         {
             previous.DocumentOpened -= OnDocumentOpened;
+            previous.PagesChanged -= OnDocumentOpened;
             previous.ViewChanged -= OnViewChanged;
         }
 
@@ -46,6 +68,9 @@ public sealed partial class PageThumbnailStrip : UserControl
         if (_viewer is { } current)
         {
             current.DocumentOpened += OnDocumentOpened;
+            // A turn changes every frame's proportions, so the strip is rebuilt
+            // rather than patched.
+            current.PagesChanged += OnDocumentOpened;
             current.ViewChanged += OnViewChanged;
         }
 
@@ -77,7 +102,7 @@ public sealed partial class PageThumbnailStrip : UserControl
         UpdateCurrent();
 
         // The repeater has not laid out yet, so ask again once it has.
-        DispatcherQueue.TryEnqueue(RequestVisiblePreviews);
+        QueueVisiblePreviews();
     }
 
     private void UpdateCurrent()
@@ -112,15 +137,15 @@ public sealed partial class PageThumbnailStrip : UserControl
             if (bounds.Bottom < top || bounds.Top > bottom) continue;
 
             _requested.Add(i);
-            _ = LoadPreviewAsync(i, viewer.DocumentId, _generation);
+            _ = LoadPreviewAsync(i, viewer.DocumentId, viewer.RotationOf(i), _generation);
         }
     }
 
-    private async Task LoadPreviewAsync(int pageIndex, int documentId, int generation)
+    private async Task LoadPreviewAsync(int pageIndex, int documentId, int rotation, int generation)
     {
         try
         {
-            var preview = await PdfRenderQueue.Shared.RequestPagePreviewAsync(documentId, pageIndex, PreviewMaxEdge);
+            var preview = await PdfRenderQueue.Shared.RequestPagePreviewAsync(documentId, pageIndex, PreviewMaxEdge, rotation);
             if (generation != _generation || preview is not { } image) return;
 
             var bitmap = new WriteableBitmap(image.Width, image.Height);

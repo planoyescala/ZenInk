@@ -33,7 +33,8 @@ nativos de PDFium (FreeType, ICU, libjpeg-turbo, lcms2).
 
 ```
 src/
-  ZenInk.App/       # App WinUI 3
+  ZenInk.App/       # App WinUI 3: interfaz, visor y impresión
+  ZenInk.Core/      # Motor sin interfaz: PDFium, tiles, texto, geometría de papel
 tests/
   ZenInk.Tests/     # Comprobaciones del motor de renderizado
 ```
@@ -47,12 +48,20 @@ dotnet run --project tests/ZenInk.Tests -c Release
 Comprueban el motor sin abrir ninguna ventana, contra PDFs sintéticos generados
 en el momento: orientación bajo las cuatro rotaciones de página, que cada tile
 coincide píxel a píxel con el render de página completa, que las cajas de texto
-siguen a la tinta dibujada, el apilado de hojas, y que un documento no puede
-alterar a otro al cerrarse o fallar.
+siguen a la tinta dibujada, el apilado de hojas a una y a dos columnas, el
+plegado de mayúsculas y acentos del buscador, que girar una hoja mueve tinta y
+texto a la vez, que el giro llega al archivo al guardarlo, qué trozo de plano
+cae en cada folio al imprimir —incluido repartir un A0 en varias hojas sin
+huecos— y que un documento no puede alterar a otro al cerrarse o fallar.
 
 ## Hitos
 
-- [x] **Hito 1**: abrir un PDF/plano grande y renderizarlo por tiles con zoom/pan fluido.
+- [x] **Hito 1**: abrir un PDF/plano grande y renderizarlo por tiles con zoom/pan
+      fluido. Incluye modos de vista (ancho / página / tamaño real, a una o dos
+      páginas, continuo u hoja a hoja), zoom por ventana, navegación por
+      teclado, giro de hojas con guardado en el PDF, buscador con Ctrl+F, abrir
+      arrastrando, e **impresión** con escala real, márgenes, calidad, grises y
+      reparto de un plano grande en varias hojas.
 - [ ] Hito 2: anotaciones (lápiz, formas, comentarios).
 - [ ] Hito 3: gestión de páginas.
 - [ ] Hito 4: captura de pantalla integrada.

@@ -1,4 +1,4 @@
-namespace ZenInk_App.Rendering;
+namespace ZenInk.Core;
 
 /// <summary>
 /// Maps a continuous render scale (device pixels per PDF point) to a discrete

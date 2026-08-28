@@ -29,7 +29,10 @@
             HorizontalScrollMode="Disabled"
             VerticalScrollBarVisibility="Auto"
             ViewChanged="OnScrollViewChanged">
-            <ItemsRepeater x:Name="Repeater" Margin="14,0">
+            <ItemsRepeater
+                x:Name="Repeater"
+                Margin="14,0"
+                ElementPrepared="OnElementPrepared">
                 <ItemsRepeater.Layout>
                     <StackLayout Spacing="10" />
                 </ItemsRepeater.Layout>

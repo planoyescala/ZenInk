@@ -1,4 +1,4 @@
-using ZenInk_App.Rendering;
+using ZenInk.Core;
 using static ZenInk.Tests.TestRunner;
 
 namespace ZenInk.Tests;
@@ -10,6 +10,7 @@ public static class LayoutTests
     {
         Continuous();
         SinglePage();
+        TwoUp();
         EdgeCases();
         Zoom();
     }
@@ -73,6 +74,83 @@ public static class LayoutTests
             DocumentLayout.SinglePage(MixedSizes, 99).Pages[0].Index == 2);
         Check("a negative page clamps to the first",
             DocumentLayout.SinglePage(MixedSizes, -5).Pages[0].Index == 0);
+    }
+
+    /// <summary>
+    /// Two sheets to a row. The property the viewer leans on is that Y never
+    /// goes backwards through <c>Pages</c> — <c>PagesInBand</c> stops early on
+    /// that basis, so a row-mate placed above its neighbour would silently
+    /// vanish from the strip.
+    /// </summary>
+    private static void TwoUp()
+    {
+        Section("DocumentLayout — two sheets to a row");
+
+        var uniform = new List<PdfPageSize>
+        {
+            new(400f, 600f),
+            new(400f, 600f),
+            new(400f, 600f),
+            new(400f, 600f),
+            new(400f, 600f),
+        };
+
+        var layout = DocumentLayout.Continuous(uniform, 2);
+
+        Check("every sheet is still laid out", layout.PageCount == 5);
+        Check("five sheets make three rows", layout.Rows.Count == 3, $"got {layout.Rows.Count}");
+        CheckClose("a row is two sheets plus the gap", layout.WidthPt, 400f * 2 + DocumentLayout.PageGapPt, 0.01);
+
+        float expectedHeight = 600f * 3 + DocumentLayout.PageGapPt * 2;
+        CheckClose("rows stack with the same gap", layout.HeightPt, expectedHeight, 0.01);
+
+        Check("the first row holds sheets 1 and 2",
+            layout.Pages[0].Index == 0 && layout.Pages[1].Index == 1);
+        CheckClose("row-mates share a top edge", layout.Pages[1].YPt, layout.Pages[0].YPt, 0.01);
+        CheckClose("the second sheet sits a gap to the right",
+            layout.Pages[1].XPt, layout.Pages[0].RightPt + DocumentLayout.PageGapPt, 0.01);
+        Check("the next row starts below", layout.Pages[2].YPt > layout.Pages[0].BottomPt);
+
+        bool monotonic = true;
+        for (int i = 1; i < layout.Pages.Count; i++)
+        {
+            if (layout.Pages[i].YPt < layout.Pages[i - 1].YPt) monotonic = false;
+        }
+        Check("Y never goes backwards, so the band scan may stop early", monotonic);
+
+        var band = layout.PagesInBand(layout.Pages[0].YPt + 10, layout.Pages[0].YPt + 20).ToList();
+        Check("a band inside a row returns both of its sheets", band.Count == 2,
+            $"got {band.Count}");
+
+        // A lone last sheet: the row is half as wide and centred against the rest.
+        var lastRow = layout.RowOfPage(4);
+        Check("an odd last sheet still has a row", lastRow is not null);
+        if (lastRow is { } row)
+        {
+            CheckClose("its row is one sheet wide", row.WidthPt, 400f, 0.01);
+            CheckClose("and is centred in the strip", row.XPt, (layout.WidthPt - 400f) / 2f, 0.01);
+        }
+
+        Check("a row covers both of its sheets",
+            layout.RowOfPage(0) == layout.RowOfPage(1));
+
+        Section("DocumentLayout — one spread at a time");
+
+        var spread = DocumentLayout.SinglePage(uniform, 3, 2);
+        Check("the spread holding sheet 4 is sheets 3 and 4",
+            spread.PageCount == 2 && spread.Pages[0].Index == 2 && spread.Pages[1].Index == 3);
+        Check("it still reports the whole document", spread.DocumentPageCount == 5);
+
+        var firstSpread = DocumentLayout.SinglePage(uniform, 0, 2);
+        Check("spreads are anchored to the start of the document, not to the page asked for",
+            firstSpread.Pages[0].Index == 0 && firstSpread.Pages[1].Index == 1);
+
+        var tail = DocumentLayout.SinglePage(uniform, 4, 2);
+        Check("the last sheet spreads alone rather than running past the end",
+            tail.PageCount == 1 && tail.Pages[0].Index == 4);
+
+        Check("a sheet outside the layout has no row",
+            DocumentLayout.SinglePage(uniform, 0, 2).RowOfPage(4) is null);
     }
 
     private static void EdgeCases()

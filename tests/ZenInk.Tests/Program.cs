@@ -11,9 +11,12 @@ Console.WriteLine("ZenInk engine checks");
 try
 {
     LayoutTests.Run();
+    PrintLayoutTests.Run();
     RenderTests.Run();
     await TextLayerTests.RunAsync();
     await RenderQueueTests.RunAsync();
+    await RotationTests.RunAsync();
+    await PrintLayoutTests.RunRenderAsync();
 }
 finally
 {

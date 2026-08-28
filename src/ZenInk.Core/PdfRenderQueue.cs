@@ -2,13 +2,26 @@ using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using PDFiumCore;
 
-namespace ZenInk_App.Rendering;
+namespace ZenInk.Core;
 
 public readonly record struct PdfPageSize(float WidthPt, float HeightPt);
 
 public sealed record PdfDocumentInfo(int DocumentId, IReadOnlyList<PdfPageSize> Pages);
 
 public readonly record struct TileBitmapData(byte[] Bgra, int Width, int Height);
+
+/// <summary>
+/// Outcome of writing page rotations back into a PDF.
+///
+/// <see cref="Document"/> is the document to use from here on: saving in place
+/// has to close the file and reopen it, so the id changes even though the tab
+/// did not. It is filled in whether or not the write succeeded, so a failed
+/// save leaves the reader looking at a working document rather than a dead tab.
+/// </summary>
+public sealed record PdfSaveOutcome(PdfDocumentInfo Document, string? Error)
+{
+    public bool Saved => Error is null;
+}
 
 /// <summary>
 /// Owns every call into PDFium on a single dedicated thread — PDFium's C API is
@@ -34,6 +47,12 @@ public sealed class PdfRenderQueue : IDisposable
     private const int PageObjectTypePath = 2;
     private const int PageObjectTypeForm = 5;
 
+    /// <summary>FPDF_INCREMENTAL — appends the change, leaving the original bytes in place.</summary>
+    private const ulong SaveIncremental = 1;
+
+    /// <summary>FPDF_NO_INCREMENTAL — writes the whole document afresh.</summary>
+    private const ulong SaveFullRewrite = 2;
+
     private static readonly Lazy<PdfRenderQueue> LazyShared = new(() => new PdfRenderQueue());
 
     public static PdfRenderQueue Shared => LazyShared.Value;
@@ -54,6 +73,14 @@ public sealed class PdfRenderQueue : IDisposable
     private readonly Dictionary<PreviewRequest, PreviewJob> _pendingPreviews = new();
     private readonly List<PreviewRequest> _previewOrder = new();
 
+    /// <summary>
+    /// Print bands are served FIFO, not LIFO like tiles: a print job asks for
+    /// its bands in the order they go on the paper and wants all of them, so
+    /// there is nothing to gain by serving the newest first.
+    /// </summary>
+    private readonly object _printGate = new();
+    private readonly Queue<(PrintBandRequest Request, TaskCompletionSource<TileBitmapData?> Completion)> _printOrder = new();
+
     private volatile bool _disposed;
     private int _nextDocumentId;
 
@@ -64,9 +91,25 @@ public sealed class PdfRenderQueue : IDisposable
 
     private readonly record struct TileRequest(int DocumentId, TileKey Key);
 
-    private readonly record struct TextRequest(int DocumentId, int PageIndex);
+    private readonly record struct TextRequest(int DocumentId, int PageIndex, int Rotation);
 
-    private readonly record struct PreviewRequest(int DocumentId, int PageIndex);
+    private readonly record struct PreviewRequest(int DocumentId, int PageIndex, int Rotation);
+
+    /// <summary>
+    /// A strip of a page rendered straight at the paper's resolution. An A0 at
+    /// 300 dpi is 139 megapixels — half a gigabyte as one bitmap — so the print
+    /// path asks for it a band at a time.
+    /// </summary>
+    private readonly record struct PrintBandRequest(
+        int DocumentId,
+        int PageIndex,
+        int Rotation,
+        double Scale,
+        int StartX,
+        int StartY,
+        int Width,
+        int Height,
+        bool Monochrome);
 
     private sealed record TileJob(int TileSize, TaskCompletionSource<TileBitmapData?> Completion);
 
@@ -189,10 +232,14 @@ public sealed class PdfRenderQueue : IDisposable
     /// Extracts a page's glyph boxes. Served at lower priority than tiles, so
     /// text extraction on a dense sheet can never delay the tiles the user is
     /// currently looking at.
+    ///
+    /// <paramref name="rotation"/> is the viewer's quarter-turn on top of the
+    /// page's own /Rotate: the boxes come back in the space the tiles are
+    /// drawn in, so a rotated sheet needs no correction downstream.
     /// </summary>
-    public Task<PageTextLayer> RequestTextLayerAsync(int documentId, int pageIndex)
+    public Task<PageTextLayer> RequestTextLayerAsync(int documentId, int pageIndex, int rotation = 0)
     {
-        var request = new TextRequest(documentId, pageIndex);
+        var request = new TextRequest(documentId, pageIndex, rotation & 3);
         lock (_textGate)
         {
             if (_pendingText.TryGetValue(request, out var existing))
@@ -214,9 +261,9 @@ public sealed class PdfRenderQueue : IDisposable
     /// costs the same object traversal whatever the output size, so previews
     /// must never come before the tiles or the text of what is on screen.
     /// </summary>
-    public Task<TileBitmapData?> RequestPagePreviewAsync(int documentId, int pageIndex, int maxEdge)
+    public Task<TileBitmapData?> RequestPagePreviewAsync(int documentId, int pageIndex, int maxEdge, int rotation = 0)
     {
-        var request = new PreviewRequest(documentId, pageIndex);
+        var request = new PreviewRequest(documentId, pageIndex, rotation & 3);
         lock (_previewGate)
         {
             if (_pendingPreviews.TryGetValue(request, out var existing))
@@ -230,6 +277,133 @@ public sealed class PdfRenderQueue : IDisposable
             _signal.Release();
             return job.Completion.Task;
         }
+    }
+
+    /// <summary>
+    /// Writes the given quarter-turns into the file the document was opened
+    /// from, then reopens it.
+    ///
+    /// Reopening is not optional: PDFium holds the source file open, so the new
+    /// bytes cannot take its place until the handle is gone. The rotations are
+    /// applied to a *separate* handle opened for the purpose, which also keeps
+    /// the hairline toggle out of the file — that setting works by rewriting
+    /// stroke widths on the parsed page, and saving from the viewer's own
+    /// handle would make it permanent.
+    /// </summary>
+    public Task<PdfSaveOutcome> ApplyRotationsInPlaceAsync(int documentId, string path, IReadOnlyList<int> quarterTurns)
+    {
+        var tcs = new TaskCompletionSource<PdfSaveOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
+        EnqueueControl(() =>
+        {
+            string? error = null;
+            string? staged = null;
+
+            try
+            {
+                staged = WriteRotatedCore(path, path, quarterTurns);
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+            }
+
+            if (staged is null)
+            {
+                // Nothing was touched, so the document in hand is still good.
+                try
+                {
+                    tcs.TrySetResult(new PdfSaveOutcome(DescribeOpenDocument(documentId), error ?? "No se pudo preparar el archivo."));
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+                return;
+            }
+
+            CloseDocumentCore(documentId);
+
+            try
+            {
+                File.Move(staged, path, overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                TryDelete(staged);
+            }
+
+            try
+            {
+                tcs.TrySetResult(new PdfSaveOutcome(OpenDocumentCore(path), error));
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        });
+        return tcs.Task;
+    }
+
+    /// <summary>
+    /// Writes a rotated copy to <paramref name="targetPath"/>, leaving the
+    /// source untouched. No document handle is involved, so the tab the reader
+    /// is looking at carries on undisturbed.
+    /// </summary>
+    public Task SaveRotatedCopyAsync(string sourcePath, string targetPath, IReadOnlyList<int> quarterTurns)
+    {
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        EnqueueControl(() =>
+        {
+            string? staged = null;
+            try
+            {
+                staged = WriteRotatedCore(sourcePath, targetPath, quarterTurns);
+                File.Move(staged, targetPath, overwrite: true);
+                tcs.TrySetResult();
+            }
+            catch (Exception ex)
+            {
+                if (staged is not null)
+                {
+                    TryDelete(staged);
+                }
+                tcs.TrySetException(ex);
+            }
+        });
+        return tcs.Task;
+    }
+
+    /// <summary>
+    /// Renders one band of a page at the paper's own resolution.
+    /// <paramref name="scale"/> is output pixels per PDF point;
+    /// <paramref name="startX"/> and <paramref name="startY"/> locate the band
+    /// within the scaled page, the same way a tile does.
+    ///
+    /// Served below tiles on purpose: the reader panning the drawing must never
+    /// wait behind a print job's bands.
+    /// </summary>
+    public Task<TileBitmapData?> RequestPrintBandAsync(
+        int documentId,
+        int pageIndex,
+        int rotation,
+        double scale,
+        int startX,
+        int startY,
+        int width,
+        int height,
+        bool monochrome)
+    {
+        var request = new PrintBandRequest(
+            documentId, pageIndex, rotation & 3, scale, startX, startY, width, height, monochrome);
+
+        var tcs = new TaskCompletionSource<TileBitmapData?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_printGate)
+        {
+            _printOrder.Enqueue((request, tcs));
+        }
+        _signal.Release();
+        return tcs.Task;
     }
 
     private void EnqueueControl(Action action)
@@ -283,6 +457,29 @@ public sealed class PdfRenderQueue : IDisposable
             tcs.TrySetResult(new PageTextLayer(0, []));
         }
 
+        List<TaskCompletionSource<TileBitmapData?>> bands = [];
+        lock (_printGate)
+        {
+            int count = _printOrder.Count;
+            for (int i = 0; i < count; i++)
+            {
+                var entry = _printOrder.Dequeue();
+                if (entry.Request.DocumentId == documentId)
+                {
+                    bands.Add(entry.Completion);
+                }
+                else
+                {
+                    _printOrder.Enqueue(entry);
+                }
+            }
+        }
+
+        foreach (var completion in bands)
+        {
+            completion.TrySetResult(null);
+        }
+
         List<PreviewJob> previews = [];
         lock (_previewGate)
         {
@@ -328,6 +525,19 @@ public sealed class PdfRenderQueue : IDisposable
                     catch (Exception ex)
                     {
                         tile.Job.Completion.TrySetException(ex);
+                    }
+                    continue;
+                }
+
+                if (DequeueOldestPrintBand() is { } band)
+                {
+                    try
+                    {
+                        band.Completion.TrySetResult(RenderPrintBandCore(band.Request));
+                    }
+                    catch (Exception ex)
+                    {
+                        band.Completion.TrySetException(ex);
                     }
                     continue;
                 }
@@ -379,6 +589,14 @@ public sealed class PdfRenderQueue : IDisposable
         }
     }
 
+    private (PrintBandRequest Request, TaskCompletionSource<TileBitmapData?> Completion)? DequeueOldestPrintBand()
+    {
+        lock (_printGate)
+        {
+            return _printOrder.Count == 0 ? null : _printOrder.Dequeue();
+        }
+    }
+
     private (TextRequest Request, TaskCompletionSource<PageTextLayer> Completion)? DequeueNewestText()
     {
         lock (_textGate)
@@ -416,6 +634,22 @@ public sealed class PdfRenderQueue : IDisposable
         int documentId = ++_nextDocumentId;
         _documents[documentId] = new OpenDocument(handle);
 
+        return new PdfDocumentInfo(documentId, ReadPageSizes(handle));
+    }
+
+    /// <summary>Re-describes a document that is already open, for a save that changed nothing.</summary>
+    private PdfDocumentInfo DescribeOpenDocument(int documentId)
+    {
+        if (!_documents.TryGetValue(documentId, out var document))
+        {
+            throw new InvalidOperationException($"El documento {documentId} ya no está abierto.");
+        }
+
+        return new PdfDocumentInfo(documentId, ReadPageSizes(document.Handle));
+    }
+
+    private static IReadOnlyList<PdfPageSize> ReadPageSizes(FpdfDocumentT handle)
+    {
         int pageCount = fpdfview.FPDF_GetPageCount(handle);
         var sizes = new List<PdfPageSize>(pageCount);
         for (int i = 0; i < pageCount; i++)
@@ -430,8 +664,173 @@ public sealed class PdfRenderQueue : IDisposable
             }
             sizes.Add(new PdfPageSize((float)width, (float)height));
         }
+        return sizes;
+    }
 
-        return new PdfDocumentInfo(documentId, sizes);
+    /// <summary>
+    /// Builds the rotated file next to its destination and returns the staged
+    /// path, or throws having written nothing that matters. The caller moves it
+    /// into place; splitting the two is what makes a save all-or-nothing over
+    /// the reader's drawing.
+    /// </summary>
+    private static string WriteRotatedCore(string sourcePath, string targetPath, IReadOnlyList<int> quarterTurns)
+    {
+        string full = Path.GetFullPath(targetPath);
+        string directory = Path.GetDirectoryName(full) ?? Directory.GetCurrentDirectory();
+        string staged = Path.Combine(directory, $"{Path.GetFileName(full)}.zenink-{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            var handle = fpdfview.FPDF_LoadDocument(sourcePath, null)
+                ?? throw new InvalidOperationException(
+                    $"No se pudo leer el PDF para guardarlo (PDFium error {fpdfview.FPDF_GetLastError()}).");
+
+            var expected = new int[fpdfview.FPDF_GetPageCount(handle)];
+            try
+            {
+                for (int i = 0; i < expected.Length; i++)
+                {
+                    int turns = i < quarterTurns.Count ? quarterTurns[i] & 3 : 0;
+
+                    var page = fpdfview.FPDF_LoadPage(handle, i)
+                        ?? throw new InvalidOperationException($"No se pudo cargar la página {i} para guardarla.");
+                    try
+                    {
+                        // PDFium reports /Rotate in quarter turns, and the
+                        // viewer's turn is relative to whatever the page
+                        // already carried.
+                        expected[i] = (fpdf_edit.FPDFPageGetRotation(page) + turns) & 3;
+                        if (turns != 0)
+                        {
+                            fpdf_edit.FPDFPageSetRotation(page, expected[i]);
+                        }
+                    }
+                    finally
+                    {
+                        fpdfview.FPDF_ClosePage(page);
+                    }
+                }
+
+                // An incremental save appends to the original bytes instead of
+                // rewriting them, which is the gentler thing to do to someone's
+                // drawing. It is not guaranteed to carry the change, so the
+                // result is read back before it is trusted.
+                WriteDocumentCore(handle, staged, SaveIncremental);
+                if (!RotationsMatch(staged, expected))
+                {
+                    WriteDocumentCore(handle, staged, SaveFullRewrite);
+                }
+            }
+            finally
+            {
+                fpdfview.FPDF_CloseDocument(handle);
+            }
+
+            if (!RotationsMatch(staged, expected))
+            {
+                throw new InvalidOperationException("El archivo guardado no conserva los giros; no se ha tocado el original.");
+            }
+
+            return staged;
+        }
+        catch
+        {
+            TryDelete(staged);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Reopens a written file and checks that every page carries the rotation
+    /// it was meant to. Cheap next to the write, and it is the only thing
+    /// standing between a bad save and the reader's original.
+    /// </summary>
+    private static bool RotationsMatch(string path, IReadOnlyList<int> expected)
+    {
+        var handle = fpdfview.FPDF_LoadDocument(path, null);
+        if (handle is null) return false;
+
+        try
+        {
+            if (fpdfview.FPDF_GetPageCount(handle) != expected.Count) return false;
+
+            for (int i = 0; i < expected.Count; i++)
+            {
+                var page = fpdfview.FPDF_LoadPage(handle, i);
+                if (page is null) return false;
+
+                try
+                {
+                    if ((fpdf_edit.FPDFPageGetRotation(page) & 3) != expected[i]) return false;
+                }
+                finally
+                {
+                    fpdfview.FPDF_ClosePage(page);
+                }
+            }
+
+            return true;
+        }
+        finally
+        {
+            fpdfview.FPDF_CloseDocument(handle);
+        }
+    }
+
+    /// <summary>
+    /// Streams a document to disk through PDFium's writer callback. The
+    /// delegate is held on the stack for the whole call: it is handed to native
+    /// code as a bare function pointer, which the collector cannot see.
+    /// </summary>
+    private static void WriteDocumentCore(FpdfDocumentT handle, string path, ulong flags)
+    {
+        using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+        var buffer = new byte[64 * 1024];
+
+        int WriteBlock(IntPtr _, IntPtr data, ulong size)
+        {
+            long remaining = (long)size;
+            long offset = 0;
+
+            while (remaining > 0)
+            {
+                int chunk = (int)Math.Min(remaining, buffer.Length);
+                Marshal.Copy(data + (int)offset, buffer, 0, chunk);
+                stream.Write(buffer, 0, chunk);
+                offset += chunk;
+                remaining -= chunk;
+            }
+
+            return 1;
+        }
+
+        var callback = new PDFiumCore.Delegates.Func_int___IntPtr___IntPtr_ulong(WriteBlock);
+        var writer = new FPDF_FILEWRITE_ { Version = 1, WriteBlock = callback };
+
+        try
+        {
+            if (fpdf_save.FPDF_SaveAsCopy(handle, writer, flags) == 0)
+            {
+                throw new InvalidOperationException("PDFium no pudo escribir el archivo.");
+            }
+        }
+        finally
+        {
+            GC.KeepAlive(callback);
+            writer.Dispose();
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"ZenInk: no se pudo borrar el temporal {path}: {ex.Message}");
+        }
     }
 
     private FpdfPageT LoadPageCore(int documentId, int pageIndex)
@@ -521,8 +920,8 @@ public sealed class PdfRenderQueue : IDisposable
         var page = LoadPageCore(request.DocumentId, key.PageIndex);
         double levelScale = ZoomLevels.ScaleForLevel(key.Level);
 
-        int scaledWidth = Math.Max(1, (int)Math.Ceiling(fpdfview.FPDF_GetPageWidthF(page) * levelScale));
-        int scaledHeight = Math.Max(1, (int)Math.Ceiling(fpdfview.FPDF_GetPageHeightF(page) * levelScale));
+        int rotation = key.Rotation & 3;
+        var (scaledWidth, scaledHeight) = RotatedRenderSize(page, levelScale, rotation);
 
         var bitmap = fpdfview.FPDFBitmapCreateEx(tileSize, tileSize, (int)FPDFBitmapFormat.BGRA, IntPtr.Zero, tileSize * 4);
         if (bitmap is null)
@@ -537,7 +936,8 @@ public sealed class PdfRenderQueue : IDisposable
             // Place the whole scaled page so that the requested tile lands on the
             // bitmap, and let PDFium clip away everything outside it. Unlike the
             // matrix variant, this applies the page's own /Rotate and uses a
-            // top-left origin, so no hand-built axis flip is involved.
+            // top-left origin, so no hand-built axis flip is involved. The
+            // viewer's own quarter-turn rides the same parameter.
             fpdfview.FPDF_RenderPageBitmap(
                 bitmap,
                 page,
@@ -545,7 +945,7 @@ public sealed class PdfRenderQueue : IDisposable
                 -key.Row * tileSize,
                 scaledWidth,
                 scaledHeight,
-                0,
+                rotation,
                 (int)RenderFlags.RenderAnnotations);
 
             int stride = fpdfview.FPDFBitmapGetStride(bitmap);
@@ -568,12 +968,109 @@ public sealed class PdfRenderQueue : IDisposable
         }
     }
 
+    /// <summary>
+    /// The output box a page occupies once the viewer's quarter-turn is applied.
+    /// The odd turns swap the axes, and FPDF_RenderPageBitmap is given the size
+    /// of the destination, not of the page — passing the unswapped size is what
+    /// squashes a rotated sheet into the wrong aspect.
+    /// </summary>
+    private static (int Width, int Height) RotatedRenderSize(FpdfPageT page, double scale, int rotation)
+    {
+        float widthPt = fpdfview.FPDF_GetPageWidthF(page);
+        float heightPt = fpdfview.FPDF_GetPageHeightF(page);
+        if ((rotation & 1) == 1)
+        {
+            (widthPt, heightPt) = (heightPt, widthPt);
+        }
+
+        return (
+            Math.Max(1, (int)Math.Ceiling(widthPt * scale)),
+            Math.Max(1, (int)Math.Ceiling(heightPt * scale)));
+    }
+
+    /// <summary>
+    /// Renders one band straight at the paper's resolution. The band is placed
+    /// the same way a tile is — the whole scaled page positioned so the wanted
+    /// strip lands on the bitmap — so it inherits the property the tile checks
+    /// pin: a band is exactly its slice of the full render, with no drift at
+    /// the seams.
+    /// </summary>
+    private TileBitmapData RenderPrintBandCore(PrintBandRequest request)
+    {
+        var page = LoadPageCore(request.DocumentId, request.PageIndex);
+        var (scaledWidth, scaledHeight) = RotatedRenderSize(page, request.Scale, request.Rotation);
+
+        int width = Math.Max(1, request.Width);
+        int height = Math.Max(1, request.Height);
+
+        var bitmap = fpdfview.FPDFBitmapCreateEx(width, height, (int)FPDFBitmapFormat.BGRA, IntPtr.Zero, width * 4)
+            ?? throw new InvalidOperationException("No se pudo crear el bitmap de impresión.");
+
+        try
+        {
+            fpdfview.FPDFBitmapFillRect(bitmap, 0, 0, width, height, 0xFFFFFFFFUL);
+            fpdfview.FPDF_RenderPageBitmap(
+                bitmap,
+                page,
+                -request.StartX,
+                -request.StartY,
+                scaledWidth,
+                scaledHeight,
+                request.Rotation,
+                (int)RenderFlags.RenderAnnotations);
+
+            int stride = fpdfview.FPDFBitmapGetStride(bitmap);
+            IntPtr buffer = fpdfview.FPDFBitmapGetBuffer(bitmap);
+
+            var packed = new byte[width * 4 * height];
+            for (int row = 0; row < height; row++)
+            {
+                Marshal.Copy(buffer + row * stride, packed, row * width * 4, width * 4);
+            }
+
+            if (request.Monochrome)
+            {
+                ToGrayscale(packed);
+            }
+
+            return new TileBitmapData(packed, width, height);
+        }
+        finally
+        {
+            fpdfview.FPDFBitmapDestroy(bitmap);
+        }
+    }
+
+    /// <summary>
+    /// Flattens colour to its luminance, in place. Done here rather than left
+    /// to the printer driver so that "monocromo" means the same thing whatever
+    /// is at the other end — and so the preview shows what will come out.
+    /// </summary>
+    private static void ToGrayscale(byte[] bgra)
+    {
+        for (int i = 0; i + 3 < bgra.Length; i += 4)
+        {
+            // Rec. 601 luma: matches how the eye weighs the channels, so a
+            // saturated red line does not come out as pale as a yellow one.
+            byte grey = (byte)((bgra[i + 2] * 299 + bgra[i + 1] * 587 + bgra[i] * 114) / 1000);
+            bgra[i] = grey;
+            bgra[i + 1] = grey;
+            bgra[i + 2] = grey;
+        }
+    }
+
     private TileBitmapData RenderPreviewCore(PreviewRequest request, int maxEdge)
     {
         var page = LoadPageCore(request.DocumentId, request.PageIndex);
+        int rotation = request.Rotation & 3;
 
         float widthPt = fpdfview.FPDF_GetPageWidthF(page);
         float heightPt = fpdfview.FPDF_GetPageHeightF(page);
+        if ((rotation & 1) == 1)
+        {
+            (widthPt, heightPt) = (heightPt, widthPt);
+        }
+
         double scale = maxEdge / (double)Math.Max(Math.Max(widthPt, heightPt), 1f);
 
         int width = Math.Max(1, (int)Math.Round(widthPt * scale));
@@ -588,7 +1085,7 @@ public sealed class PdfRenderQueue : IDisposable
         try
         {
             fpdfview.FPDFBitmapFillRect(bitmap, 0, 0, width, height, 0xFFFFFFFFUL);
-            fpdfview.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, (int)RenderFlags.RenderAnnotations);
+            fpdfview.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, rotation, (int)RenderFlags.RenderAnnotations);
 
             int stride = fpdfview.FPDFBitmapGetStride(bitmap);
             IntPtr buffer = fpdfview.FPDFBitmapGetBuffer(bitmap);
@@ -623,20 +1120,21 @@ public sealed class PdfRenderQueue : IDisposable
     /// That keeps the text layer aligned with whatever FPDF_RenderPageBitmap
     /// draws, including any page rotation, by construction.
     /// </summary>
-    private static PageTransform BuildPageTransform(FpdfPageT page)
+    private static PageTransform BuildPageTransform(FpdfPageT page, int rotation)
     {
         // Sub-point precision for the integer device coordinates PDFium returns,
         // and a long sample span so the rounding error stays negligible.
         const int Precision = 64;
         const double Span = 1000.0;
 
-        int sizeX = Math.Max(1, (int)Math.Round(fpdfview.FPDF_GetPageWidthF(page) * Precision));
-        int sizeY = Math.Max(1, (int)Math.Round(fpdfview.FPDF_GetPageHeightF(page) * Precision));
+        // Same rotation and same destination box the tiles are rendered into,
+        // so whatever PDFium does to the ink it also does to the boxes.
+        var (sizeX, sizeY) = RotatedRenderSize(page, Precision, rotation);
 
         int x0 = 0, y0 = 0, x1 = 0, y1 = 0, x2 = 0, y2 = 0;
-        fpdfview.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, 0, 0, 0, ref x0, ref y0);
-        fpdfview.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, 0, Span, 0, ref x1, ref y1);
-        fpdfview.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, 0, 0, Span, ref x2, ref y2);
+        fpdfview.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, rotation, 0, 0, ref x0, ref y0);
+        fpdfview.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, rotation, Span, 0, ref x1, ref y1);
+        fpdfview.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, rotation, 0, Span, ref x2, ref y2);
 
         return new PageTransform(
             (float)((x1 - x0) / Span / Precision),
@@ -651,7 +1149,7 @@ public sealed class PdfRenderQueue : IDisposable
     {
         int pageIndex = request.PageIndex;
         var page = LoadPageCore(request.DocumentId, pageIndex);
-        var transform = BuildPageTransform(page);
+        var transform = BuildPageTransform(page, request.Rotation & 3);
 
         var textPage = fpdf_text.FPDFTextLoadPage(page);
         if (textPage is null)
