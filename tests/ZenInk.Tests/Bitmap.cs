@@ -38,6 +38,44 @@ public static class Bitmap
         }
     }
 
+    /// <summary>
+    /// Renders a whole page the way a reader that shows annotations would —
+    /// which is the only way to see what ZenInk actually put in the file, since
+    /// the engine hides its own marks on every handle it opens.
+    /// </summary>
+    public static byte[] RenderWithAnnotations(FpdfPageT page, int width, int height)
+    {
+        var bitmap = fpdfview.FPDFBitmapCreateEx(width, height, (int)FPDFBitmapFormat.BGRA, IntPtr.Zero, width * 4)
+            ?? throw new InvalidOperationException("FPDFBitmap_CreateEx returned null.");
+        try
+        {
+            fpdfview.FPDFBitmapFillRect(bitmap, 0, 0, width, height, 0xFFFFFFFFUL);
+            fpdfview.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, (int)RenderFlags.RenderAnnotations);
+
+            int stride = fpdfview.FPDFBitmapGetStride(bitmap);
+            IntPtr buffer = fpdfview.FPDFBitmapGetBuffer(bitmap);
+
+            var packed = new byte[width * 4 * height];
+            for (int row = 0; row < height; row++)
+            {
+                System.Runtime.InteropServices.Marshal.Copy(
+                    buffer + row * stride, packed, row * width * 4, width * 4);
+            }
+            return packed;
+        }
+        finally
+        {
+            fpdfview.FPDFBitmapDestroy(bitmap);
+        }
+    }
+
+    /// <summary>One pixel, as blue/green/red.</summary>
+    public static (byte B, byte G, byte R) Pixel(byte[] bgra, int width, int x, int y)
+    {
+        int i = (y * width + x) * 4;
+        return (bgra[i], bgra[i + 1], bgra[i + 2]);
+    }
+
     public static bool IsDark(byte[] bgra, int width, int x, int y)
     {
         int i = (y * width + x) * 4;

@@ -62,7 +62,8 @@
             PointerPressed="OnPointerPressed"
             PointerMoved="OnPointerMoved"
             PointerReleased="OnPointerReleased"
-            PointerCanceled="OnPointerReleased" />
+            PointerCanceled="OnPointerReleased"
+            DoubleTapped="OnCanvasDoubleTapped" />
 
         <primitives:ScrollBar
             x:Name="VerticalScroll"

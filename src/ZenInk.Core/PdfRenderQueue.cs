@@ -53,6 +53,12 @@ public sealed class PdfRenderQueue : IDisposable
     /// <summary>FPDF_NO_INCREMENTAL — writes the whole document afresh.</summary>
     private const ulong SaveFullRewrite = 2;
 
+    /// <summary>FLAT_NORMALDISPLAY — burn the annotations in as they are seen on screen.</summary>
+    private const int FlattenForDisplay = 0;
+
+    /// <summary>FLATTEN_FAIL, the one answer that means nothing was done.</summary>
+    private const int FlattenFail = 0;
+
     private static readonly Lazy<PdfRenderQueue> LazyShared = new(() => new PdfRenderQueue());
 
     public static PdfRenderQueue Shared => LazyShared.Value;
@@ -280,17 +286,49 @@ public sealed class PdfRenderQueue : IDisposable
     }
 
     /// <summary>
-    /// Writes the given quarter-turns into the file the document was opened
-    /// from, then reopens it.
+    /// Reads back the marks ZenInk itself wrote into a document, sheet by
+    /// sheet, so a drawing reopens with its review still on it.
+    ///
+    /// A control action, and cheap enough to be one: loading a page builds its
+    /// dictionary but does not parse its content, so this is a walk over the
+    /// annotation lists and not over the drawing.
+    /// </summary>
+    public Task<Dictionary<int, IReadOnlyList<Annotation>>> ReadAnnotationsAsync(int documentId)
+    {
+        var tcs = new TaskCompletionSource<Dictionary<int, IReadOnlyList<Annotation>>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        EnqueueControl(() =>
+        {
+            try
+            {
+                tcs.TrySetResult(ReadAnnotationsCore(documentId));
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        });
+        return tcs.Task;
+    }
+
+    /// <summary>
+    /// Writes the given quarter-turns and marks into the file the document was
+    /// opened from, then reopens it.
     ///
     /// Reopening is not optional: PDFium holds the source file open, so the new
-    /// bytes cannot take its place until the handle is gone. The rotations are
+    /// bytes cannot take its place until the handle is gone. The changes are
     /// applied to a *separate* handle opened for the purpose, which also keeps
     /// the hairline toggle out of the file — that setting works by rewriting
     /// stroke widths on the parsed page, and saving from the viewer's own
     /// handle would make it permanent.
     /// </summary>
-    public Task<PdfSaveOutcome> ApplyRotationsInPlaceAsync(int documentId, string path, IReadOnlyList<int> quarterTurns)
+    public Task<PdfSaveOutcome> ApplyChangesInPlaceAsync(
+        int documentId,
+        string path,
+        IReadOnlyList<int> quarterTurns,
+        IReadOnlyDictionary<int, IReadOnlyList<Annotation>>? annotations = null,
+        bool flatten = false)
     {
         var tcs = new TaskCompletionSource<PdfSaveOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
         EnqueueControl(() =>
@@ -300,7 +338,7 @@ public sealed class PdfRenderQueue : IDisposable
 
             try
             {
-                staged = WriteRotatedCore(path, path, quarterTurns);
+                staged = WriteChangesCore(path, path, quarterTurns, annotations, flatten);
             }
             catch (Exception ex)
             {
@@ -346,11 +384,16 @@ public sealed class PdfRenderQueue : IDisposable
     }
 
     /// <summary>
-    /// Writes a rotated copy to <paramref name="targetPath"/>, leaving the
-    /// source untouched. No document handle is involved, so the tab the reader
-    /// is looking at carries on undisturbed.
+    /// Writes a copy carrying the turns and marks to
+    /// <paramref name="targetPath"/>, leaving the source untouched. No document
+    /// handle is involved, so the tab the reader is looking at carries on
+    /// undisturbed.
     /// </summary>
-    public Task SaveRotatedCopyAsync(string sourcePath, string targetPath, IReadOnlyList<int> quarterTurns)
+    public Task SaveChangesCopyAsync(
+        string sourcePath,
+        string targetPath,
+        IReadOnlyList<int> quarterTurns,
+        IReadOnlyDictionary<int, IReadOnlyList<Annotation>>? annotations = null)
     {
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         EnqueueControl(() =>
@@ -358,7 +401,7 @@ public sealed class PdfRenderQueue : IDisposable
             string? staged = null;
             try
             {
-                staged = WriteRotatedCore(sourcePath, targetPath, quarterTurns);
+                staged = WriteChangesCore(sourcePath, targetPath, quarterTurns, annotations);
                 File.Move(staged, targetPath, overwrite: true);
                 tcs.TrySetResult();
             }
@@ -668,12 +711,22 @@ public sealed class PdfRenderQueue : IDisposable
     }
 
     /// <summary>
-    /// Builds the rotated file next to its destination and returns the staged
+    /// Builds the changed file next to its destination and returns the staged
     /// path, or throws having written nothing that matters. The caller moves it
     /// into place; splitting the two is what makes a save all-or-nothing over
     /// the reader's drawing.
+    ///
+    /// Turns and marks travel together because they are one save to the reader,
+    /// and because the order between them matters: a mark is held in the sheet
+    /// space of the page as it was read, so it has to be written before the page
+    /// is turned under it.
     /// </summary>
-    private static string WriteRotatedCore(string sourcePath, string targetPath, IReadOnlyList<int> quarterTurns)
+    private static string WriteChangesCore(
+        string sourcePath,
+        string targetPath,
+        IReadOnlyList<int> quarterTurns,
+        IReadOnlyDictionary<int, IReadOnlyList<Annotation>>? annotations,
+        bool flatten = false)
     {
         string full = Path.GetFullPath(targetPath);
         string directory = Path.GetDirectoryName(full) ?? Directory.GetCurrentDirectory();
@@ -685,25 +738,54 @@ public sealed class PdfRenderQueue : IDisposable
                 ?? throw new InvalidOperationException(
                     $"No se pudo leer el PDF para guardarlo (PDFium error {fpdfview.FPDF_GetLastError()}).");
 
-            var expected = new int[fpdfview.FPDF_GetPageCount(handle)];
+            var expected = new PageExpectation[fpdfview.FPDF_GetPageCount(handle)];
             try
             {
                 for (int i = 0; i < expected.Length; i++)
                 {
                     int turns = i < quarterTurns.Count ? quarterTurns[i] & 3 : 0;
+                    var marks = annotations is not null && annotations.TryGetValue(i, out var forPage)
+                        ? forPage
+                        : [];
 
                     var page = fpdfview.FPDF_LoadPage(handle, i)
                         ?? throw new InvalidOperationException($"No se pudo cargar la página {i} para guardarla.");
                     try
                     {
+                        // Only touch a page's annotations if there is something
+                        // to say about them: nothing to write and nothing of
+                        // ours already there means the page is left exactly as
+                        // it came.
+                        var names = marks.Count > 0 || PdfAnnotations.OwnedNames(page).Count > 0
+                            ? PdfAnnotations.Write(handle, page, marks)
+                            : [];
+
                         // PDFium reports /Rotate in quarter turns, and the
                         // viewer's turn is relative to whatever the page
                         // already carried.
-                        expected[i] = (fpdf_edit.FPDFPageGetRotation(page) + turns) & 3;
+                        int rotation = (fpdf_edit.FPDFPageGetRotation(page) + turns) & 3;
                         if (turns != 0)
                         {
-                            fpdf_edit.FPDFPageSetRotation(page, expected[i]);
+                            fpdf_edit.FPDFPageSetRotation(page, rotation);
                         }
+
+                        int objects = fpdf_edit.FPDFPageCountObjects(page);
+
+                        if (flatten)
+                        {
+                            // Burns every annotation into the page itself. What
+                            // comes back has no marks left to check by name —
+                            // the check is that they are gone and that the
+                            // drawing they were on is still there.
+                            if (fpdf_flatten.FPDFPageFlatten(page, FlattenForDisplay) == FlattenFail)
+                            {
+                                throw new InvalidOperationException($"No se pudieron aplanar las marcas de la página {i + 1}.");
+                            }
+
+                            names = [];
+                        }
+
+                        expected[i] = new PageExpectation(rotation, names, flatten ? objects : 0);
                     }
                     finally
                     {
@@ -716,7 +798,7 @@ public sealed class PdfRenderQueue : IDisposable
                 // drawing. It is not guaranteed to carry the change, so the
                 // result is read back before it is trusted.
                 WriteDocumentCore(handle, staged, SaveIncremental);
-                if (!RotationsMatch(staged, expected))
+                if (!ChangesMatch(staged, expected))
                 {
                     WriteDocumentCore(handle, staged, SaveFullRewrite);
                 }
@@ -726,9 +808,9 @@ public sealed class PdfRenderQueue : IDisposable
                 fpdfview.FPDF_CloseDocument(handle);
             }
 
-            if (!RotationsMatch(staged, expected))
+            if (!ChangesMatch(staged, expected))
             {
-                throw new InvalidOperationException("El archivo guardado no conserva los giros; no se ha tocado el original.");
+                throw new InvalidOperationException("El archivo guardado no conserva los cambios; no se ha tocado el original.");
             }
 
             return staged;
@@ -741,11 +823,23 @@ public sealed class PdfRenderQueue : IDisposable
     }
 
     /// <summary>
-    /// Reopens a written file and checks that every page carries the rotation
-    /// it was meant to. Cheap next to the write, and it is the only thing
-    /// standing between a bad save and the reader's original.
+    /// What a written page has to come back with for the save to be trusted.
+    ///
+    /// <see cref="LeastObjects"/> is only used by a flatten, where there is
+    /// nothing left to check by name: a page whose marks were burnt in must
+    /// still carry at least the drawing it had before.
     /// </summary>
-    private static bool RotationsMatch(string path, IReadOnlyList<int> expected)
+    private readonly record struct PageExpectation(
+        int Rotation,
+        IReadOnlyList<string> AnnotationNames,
+        int LeastObjects = 0);
+
+    /// <summary>
+    /// Reopens a written file and checks that every page carries the turn and
+    /// the marks it was meant to. Cheap next to the write, and it is the only
+    /// thing standing between a bad save and the reader's original.
+    /// </summary>
+    private static bool ChangesMatch(string path, IReadOnlyList<PageExpectation> expected)
     {
         var handle = fpdfview.FPDF_LoadDocument(path, null);
         if (handle is null) return false;
@@ -761,7 +855,25 @@ public sealed class PdfRenderQueue : IDisposable
 
                 try
                 {
-                    if ((fpdf_edit.FPDFPageGetRotation(page) & 3) != expected[i]) return false;
+                    if ((fpdf_edit.FPDFPageGetRotation(page) & 3) != expected[i].Rotation) return false;
+
+                    var written = PdfAnnotations.OwnedNames(page);
+                    var wanted = expected[i].AnnotationNames;
+                    if (written.Count != wanted.Count) return false;
+
+                    var pending = new HashSet<string>(wanted);
+                    foreach (string name in written)
+                    {
+                        if (!pending.Remove(name)) return false;
+                    }
+
+                    // After a flatten the marks are part of the drawing, so the
+                    // page must have grown rather than lost anything.
+                    if (expected[i].LeastObjects > 0
+                        && fpdf_edit.FPDFPageCountObjects(page) < expected[i].LeastObjects)
+                    {
+                        return false;
+                    }
                 }
                 finally
                 {
@@ -775,6 +887,43 @@ public sealed class PdfRenderQueue : IDisposable
         {
             fpdfview.FPDF_CloseDocument(handle);
         }
+    }
+
+    /// <summary>
+    /// Reads a document's ZenInk marks, sheet by sheet. Pages already parsed
+    /// are reused; the rest are loaded and let go again, so reading the marks
+    /// of a hundred-sheet set does not evict the sheets on screen.
+    /// </summary>
+    private Dictionary<int, IReadOnlyList<Annotation>> ReadAnnotationsCore(int documentId)
+    {
+        var marks = new Dictionary<int, IReadOnlyList<Annotation>>();
+        if (!_documents.TryGetValue(documentId, out var document)) return marks;
+
+        int pageCount = fpdfview.FPDF_GetPageCount(document.Handle);
+        for (int i = 0; i < pageCount; i++)
+        {
+            bool cached = document.Pages.TryGetValue(i, out var page);
+            page ??= fpdfview.FPDF_LoadPage(document.Handle, i);
+            if (page is null) continue;
+
+            try
+            {
+                var found = PdfAnnotations.Read(page);
+                if (found.Count > 0)
+                {
+                    marks[i] = found;
+                }
+            }
+            finally
+            {
+                if (!cached)
+                {
+                    fpdfview.FPDF_ClosePage(page);
+                }
+            }
+        }
+
+        return marks;
     }
 
     /// <summary>
@@ -857,6 +1006,12 @@ public sealed class PdfRenderQueue : IDisposable
         {
             ApplyHairlineStrokes(page);
         }
+
+        // ZenInk's own marks are drawn by the viewer, over the tiles, so that
+        // they can be picked up and moved. Left visible here they would also be
+        // rasterized into the tile underneath and show twice — but only after a
+        // save, which is exactly the kind of difference nobody looks for.
+        PdfAnnotations.HideOwned(page);
 
         document.Pages[pageIndex] = page;
         document.PageLru.AddLast(pageIndex);

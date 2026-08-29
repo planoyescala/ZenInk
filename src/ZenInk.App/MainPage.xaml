@@ -43,10 +43,14 @@
             <Setter Property="Thickness" Value="1.5" />
         </Style>
 
-        <!--  Raíl: botón cuadrado, icono solo.  -->
+        <!--
+            Raíl: botón cuadrado, icono solo. A 36 px las quince herramientas
+            entran en una ventana normal sin que la última quede bajo el borde;
+            el icono sigue siendo de 21.
+        -->
         <Style x:Key="RailToolStyle" TargetType="ToggleButton">
-            <Setter Property="Width" Value="40" />
-            <Setter Property="Height" Value="40" />
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="CornerRadius" Value="8" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -85,6 +89,24 @@
             <Setter Property="CornerRadius" Value="4" />
         </Style>
 
+        <!--  Muestra de color: el botón no pinta nada, el color lo pone el borde de dentro.  -->
+        <Style x:Key="SwatchButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="SwatchStyle" TargetType="Border">
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{ThemeResource SurfaceStrokeColorDefaultBrush}" />
+        </Style>
+
         <Style x:Key="SlimSplitButtonStyle" TargetType="SplitButton">
             <Setter Property="Height" Value="30" />
             <Setter Property="Padding" Value="9,0" />
@@ -108,6 +130,12 @@
         <KeyboardAccelerator Key="Number2" Modifiers="Control" Invoked="OnFitPageAccelerator" />
         <KeyboardAccelerator Key="Number0" Modifiers="Control" Invoked="OnActualSizeAccelerator" />
         <KeyboardAccelerator Key="P" Modifiers="Control" Invoked="OnPrintAccelerator" />
+        <KeyboardAccelerator Key="Z" Modifiers="Control" Invoked="OnUndoAccelerator" />
+        <KeyboardAccelerator Key="Y" Modifiers="Control" Invoked="OnRedoAccelerator" />
+        <KeyboardAccelerator
+            Key="Z"
+            Invoked="OnRedoAccelerator"
+            Modifiers="Control,Shift" />
     </Page.KeyboardAccelerators>
 
     <!--
@@ -208,9 +236,58 @@
                                 x:Name="SaveCopyItem"
                                 Click="OnSaveCopyClicked"
                                 Text="Guardar como…" />
+
+                            <MenuFlyoutSeparator />
+
+                            <!--
+                                Aplanar es una forma de guardar, no una
+                                herramienta de dibujo: escribe el archivo y
+                                cambia lo que el archivo es. Por eso está aquí y
+                                no en el raíl.
+                            -->
+                            <MenuFlyoutItem
+                                x:Name="FlattenItem"
+                                Click="OnFlattenClicked"
+                                Text="Aplanar las marcas en el plano…" />
+
+                            <MenuFlyoutSeparator />
+
+                            <!--
+                                Descartar vive aquí, no en «Girar»: tira todo lo
+                                que no se ha escrito, marcas incluidas, y eso es
+                                asunto del documento y no de una herramienta.
+                            -->
+                            <MenuFlyoutItem
+                                x:Name="DiscardChangesItem"
+                                Click="OnDiscardChangesClicked"
+                                Text="Descartar los cambios sin guardar" />
                         </MenuFlyout>
                     </SplitButton.Flyout>
                 </SplitButton>
+
+                <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                <!--
+                    Undo sits with the document's own actions, not in the marks
+                    panel: it is the reader's way back from anything, and it
+                    should not disappear when they switch tools.
+                -->
+                <Button
+                    x:Name="UndoButton"
+                    Click="OnUndoClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimIconButtonStyle}"
+                    ToolTipService.ToolTip="Deshacer (Ctrl+Z)">
+                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M6.5 6.2 L3 9.7 L6.5 13.2 M3 9.7h8.2a4.6 4.6 0 0 1 0 9.2" />
+                </Button>
+                <Button
+                    x:Name="RedoButton"
+                    Click="OnRedoClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimIconButtonStyle}"
+                    ToolTipService.ToolTip="Rehacer (Ctrl+Y)">
+                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M13.5 6.2 L17 9.7 L13.5 13.2 M17 9.7H8.8a4.6 4.6 0 0 0 0 9.2" />
+                </Button>
 
                 <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
 
@@ -310,13 +387,6 @@
 
                             <MenuFlyoutItem Click="OnRotateAllLeftClicked" Text="Girar todas las hojas a la izquierda" />
                             <MenuFlyoutItem Click="OnRotateAllRightClicked" Text="Girar todas las hojas a la derecha" />
-
-                            <MenuFlyoutSeparator />
-
-                            <MenuFlyoutItem
-                                x:Name="DiscardRotationsItem"
-                                Click="OnDiscardRotationsClicked"
-                                Text="Descartar los giros sin guardar" />
                         </MenuFlyout>
                     </DropDownButton.Flyout>
                 </DropDownButton>
@@ -462,12 +532,21 @@
                 Background="{ThemeResource LayerFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                 BorderThickness="0,0,1,0"
-                RowDefinitions="Auto,*,Auto">
-                <StackPanel
+                RowDefinitions="*,Auto">
+                <!--
+                    The rail scrolls: with the marking tools on it there are
+                    eleven buttons, and a window short enough to cut one off is
+                    an ordinary window, not an edge case.
+                -->
+                <ScrollViewer
                     Grid.Row="0"
-                    Padding="0,8"
+                    HorizontalScrollMode="Disabled"
+                    VerticalScrollBarVisibility="Hidden">
+                <!--  Poco aire entre botones: con doce herramientas, cada punto cuenta.  -->
+                <StackPanel
+                    Padding="0,6"
                     HorizontalAlignment="Center"
-                    Spacing="3">
+                    Spacing="2">
                     <ToggleButton
                         x:Name="PanToolButton"
                         Click="OnPanToolClicked"
@@ -476,7 +555,16 @@
                         Style="{StaticResource RailToolStyle}"
                         ToolTipService.Placement="Right"
                         ToolTipService.ToolTip="Mano — arrastrar para desplazar">
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M7 9V4.6a1.1 1.1 0 0 1 2.2 0V9 M9.2 8.4V3.8a1.1 1.1 0 0 1 2.2 0v4.6 M11.4 8.1V5.3a1.1 1.1 0 0 1 2.2 0V11 M4.8 9.4a1.1 1.1 0 0 1 2.2 0v2.2 M4.8 11.6c0 3 2.2 5.4 5.2 5.4s5.4-2 5.4-5.4V8" />
+                        <!--
+                            Mano abierta de contorno: cuatro dedos como barras
+                            redondeadas que arrancan de la palma, con hueco
+                            entre ellas, y la palma cerrada en curva. El hueco
+                            es lo que la hace legible: rellena o en escalera se
+                            leía como un bulto.
+                        -->
+                        <controls:ToolIcon
+                            Style="{StaticResource RailIconStyle}"
+                            Data="M4 13V9.8a1.1 1.1 0 0 1 2.2 0v1.7 M7.4 11.5V4.6a1.1 1.1 0 0 1 2.2 0v6.9 M10.8 11.5V4a1.1 1.1 0 0 1 2.2 0v7.5 M14.2 11.5V6.2a1.1 1.1 0 0 1 2.2 0V13a6.2 6.2 0 0 1-12.4 0" />
                     </ToggleButton>
                     <ToggleButton
                         x:Name="ZoomToolButton"
@@ -496,10 +584,139 @@
                         ToolTipService.ToolTip="Seleccionar texto">
                         <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M8 3.5h4 M8 16.5h4 M10 3.5v13" />
                     </ToggleButton>
+
+                    <Rectangle
+                        Width="24"
+                        Height="1"
+                        Margin="0,5"
+                        HorizontalAlignment="Center"
+                        Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                    <!--  Anotación: una herramienta por tipo de marca, y la flecha para cogerlas.  -->
+                    <ToggleButton
+                        x:Name="SelectMarkToolButton"
+                        Click="OnSelectMarkToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Seleccionar marcas — arrastrar para moverlas, Supr para borrar">
+                        <controls:ToolIcon
+                            Style="{StaticResource RailIconStyle}"
+                            Data="M5.6 3.2 L5.6 15.4 L8.6 12.6 L10.6 16.8 L12.8 15.8 L10.8 11.8 L15 11.6 Z"
+                            Filled="True" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="LineToolButton"
+                        Click="OnLineToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Línea">
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M4 16 L16 4" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="ArrowToolButton"
+                        Click="OnArrowToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Flecha">
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M4 16 L15.4 4.6 M10.2 4.6 H15.4 V9.8" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="PolylineToolButton"
+                        Click="OnPolylineToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Polilínea — clic en cada vértice, Intro o doble clic para terminar">
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M3.4 15.2 L7.6 6.6 L11.2 12.4 L16.6 4.8" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="RectangleToolButton"
+                        Click="OnRectangleToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Rectángulo">
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M3.6 5.4h12.8v9.2H3.6Z" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="EllipseToolButton"
+                        Click="OnEllipseToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Elipse">
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M10 15.4c3.6 0 6.4-2.4 6.4-5.4S13.6 4.6 10 4.6 3.6 7 3.6 10s2.8 5.4 6.4 5.4Z" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="PolygonToolButton"
+                        Click="OnPolygonToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Polígono — clic en cada vértice, Intro o doble clic para cerrarlo">
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M10 3.2 L16.8 8.2 L14.2 16.4 H5.8 L3.2 8.2 Z" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="CloudToolButton"
+                        Click="OnCloudToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Nube de revisión — arrastra un recuadro, o clic en cada vértice">
+                        <!--  Cuatro lóbulos y una base: a 21 px es lo que se lee como nube.  -->
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M5.6 15.2a2.7 2.7 0 0 1-.4-5.3 3.3 3.3 0 0 1 5.6-2.6 2.9 2.9 0 0 1 4.5 2.7 2.6 2.6 0 0 1-.5 5.2Z" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="HighlightToolButton"
+                        Click="OnHighlightToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Resaltar texto — arrastra sobre el texto del plano">
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M5.6 12.2 12.4 5.4l2.6 2.6-6.8 6.8H5.6Z M3.8 17.2h12.4" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="TextToolMarkButton"
+                        Click="OnFreeTextToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Texto — clic en el plano y se escribe al lado">
+                        <!--  Una A sobre una línea de base: el texto que se queda en el plano.  -->
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M4.6 13.4 9 3.6h2L15.4 13.4 M6.6 10.2h6.8 M3.6 16.6h12.8" />
+                    </ToggleButton>
+                    <ToggleButton
+                        x:Name="NoteToolButton"
+                        Click="OnNoteToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Comentario — clic en el plano y se escribe al lado">
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M3.8 5h12.4v8.2H9.4L6.2 16.4V13.2H3.8Z" />
+                    </ToggleButton>
+
+                    <!--
+                        El lápiz, el último: dibujar a mano alzada con ratón es
+                        el caso raro mientras la app no sea para pantalla táctil
+                        ni tableta.
+                    -->
+                    <ToggleButton
+                        x:Name="InkToolButton"
+                        Click="OnInkToolClicked"
+                        IsEnabled="False"
+                        Style="{StaticResource RailToolStyle}"
+                        ToolTipService.Placement="Right"
+                        ToolTipService.ToolTip="Lápiz — dibujar a mano alzada">
+                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M4 16.2h3.4l8.8-8.8a1.7 1.7 0 0 0 0-2.4l-1-1a1.7 1.7 0 0 0-2.4 0L4 12.8Z M11.6 5.6 14.8 8.8" />
+                    </ToggleButton>
                 </StackPanel>
+                </ScrollViewer>
 
                 <StackPanel
-                    Grid.Row="2"
+                    Grid.Row="1"
                     Padding="0,8"
                     HorizontalAlignment="Center">
                     <ToggleButton
@@ -566,47 +783,352 @@
                     BorderThickness="0,0,0,1"
                     Orientation="Horizontal"
                     Spacing="10">
+                    <!--
+                        Dos iconos y no uno con la geometría cambiada: el dato
+                        es una Geometry, y construirla desde código sería
+                        analizar en C# lo que el XAML ya sabe leer.
+                    -->
                     <controls:ToolIcon
+                        x:Name="PropertiesIconText"
                         Width="15"
                         Height="15"
                         VerticalAlignment="Center"
                         Data="M8 3.5h4 M8 16.5h4 M10 3.5v13"
                         Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
+                    <controls:ToolIcon
+                        x:Name="PropertiesIconMark"
+                        Width="15"
+                        Height="15"
+                        VerticalAlignment="Center"
+                        Data="M4 16.2h3.4l8.8-8.8a1.7 1.7 0 0 0 0-2.4l-1-1a1.7 1.7 0 0 0-2.4 0L4 12.8Z M11.6 5.6 14.8 8.8"
+                        Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                        Visibility="Collapsed" />
                     <TextBlock
+                        x:Name="PropertiesTitle"
                         VerticalAlignment="Center"
                         FontWeight="SemiBold"
                         Text="Selección de texto" />
                 </StackPanel>
 
-                <StackPanel
-                    Grid.Row="1"
-                    Padding="16,20"
-                    Spacing="14">
-                    <TextBlock
-                        x:Name="SelectionStatus"
-                        Opacity="0.6"
-                        Text="Arrastra sobre el plano para seleccionar."
-                        TextWrapping="Wrap" />
-                    <Button
-                        x:Name="CopySelectionButton"
-                        HorizontalAlignment="Stretch"
-                        Click="OnCopySelectionClicked"
-                        IsEnabled="False">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M7 2.8h8.2a1.4 1.4 0 0 1 1.4 1.4v8.2 M4.8 5.6h7.6a1.4 1.4 0 0 1 1.4 1.4v8.2a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4V7a1.4 1.4 0 0 1 1.4-1.4Z" />
-                            <TextBlock Text="Copiar" />
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <Grid>
+                        <StackPanel
+                            x:Name="TextToolPanel"
+                            Padding="16,20"
+                            Spacing="14">
+                            <TextBlock
+                                x:Name="SelectionStatus"
+                                Opacity="0.6"
+                                Text="Arrastra sobre el plano para seleccionar."
+                                TextWrapping="Wrap" />
+                            <Button
+                                x:Name="CopySelectionButton"
+                                HorizontalAlignment="Stretch"
+                                Click="OnCopySelectionClicked"
+                                IsEnabled="False">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M7 2.8h8.2a1.4 1.4 0 0 1 1.4 1.4v8.2 M4.8 5.6h7.6a1.4 1.4 0 0 1 1.4 1.4v8.2a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4V7a1.4 1.4 0 0 1 1.4-1.4Z" />
+                                    <TextBlock Text="Copiar" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="SelectAllButton"
+                                HorizontalAlignment="Stretch"
+                                Click="OnSelectAllClicked">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.4 6.2V4.6a1.2 1.2 0 0 1 1.2-1.2h1.6 M16.6 6.2V4.6a1.2 1.2 0 0 0-1.2-1.2h-1.6 M3.4 13.8v1.6a1.2 1.2 0 0 0 1.2 1.2h1.6 M16.6 13.8v1.6a1.2 1.2 0 0 1-1.2 1.2h-1.6 M6.6 6.8h6.8v6.4H6.6Z" />
+                                    <TextBlock Text="Seleccionar la hoja" />
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
-                    </Button>
-                    <Button
-                        x:Name="SelectAllButton"
-                        HorizontalAlignment="Stretch"
-                        Click="OnSelectAllClicked">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.4 6.2V4.6a1.2 1.2 0 0 1 1.2-1.2h1.6 M16.6 6.2V4.6a1.2 1.2 0 0 0-1.2-1.2h-1.6 M3.4 13.8v1.6a1.2 1.2 0 0 0 1.2 1.2h1.6 M16.6 13.8v1.6a1.2 1.2 0 0 1-1.2 1.2h-1.6 M6.6 6.8h6.8v6.4H6.6Z" />
-                            <TextBlock Text="Seleccionar la hoja" />
+
+                        <!--
+                            Marcas: color y grosor valen para la siguiente y, si
+                            hay una cogida, para esa. Es lo que se espera al
+                            elegir un color con algo seleccionado.
+                        -->
+                        <StackPanel
+                            x:Name="MarkToolPanel"
+                            Padding="16,20"
+                            Spacing="16"
+                            Visibility="Collapsed">
+                            <StackPanel x:Name="ColourSection" Spacing="8">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Opacity="0.7"
+                                        Text="Color" />
+                                    <Border
+                                        x:Name="CurrentColourSwatch"
+                                        Width="16"
+                                        Height="16"
+                                        VerticalAlignment="Center"
+                                        BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="3" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button
+                                        Click="OnColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="D82020"
+                                        ToolTipService.ToolTip="Rojo">
+                                        <Border Background="#D82020" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                    <Button
+                                        Click="OnColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="F07A1E"
+                                        ToolTipService.ToolTip="Naranja">
+                                        <Border Background="#F07A1E" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                    <Button
+                                        Click="OnColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="FFC800"
+                                        ToolTipService.ToolTip="Amarillo">
+                                        <Border Background="#FFC800" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                    <Button
+                                        Click="OnColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="1E9B4B"
+                                        ToolTipService.ToolTip="Verde">
+                                        <Border Background="#1E9B4B" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button
+                                        Click="OnColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="0067C0"
+                                        ToolTipService.ToolTip="Azul">
+                                        <Border Background="#0067C0" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                    <Button
+                                        Click="OnColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="7B4BD6"
+                                        ToolTipService.ToolTip="Violeta">
+                                        <Border Background="#7B4BD6" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                    <Button
+                                        Click="OnColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="E0359C"
+                                        ToolTipService.ToolTip="Magenta">
+                                        <Border Background="#E0359C" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                    <Button
+                                        Click="OnColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="1C1C1C"
+                                        ToolTipService.ToolTip="Negro">
+                                        <Border Background="#1C1C1C" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!--
+                                Relleno: su propio color, porque el caso típico
+                                de revisión es una mancha clara con el borde en
+                                otro color, y su propia opacidad, porque un
+                                relleno opaco taparía justo las líneas que la
+                                marca señala.
+                            -->
+                            <StackPanel x:Name="FillSection" Spacing="8">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Opacity="0.7"
+                                        Text="Relleno" />
+                                    <Border
+                                        x:Name="CurrentFillSwatch"
+                                        Width="16"
+                                        Height="16"
+                                        VerticalAlignment="Center"
+                                        BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="3" />
+                                    <TextBlock
+                                        x:Name="FillStateText"
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Opacity="0.5" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button
+                                        Click="OnNoFillClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        ToolTipService.ToolTip="Sin relleno">
+                                        <controls:ToolIcon
+                                            Width="18"
+                                            Height="18"
+                                            Data="M3.5 3.5h13v13h-13Z M3.5 16.5 16.5 3.5"
+                                            Thickness="1.3" />
+                                    </Button>
+                                    <Button
+                                        Click="OnFillColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="FFC800"
+                                        ToolTipService.ToolTip="Relleno amarillo">
+                                        <Border Background="#FFC800" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                    <Button
+                                        Click="OnFillColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="D82020"
+                                        ToolTipService.ToolTip="Relleno rojo">
+                                        <Border Background="#D82020" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                    <Button
+                                        Click="OnFillColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="1E9B4B"
+                                        ToolTipService.ToolTip="Relleno verde">
+                                        <Border Background="#1E9B4B" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button
+                                        Click="OnFillColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="0067C0"
+                                        ToolTipService.ToolTip="Relleno azul">
+                                        <Border Background="#0067C0" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                    <Button
+                                        Click="OnFillColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="7B4BD6"
+                                        ToolTipService.ToolTip="Relleno violeta">
+                                        <Border Background="#7B4BD6" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                    <Button
+                                        Click="OnFillColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="9AA0A6"
+                                        ToolTipService.ToolTip="Relleno gris">
+                                        <Border Background="#9AA0A6" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                    <Button
+                                        Click="OnFillColourClicked"
+                                        Style="{StaticResource SwatchButtonStyle}"
+                                        Tag="1C1C1C"
+                                        ToolTipService.ToolTip="Relleno negro">
+                                        <Border Background="#1C1C1C" Style="{StaticResource SwatchStyle}" />
+                                    </Button>
+                                </StackPanel>
+
+                                <StackPanel x:Name="FillOpacitySection" Spacing="2">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            FontSize="12"
+                                            Opacity="0.7"
+                                            Text="Opacidad" />
+                                        <TextBlock
+                                            x:Name="FillOpacityText"
+                                            VerticalAlignment="Center"
+                                            FontSize="12"
+                                            Opacity="0.5" />
+                                    </StackPanel>
+                                    <Slider
+                                        x:Name="FillOpacitySlider"
+                                        Maximum="100"
+                                        Minimum="5"
+                                        StepFrequency="5"
+                                        TickFrequency="5"
+                                        Value="35"
+                                        ValueChanged="OnFillOpacityChanged" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel x:Name="WidthSection" Spacing="2">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Opacity="0.7"
+                                        Text="Grosor" />
+                                    <TextBlock
+                                        x:Name="WidthValueText"
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Opacity="0.5" />
+                                </StackPanel>
+                                <Slider
+                                    x:Name="WidthSlider"
+                                    Maximum="8"
+                                    Minimum="0.5"
+                                    StepFrequency="0.25"
+                                    TickFrequency="0.25"
+                                    Value="2"
+                                    ValueChanged="OnWidthChanged" />
+                            </StackPanel>
+
+                            <StackPanel x:Name="FontSizeSection" Spacing="2">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Opacity="0.7"
+                                        Text="Tamaño" />
+                                    <TextBlock
+                                        x:Name="FontSizeText"
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Opacity="0.5" />
+                                </StackPanel>
+                                <Slider
+                                    x:Name="FontSizeSlider"
+                                    Maximum="72"
+                                    Minimum="6"
+                                    StepFrequency="1"
+                                    TickFrequency="1"
+                                    Value="12"
+                                    ValueChanged="OnFontSizeChanged" />
+                            </StackPanel>
+
+                            <!--  El texto aparece cuando hay una nota o un texto cogido.  -->
+                            <StackPanel x:Name="NoteEditor" Spacing="6" Visibility="Collapsed">
+                                <TextBlock
+                                    x:Name="NoteEditorLabel"
+                                    FontSize="12"
+                                    Opacity="0.7"
+                                    Text="Comentario" />
+                                <TextBox
+                                    x:Name="NoteText"
+                                    Height="120"
+                                    AcceptsReturn="True"
+                                    PlaceholderText="Qué hay que revisar"
+                                    TextChanged="OnNoteTextChanged"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <Button
+                                x:Name="DeleteMarkButton"
+                                HorizontalAlignment="Stretch"
+                                Click="OnDeleteMarkClicked"
+                                IsEnabled="False">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.6 5.6h12.8 M8 5.6V3.8h4v1.8 M5.2 5.6l.8 10.4a1.2 1.2 0 0 0 1.2 1.1h5.6a1.2 1.2 0 0 0 1.2-1.1l.8-10.4" />
+                                    <TextBlock Text="Eliminar la marca (Supr)" />
+                                </StackPanel>
+                            </Button>
+
+                            <TextBlock
+                                x:Name="MarkStatus"
+                                FontSize="12"
+                                Opacity="0.55"
+                                TextWrapping="Wrap" />
                         </StackPanel>
-                    </Button>
-                </StackPanel>
+                    </Grid>
+                </ScrollViewer>
             </Grid>
         </Grid>
     </Grid>

@@ -5,6 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>ZenInk.Core</RootNamespace>
+    <!--
+      Two of PDFium's annotation entry points take an array of points, which
+      the generated wrapper cannot express. See PdfiumInk.
+    -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <!--

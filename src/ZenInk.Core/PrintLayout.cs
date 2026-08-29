@@ -3,9 +3,29 @@ namespace ZenInk.Core;
 /// <summary>A rectangle in PDF points, y down.</summary>
 public readonly record struct RectPt(float X, float Y, float Width, float Height)
 {
+    public float Left => X;
+
+    public float Top => Y;
+
     public float Right => X + Width;
 
     public float Bottom => Y + Height;
+
+    /// <summary>The box two opposite corners span, whichever way round they came.</summary>
+    public static RectPt FromCorners(System.Numerics.Vector2 a, System.Numerics.Vector2 b) => new(
+        MathF.Min(a.X, b.X),
+        MathF.Min(a.Y, b.Y),
+        MathF.Abs(b.X - a.X),
+        MathF.Abs(b.Y - a.Y));
+
+    /// <summary>Grows the box on every side; a negative amount shrinks it.</summary>
+    public RectPt Inflated(float by) => new(X - by, Y - by, Width + by * 2f, Height + by * 2f);
+
+    public bool Contains(System.Numerics.Vector2 point) =>
+        point.X >= Left && point.X <= Right && point.Y >= Top && point.Y <= Bottom;
+
+    public bool Intersects(RectPt other) =>
+        other.Left <= Right && other.Right >= Left && other.Top <= Bottom && other.Bottom >= Top;
 }
 
 /// <summary>Unprintable border, in points, on each edge of the paper.</summary>

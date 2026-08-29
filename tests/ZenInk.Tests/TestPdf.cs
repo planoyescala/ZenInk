@@ -55,7 +55,27 @@ public static class TestPdf
         return Write(name, content.ToString(), "", withFont: false);
     }
 
-    private static string Write(string name, string content, string rotateEntry, bool withFont)
+    /// <summary>
+    /// A single page carrying an annotation ZenInk did not write — someone
+    /// else's review comment. Nothing marks it as ours, so saving must leave it
+    /// exactly where it is, and PDFium must go on drawing it into the tiles.
+    /// </summary>
+    public static string WriteForeignAnnotation(string name) =>
+        Write(
+            name,
+            "0 0 0 rg\n0 450 100 150 re f\n",
+            "",
+            withFont: false,
+            extraPageEntries: "/Annots[5 0 R]",
+            extraObjects: ["<</Type/Annot/Subtype/Square/Rect[200 100 350 250]/C[0 0.35 0.78]/F 4/Border[0 0 3]>>"]);
+
+    private static string Write(
+        string name,
+        string content,
+        string rotateEntry,
+        bool withFont,
+        string extraPageEntries = "",
+        IReadOnlyList<string>? extraObjects = null)
     {
         int contentLength = Encoding.ASCII.GetByteCount(content);
         string resources = withFont ? "/Resources<</Font<</F1 5 0 R>>>>" : "";
@@ -64,13 +84,18 @@ public static class TestPdf
         {
             "<</Type/Catalog/Pages 2 0 R>>",
             "<</Type/Pages/Kids[3 0 R]/Count 1>>",
-            $"<</Type/Page/Parent 2 0 R/MediaBox[0 0 {PageWidth} {PageHeight}]{rotateEntry}{resources}/Contents 4 0 R>>",
+            $"<</Type/Page/Parent 2 0 R/MediaBox[0 0 {PageWidth} {PageHeight}]{rotateEntry}{resources}{extraPageEntries}/Contents 4 0 R>>",
             $"<</Length {contentLength}>>\nstream\n{content}endstream",
         };
 
         if (withFont)
         {
             objects.Add("<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>");
+        }
+
+        if (extraObjects is not null)
+        {
+            objects.AddRange(extraObjects);
         }
 
         var sb = new StringBuilder();

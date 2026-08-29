@@ -2,6 +2,7 @@ using Microsoft.Graphics.Canvas;
 using Windows.Foundation;
 using Windows.Graphics.DirectX;
 using ZenInk.Core;
+using ZenInk_App.Rendering;
 
 namespace ZenInk_App.Printing;
 
@@ -56,6 +57,18 @@ public sealed class PdfPrintJob : IAsyncDisposable
 
     /// <summary>Why a sheet came out blank, when one did.</summary>
     public string? Problem { get; private set; }
+
+    /// <summary>
+    /// The marks to print over the drawing, by sheet.
+    ///
+    /// They are drawn here rather than left to PDFium for two reasons: the ones
+    /// made in this sitting are not in the file yet, and the ones that are get
+    /// hidden on every handle the queue opens so that the viewer can own them.
+    /// Printing them from the same model the screen draws is what makes the
+    /// paper match the screen — including marks that have never been saved.
+    /// </summary>
+    public IReadOnlyDictionary<int, IReadOnlyList<Annotation>> Marks { get; set; } =
+        new Dictionary<int, IReadOnlyList<Annotation>>();
 
     /// <summary>
     /// Opens a private view of the document for printing. The sheet sizes come
@@ -221,6 +234,55 @@ public sealed class PdfPrintJob : IAsyncDisposable
         finally
         {
             ds.Antialiasing = antialiasing;
+        }
+
+        DrawMarks(ds, piece);
+    }
+
+    /// <summary>
+    /// Lays this piece's marks over the drawing, in vector rather than as
+    /// pixels: a stroke drawn here comes out at the plotter's own resolution
+    /// instead of the render's.
+    ///
+    /// Clipped to the piece, because a poster split across several sheets must
+    /// not print the same arrow on two of them.
+    /// </summary>
+    private void DrawMarks(CanvasDrawingSession ds, PrintPiece piece)
+    {
+        if (!Marks.TryGetValue(piece.PageIndex, out var marks) || marks.Count == 0) return;
+
+        var source = piece.Source;
+        var destination = piece.Destination;
+
+        // DIPs per point of the sheet, and where the sheet's origin would fall
+        // if the whole of it were on this piece of paper.
+        double scale = destination.Width / source.Width * PointsToDips;
+        double originX = destination.X * PointsToDips - source.X * scale;
+        double originY = destination.Y * PointsToDips - source.Y * scale;
+
+        var sheet = _sheets[piece.PageIndex];
+        int rotation = RotationOf(piece.PageIndex);
+
+        // The placement wants the sheet as the file draws it; _sheets holds it
+        // as the reader turned it, so an odd turn has the axes back to front.
+        var (sheetWidth, sheetHeight) = (rotation & 1) == 1
+            ? (sheet.HeightPt, sheet.WidthPt)
+            : (sheet.WidthPt, sheet.HeightPt);
+
+        var clip = new Rect(
+            destination.X * PointsToDips,
+            destination.Y * PointsToDips,
+            destination.Width * PointsToDips,
+            destination.Height * PointsToDips);
+
+        var placement = new SheetPlacement(sheetWidth, sheetHeight, rotation, originX, originY, scale);
+
+        using (ds.CreateLayer(1f, clip))
+        {
+            foreach (var mark in marks)
+            {
+                AnnotationRenderer.Draw(ds, mark, placement, Settings.Monochrome);
+            }
         }
     }
 

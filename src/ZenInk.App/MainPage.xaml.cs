@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
@@ -17,6 +18,14 @@ public sealed partial class MainPage : Page
 
     /// <summary>Set while a file operation is running; the bar is locked and says so.</summary>
     private string? _busyMessage;
+
+    /// <summary>
+    /// Set while the panel is being filled in from the viewer. The slider and
+    /// the comment box raise the same events whether a person or this code
+    /// changed them, and without the guard writing a value back would read as
+    /// the reader having edited it.
+    /// </summary>
+    private bool _syncingPanel;
 
     public MainPage()
     {
@@ -146,6 +155,7 @@ public sealed partial class MainPage : Page
             var viewer = new PdfTiledViewer();
             viewer.ViewChanged += OnViewerViewChanged;
             viewer.PagesChanged += OnViewerViewChanged;
+            viewer.TextWanted += OnViewerTextWanted;
 
             tab = new TabViewItem
             {
@@ -199,8 +209,8 @@ public sealed partial class MainPage : Page
     }
 
     /// <summary>
-    /// Closing a tab with turns that never reached the file is the one place
-    /// work can be lost silently, so it asks. TabView removes nothing on its
+    /// Closing a tab with turns or marks that never reached the file is the one
+    /// place work can be lost silently, so it asks. TabView removes nothing on its
     /// own — the tab only goes when <see cref="CloseTab"/> says so.
     /// </summary>
     private async void OnTabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args)
@@ -228,12 +238,12 @@ public sealed partial class MainPage : Page
 
         if (answer == ContentDialogResult.Primary)
         {
-            using (BusyScope("Guardando los giros…"))
+            using (BusyScope("Guardando…"))
             {
-                string? error = await viewer.SaveRotationsAsync();
+                string? error = await viewer.SaveChangesAsync();
                 if (error is not null)
                 {
-                    await ShowMessageAsync("No se pudieron guardar los giros", error);
+                    await ShowMessageAsync("No se pudo guardar el documento", error);
                     return;
                 }
             }
@@ -256,6 +266,7 @@ public sealed partial class MainPage : Page
 
             viewer.ViewChanged -= OnViewerViewChanged;
             viewer.PagesChanged -= OnViewerViewChanged;
+            viewer.TextWanted -= OnViewerTextWanted;
             viewer.CloseDocument();
             tab.Tag = null;
         }
@@ -283,6 +294,20 @@ public sealed partial class MainPage : Page
         // Only the visible tab drives the chrome.
         if (!ReferenceEquals(sender, ActiveViewer)) return;
         UpdateChrome();
+    }
+
+    /// <summary>
+    /// A mark was just placed that is waiting to be typed into, so the caret
+    /// goes to the panel. Otherwise the reader clicks on the sheet, a marker
+    /// appears, and the keys they type go nowhere.
+    /// </summary>
+    private void OnViewerTextWanted(object? sender, EventArgs e)
+    {
+        if (!ReferenceEquals(sender, ActiveViewer)) return;
+
+        UpdateChrome();
+        NoteText.Focus(FocusState.Programmatic);
+        NoteText.SelectAll();
     }
 
     // --- barra superior ---------------------------------------------------
@@ -388,13 +413,40 @@ public sealed partial class MainPage : Page
         UpdateChrome();
     }
 
-    private async void OnDiscardRotationsClicked(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Throws away everything that has not been written: turns and marks alike.
+    ///
+    /// It asks first, and it has to. Reopening the file is the honest undo —
+    /// it puts the document back exactly as the PDF has it, with no separate
+    /// history to keep in step — but that also means a morning's marks go with
+    /// the turns, and the two arrive at this menu item together.
+    /// </summary>
+    private async void OnDiscardChangesClicked(object sender, RoutedEventArgs e)
     {
         if (ActiveViewer is not { } viewer || viewer.SourcePath is not { } path) return;
-        if (!viewer.HasUnsavedRotations) return;
+        if (!viewer.HasUnsavedChanges) return;
 
-        // Reopening the file is the honest undo: it puts every sheet back the
-        // way the PDF has it, with no separate history to keep in step.
+        int marks = viewer.Annotations.Count;
+        string what = (viewer.HasUnsavedRotations, marks) switch
+        {
+            (true, 0) => "Los giros que no se han guardado se perderán.",
+            (true, _) => $"Los giros y las {marks} marcas que no se han guardado se perderán.",
+            (false, 1) => "La marca que no se ha guardado se perderá.",
+            _ => $"Las {marks} marcas que no se han guardado se perderán.",
+        };
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Descartar los cambios",
+            Content = $"{what}\n\nEl documento volverá a como está en el archivo.",
+            PrimaryButtonText = "Descartar",
+            CloseButtonText = "Cancelar",
+            DefaultButton = ContentDialogButton.Close,
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+
         await ReloadAsync(viewer, path);
     }
 
@@ -409,8 +461,8 @@ public sealed partial class MainPage : Page
     private async void OnSaveItemClicked(object sender, RoutedEventArgs e) => await SaveDocumentAsync();
 
     /// <summary>
-    /// Writes the document's pending changes back to its file. Sheet turns are
-    /// all there is to write today; comments will join them here.
+    /// Writes the document's pending changes back to its file: the sheet turns
+    /// and the marks, in one write.
     /// </summary>
     private async Task SaveDocumentAsync()
     {
@@ -418,10 +470,54 @@ public sealed partial class MainPage : Page
 
         using (BusyScope("Guardando…"))
         {
-            string? error = await viewer.SaveRotationsAsync();
+            string? error = await viewer.SaveChangesAsync();
             if (error is not null)
             {
                 await ShowMessageAsync("No se pudo guardar el documento", error);
+            }
+        }
+
+        UpdateChrome();
+    }
+
+    /// <summary>
+    /// Burns the marks into the drawing, for good. Everything pending is
+    /// written first, so nothing is lost on the way — but the marks stop being
+    /// marks, and that is worth asking about plainly rather than through a
+    /// word like "flatten" on a menu.
+    /// </summary>
+    private async void OnFlattenClicked(object sender, RoutedEventArgs e)
+    {
+        if (ActiveViewer is not { } viewer || viewer.PageCount == 0) return;
+
+        int marks = viewer.Annotations.Count;
+        string count = marks switch
+        {
+            0 => "Las anotaciones del documento pasarán a formar parte del dibujo.",
+            1 => "La marca de este documento pasará a formar parte del dibujo.",
+            _ => $"Las {marks} marcas de este documento pasarán a formar parte del dibujo.",
+        };
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Aplanar las marcas",
+            Content = $"{count}\n\nDespués nadie podrá moverlas, cambiarlas ni borrarlas, "
+                + "ni en ZenInk ni en otro programa. También se aplanan las anotaciones "
+                + "que traía el archivo de otras herramientas.\n\nEsto no se puede deshacer.",
+            PrimaryButtonText = "Aplanar y guardar",
+            CloseButtonText = "Cancelar",
+            DefaultButton = ContentDialogButton.Close,
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+
+        using (BusyScope("Aplanando las marcas…"))
+        {
+            string? error = await viewer.FlattenAsync();
+            if (error is not null)
+            {
+                await ShowMessageAsync("No se pudieron aplanar las marcas", error);
             }
         }
 
@@ -457,7 +553,7 @@ public sealed partial class MainPage : Page
         {
             try
             {
-                await viewer.SaveRotationsCopyAsync(file.Path);
+                await viewer.SaveChangesCopyAsync(file.Path);
             }
             catch (Exception ex)
             {
@@ -560,6 +656,9 @@ public sealed partial class MainPage : Page
             using (BusyScope("Preparando la impresión…"))
             {
                 var job = await PdfPrintJob.OpenAsync(path, rotations);
+                // Marks print whether or not they have been saved, for the same
+                // reason unsaved turns do: the paper should be what is on screen.
+                job.Marks = viewer.Annotations.Snapshot();
                 source = new PdfPrintSource(job, title, WindowNative.GetWindowHandle(App.Current.MainWindow));
             }
 
@@ -639,6 +738,124 @@ public sealed partial class MainPage : Page
 
     private void OnZoomToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.ZoomRectangle);
 
+    private void OnSelectMarkToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.SelectAnnotation);
+
+    private void OnInkToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Ink);
+
+    private void OnLineToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Line);
+
+    private void OnArrowToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Arrow);
+
+    private void OnRectangleToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Rectangle);
+
+    private void OnEllipseToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Ellipse);
+
+    private void OnPolylineToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Polyline);
+
+    private void OnPolygonToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Polygon);
+
+    private void OnCloudToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Cloud);
+
+    private void OnHighlightToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Highlight);
+
+    private void OnFreeTextToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.FreeText);
+
+    private void OnNoteToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Note);
+
+    // --- marcas -----------------------------------------------------------
+
+    private void OnUndoClicked(object sender, RoutedEventArgs e) => Undo();
+
+    private void OnRedoClicked(object sender, RoutedEventArgs e) => Redo();
+
+    private void OnUndoAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        Undo();
+        args.Handled = true;
+    }
+
+    private void OnRedoAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        Redo();
+        args.Handled = true;
+    }
+
+    private void Undo()
+    {
+        ActiveViewer?.UndoAnnotation();
+        UpdateChrome();
+    }
+
+    private void Redo()
+    {
+        ActiveViewer?.RedoAnnotation();
+        UpdateChrome();
+    }
+
+    private void OnColourClicked(object sender, RoutedEventArgs e)
+    {
+        if (ActiveViewer is not { } viewer) return;
+        if ((sender as FrameworkElement)?.Tag is not string hex) return;
+        if (!uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out uint packed)) return;
+
+        viewer.AnnotationStyle = viewer.AnnotationStyle with { Color = AnnotationColor.FromPacked(packed) };
+        UpdateChrome();
+    }
+
+    private void OnWidthChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_syncingPanel || ActiveViewer is not { } viewer) return;
+
+        viewer.AnnotationStyle = viewer.AnnotationStyle with { WidthPt = (float)e.NewValue };
+        UpdateChrome();
+    }
+
+    private void OnFillColourClicked(object sender, RoutedEventArgs e)
+    {
+        if (ActiveViewer is not { } viewer) return;
+        if ((sender as FrameworkElement)?.Tag is not string hex) return;
+        if (!uint.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out uint packed)) return;
+
+        viewer.AnnotationStyle = viewer.AnnotationStyle with { Fill = AnnotationColor.FromPacked(packed) };
+        UpdateChrome();
+    }
+
+    private void OnNoFillClicked(object sender, RoutedEventArgs e)
+    {
+        if (ActiveViewer is not { } viewer) return;
+
+        viewer.AnnotationStyle = viewer.AnnotationStyle with { Fill = null };
+        UpdateChrome();
+    }
+
+    private void OnFontSizeChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_syncingPanel || ActiveViewer is not { } viewer) return;
+
+        viewer.AnnotationStyle = viewer.AnnotationStyle with { FontSizePt = (float)e.NewValue };
+        UpdateChrome();
+    }
+
+    private void OnFillOpacityChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_syncingPanel || ActiveViewer is not { } viewer) return;
+
+        viewer.AnnotationStyle = viewer.AnnotationStyle with { FillOpacity = (float)(e.NewValue / 100.0) };
+        UpdateChrome();
+    }
+
+    private void OnNoteTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_syncingPanel) return;
+        ActiveViewer?.SetSelectedText(NoteText.Text);
+    }
+
+    private void OnDeleteMarkClicked(object sender, RoutedEventArgs e)
+    {
+        ActiveViewer?.DeleteSelectedAnnotation();
+        UpdateChrome();
+    }
+
     private void SetTool(ViewerTool tool)
     {
         if (ActiveViewer is { } viewer)
@@ -690,6 +907,7 @@ public sealed partial class MainPage : Page
         ZoomToolButton.IsEnabled = interactive;
         LineWeightButton.IsChecked = viewer?.ThinLines != true;
 
+        UpdateMarkTools(viewer, tool, interactive);
         UpdateViewMenu(viewer);
         UpdateSaveChrome(viewer, interactive);
 
@@ -697,8 +915,11 @@ public sealed partial class MainPage : Page
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        // The panel is contextual: it appears for the tool that has options.
-        PropertiesPanel.Visibility = hasDocument && textTool ? Visibility.Visible : Visibility.Collapsed;
+        // The panel is contextual: it appears for the tools that have options.
+        bool markTool = tool.IsAnnotation();
+        PropertiesPanel.Visibility = hasDocument && (textTool || markTool) ? Visibility.Visible : Visibility.Collapsed;
+        TextToolPanel.Visibility = textTool ? Visibility.Visible : Visibility.Collapsed;
+        MarkToolPanel.Visibility = markTool ? Visibility.Visible : Visibility.Collapsed;
 
         bool hasSelection = viewer?.HasSelection ?? false;
         CopySelectionButton.IsEnabled = hasSelection;
@@ -731,6 +952,171 @@ public sealed partial class MainPage : Page
         string name = (Tabs.SelectedItem as TabViewItem)?.Header as string ?? string.Empty;
         DocumentNameText.Text = viewer.HasUnsavedChanges ? $"{name}  •" : name;
     }
+
+    /// <summary>
+    /// The marking half of the chrome: which tool is down, what the panel is
+    /// showing, and whether there is anything to undo.
+    ///
+    /// The panel is filled from the viewer rather than kept in step by hand,
+    /// which is what makes picking up a mark show that mark's colour and width
+    /// without a second path through the code.
+    /// </summary>
+    private void UpdateMarkTools(PdfTiledViewer? viewer, ViewerTool tool, bool interactive)
+    {
+        foreach (var (button, owned) in MarkToolButtons(tool))
+        {
+            button.IsEnabled = interactive;
+            button.IsChecked = owned;
+        }
+
+        UndoButton.IsEnabled = interactive && (viewer?.CanUndo ?? false);
+        RedoButton.IsEnabled = interactive && (viewer?.CanRedo ?? false);
+
+        PropertiesIconText.Visibility = tool.IsAnnotation() ? Visibility.Collapsed : Visibility.Visible;
+        PropertiesIconMark.Visibility = tool.IsAnnotation() ? Visibility.Visible : Visibility.Collapsed;
+
+        if (!tool.IsAnnotation())
+        {
+            if (tool == ViewerTool.SelectText)
+            {
+                PropertiesTitle.Text = "Selección de texto";
+            }
+            return;
+        }
+
+        PropertiesTitle.Text = ToolTitle(tool);
+
+        var style = viewer?.AnnotationStyle ?? AnnotationStyle.Default;
+        var selected = viewer?.SelectedAnnotation;
+
+        // The fill belongs to the shapes that enclose an area; on a line it
+        // would be a control with nothing to do.
+        var kind = selected?.Kind ?? (tool == ViewerTool.SelectAnnotation ? AnnotationKind.Ink : tool.ToKind());
+        bool takesFill = Annotation.TakesFill(kind);
+
+        // A mark that cannot be changed shows none of the controls that would
+        // change it: a swatch that does nothing when clicked is worse than no
+        // swatch at all.
+        bool changeable = selected is null || Annotation.CanBeChanged(selected.Kind);
+
+        _syncingPanel = true;
+        try
+        {
+            CurrentColourSwatch.Background = Swatch(style.Color);
+
+            ColourSection.Visibility = changeable ? Visibility.Visible : Visibility.Collapsed;
+            WidthSection.Visibility = changeable && Annotation.TakesWidth(kind)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            WidthSlider.Value = style.WidthPt;
+            WidthValueText.Text = $"{style.WidthPt:0.##} pt";
+
+            FontSizeSection.Visibility = changeable && Annotation.TakesFontSize(kind)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            FontSizeSlider.Value = Math.Clamp(Math.Round(style.FontSizePt), 6, 72);
+            FontSizeText.Text = $"{style.FontSizePt:0} pt";
+
+            FillSection.Visibility = changeable && takesFill ? Visibility.Visible : Visibility.Collapsed;
+            FillOpacitySection.Visibility = changeable && takesFill && style.Fill is not null
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            FillStateText.Text = style.Fill is null ? "Sin relleno" : string.Empty;
+            CurrentFillSwatch.Visibility = style.Fill is null ? Visibility.Collapsed : Visibility.Visible;
+            if (style.Fill is { } fill)
+            {
+                CurrentFillSwatch.Background = Swatch(fill);
+                FillOpacitySlider.Value = Math.Clamp(Math.Round(style.FillOpacity * 100.0), 5, 100);
+                FillOpacityText.Text = $"{style.FillOpacity * 100:0} %";
+            }
+
+            bool typing = selected is not null && Annotation.TakesText(selected.Kind);
+            NoteEditor.Visibility = typing ? Visibility.Visible : Visibility.Collapsed;
+            if (typing)
+            {
+                NoteEditorLabel.Text = selected!.Kind == AnnotationKind.Note ? "Comentario" : "Texto";
+                NoteText.PlaceholderText = selected.Kind == AnnotationKind.Note
+                    ? "Qué hay que revisar"
+                    : "Lo que se lee en el plano";
+
+                if (NoteText.Text != selected.Text)
+                {
+                    NoteText.Text = selected.Text;
+                }
+            }
+        }
+        finally
+        {
+            _syncingPanel = false;
+        }
+
+        DeleteMarkButton.IsEnabled = selected is not null;
+
+        int onSheet = viewer is null ? 0 : viewer.Annotations.CountForPage(viewer.CurrentPageIndex);
+        bool placing = viewer?.IsPlacingVertices ?? false;
+
+        MarkStatus.Text = placing
+            ? "Clic para cada vértice. Intro o doble clic lo termina, Retroceso quita el último, Esc lo descarta."
+            : selected is not null && !changeable
+                ? $"El resaltado va con el texto que cubre: no se mueve ni cambia, solo se elimina. {Sheet(onSheet)}"
+            : selected is not null
+                ? $"Marca seleccionada. Arrástrala para moverla, tira de un tirador para estirarla o del pomo para girarla. {Sheet(onSheet)}"
+                : tool switch
+                {
+                    ViewerTool.SelectAnnotation => $"Haz clic en una marca para cogerla. {Sheet(onSheet)}",
+                    ViewerTool.Note => $"Haz clic en el plano para dejar un comentario. {Sheet(onSheet)}",
+                    ViewerTool.FreeText => $"Haz clic en el plano y escribe en el panel. {Sheet(onSheet)}",
+                    ViewerTool.Ink => $"Dibuja con el lápiz o el ratón. La otra punta del lápiz borra. {Sheet(onSheet)}",
+                    ViewerTool.Highlight => $"Arrastra sobre el texto del plano para resaltarlo. {Sheet(onSheet)}",
+                    ViewerTool.Cloud => $"Arrastra un recuadro, o haz clic en cada vértice. {Sheet(onSheet)}",
+                    ViewerTool.Polyline or ViewerTool.Polygon =>
+                        $"Haz clic en cada vértice; Intro o doble clic lo termina. {Sheet(onSheet)}",
+                    _ => $"Arrastra sobre el plano para dibujar. {Sheet(onSheet)}",
+                };
+
+        static string Sheet(int count) => count switch
+        {
+            0 => "Esta hoja no tiene marcas.",
+            1 => "Hay 1 marca en esta hoja.",
+            _ => $"Hay {count} marcas en esta hoja.",
+        };
+    }
+
+    private IEnumerable<(ToggleButton Button, bool Owns)> MarkToolButtons(ViewerTool tool)
+    {
+        yield return (SelectMarkToolButton, tool == ViewerTool.SelectAnnotation);
+        yield return (InkToolButton, tool == ViewerTool.Ink);
+        yield return (LineToolButton, tool == ViewerTool.Line);
+        yield return (ArrowToolButton, tool == ViewerTool.Arrow);
+        yield return (PolylineToolButton, tool == ViewerTool.Polyline);
+        yield return (RectangleToolButton, tool == ViewerTool.Rectangle);
+        yield return (EllipseToolButton, tool == ViewerTool.Ellipse);
+        yield return (PolygonToolButton, tool == ViewerTool.Polygon);
+        yield return (CloudToolButton, tool == ViewerTool.Cloud);
+        yield return (HighlightToolButton, tool == ViewerTool.Highlight);
+        yield return (TextToolMarkButton, tool == ViewerTool.FreeText);
+        yield return (NoteToolButton, tool == ViewerTool.Note);
+    }
+
+    private static Microsoft.UI.Xaml.Media.SolidColorBrush Swatch(AnnotationColor colour) =>
+        new(Windows.UI.Color.FromArgb(255, colour.R, colour.G, colour.B));
+
+    private static string ToolTitle(ViewerTool tool) => tool switch
+    {
+        ViewerTool.SelectAnnotation => "Marcas",
+        ViewerTool.Ink => "Lápiz",
+        ViewerTool.Line => "Línea",
+        ViewerTool.Arrow => "Flecha",
+        ViewerTool.Polyline => "Polilínea",
+        ViewerTool.Rectangle => "Rectángulo",
+        ViewerTool.Ellipse => "Elipse",
+        ViewerTool.Polygon => "Polígono",
+        ViewerTool.Cloud => "Nube de revisión",
+        ViewerTool.Highlight => "Resaltar texto",
+        ViewerTool.FreeText => "Texto",
+        ViewerTool.Note => "Comentario",
+        _ => "Herramienta",
+    };
 
     /// <summary>
     /// The view menu's three groups, plus the button's own label: it names the
@@ -779,6 +1165,7 @@ public sealed partial class MainPage : Page
         SaveButton.IsEnabled = hasDocument;
         SaveItem.IsEnabled = pending;
         SaveCopyItem.IsEnabled = hasDocument;
-        DiscardRotationsItem.IsEnabled = hasDocument && (viewer?.HasUnsavedRotations ?? false);
+        FlattenItem.IsEnabled = hasDocument;
+        DiscardChangesItem.IsEnabled = pending;
     }
 }

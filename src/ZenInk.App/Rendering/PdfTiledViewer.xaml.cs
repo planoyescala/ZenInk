@@ -29,6 +29,67 @@ public enum ViewerTool
     /// a dozen wheel notches and a drag to recentre.
     /// </summary>
     ZoomRectangle,
+
+    /// <summary>Pick a mark up: click to select it, drag to move it.</summary>
+    SelectAnnotation,
+
+    /// <summary>Freehand, pen or mouse.</summary>
+    Ink,
+
+    Line,
+
+    Arrow,
+
+    Rectangle,
+
+    Ellipse,
+
+    /// <summary>An open run of segments, placed vertex by vertex.</summary>
+    Polyline,
+
+    /// <summary>A closed run of segments, placed vertex by vertex.</summary>
+    Polygon,
+
+    /// <summary>A revision cloud, round a dragged box or round placed vertices.</summary>
+    Cloud,
+
+    /// <summary>Drag over text to wash it in colour.</summary>
+    Highlight,
+
+    /// <summary>Write words straight onto the sheet.</summary>
+    FreeText,
+
+    /// <summary>Place a comment; the text is typed in the panel.</summary>
+    Note,
+}
+
+public static class ViewerToolExtensions
+{
+    /// <summary>True for the tools that put something on the sheet.</summary>
+    public static bool Draws(this ViewerTool tool) =>
+        tool is ViewerTool.Ink or ViewerTool.Line or ViewerTool.Arrow
+            or ViewerTool.Rectangle or ViewerTool.Ellipse or ViewerTool.Polyline
+            or ViewerTool.Polygon or ViewerTool.Cloud
+            or ViewerTool.Highlight or ViewerTool.FreeText or ViewerTool.Note;
+
+    /// <summary>True for the tools whose panel is about marks — drawing them or picking them up.</summary>
+    public static bool IsAnnotation(this ViewerTool tool) => tool.Draws() || tool == ViewerTool.SelectAnnotation;
+
+    /// <summary>The kind of mark a drawing tool makes.</summary>
+    public static AnnotationKind ToKind(this ViewerTool tool) => tool switch
+    {
+        ViewerTool.Line => AnnotationKind.Line,
+        ViewerTool.Arrow => AnnotationKind.Arrow,
+        ViewerTool.Rectangle => AnnotationKind.Rectangle,
+        ViewerTool.Ellipse => AnnotationKind.Ellipse,
+        ViewerTool.Polyline => AnnotationKind.Polyline,
+        ViewerTool.Polygon => AnnotationKind.Polygon,
+        ViewerTool.Cloud => AnnotationKind.Cloud,
+        ViewerTool.Highlight => AnnotationKind.Highlight,
+        ViewerTool.FreeText => AnnotationKind.FreeText,
+        ViewerTool.Note => AnnotationKind.Note,
+        _ => AnnotationKind.Ink,
+    };
 }
 
 public enum ViewerLayoutMode
@@ -86,6 +147,19 @@ public sealed partial class PdfTiledViewer : UserControl
 
     /// <summary>Below this, a zoom-rectangle drag was a click and is treated as one.</summary>
     private const double MinZoomBandDips = 12.0;
+
+    /// <summary>
+    /// How far off the line a captured stroke may be thinned, in points. Well
+    /// under the width of anything drawn, and it cuts the point count of a pen
+    /// gesture by an order of magnitude.
+    /// </summary>
+    private const float InkSimplifyPt = 0.35f;
+
+    /// <summary>
+    /// Below this, a drag with a shape tool was a click. A rectangle a point
+    /// wide is not something anyone meant to draw.
+    /// </summary>
+    private const double MinShapeDips = 4.0;
 
     /// <summary>Arrow-key step, as a fraction of the viewport.</summary>
     private const double ArrowStepFraction = 0.12;
@@ -159,6 +233,49 @@ public sealed partial class PdfTiledViewer : UserControl
     private bool _thinLines;
     private bool _suppressScrollEvents;
 
+    /// <summary>Every mark on this document, and the history to take them back.</summary>
+    private readonly AnnotationStore _annotations = new();
+
+    /// <summary>
+    /// Colour and width per kind of mark, remembered separately.
+    ///
+    /// A reviewer does not want one colour for everything: the highlighter is
+    /// yellow and the pencil is red, and having to set that again on every
+    /// switch is the sort of friction that ends with everything being one
+    /// colour.
+    /// </summary>
+    private readonly Dictionary<AnnotationKind, AnnotationStyle> _styles = new();
+
+    /// <summary>The mark the reader has hold of, and the sheet it is on.</summary>
+    private Annotation? _selected;
+    private int _selectedPage = -1;
+
+    /// <summary>The stroke being drawn right now, in sheet space, and its sheet.</summary>
+    private readonly List<Vector2> _draft = new();
+    private int _draftPage = -1;
+    private bool _isDrawing;
+
+    /// <summary>Set while a mark is being dragged; holds where it started so undo has one step.</summary>
+    private Annotation? _movingFrom;
+    private Vector2 _moveAnchorSheet;
+
+    /// <summary>The grip being pulled, if the drag started on one.</summary>
+    private MarkHandle _handle = MarkHandle.None;
+
+    /// <summary>
+    /// Vertices placed so far, for the shapes that are built click by click,
+    /// and where the pointer is now — the segment that follows the cursor.
+    /// </summary>
+    private readonly List<Vector2> _vertices = new();
+    private Vector2 _rubber;
+    private bool _placingVertices;
+
+    /// <summary>Where the pointer went down, to tell a click from a drag.</summary>
+    private Point _pressPosition;
+
+    /// <summary>The pointer that owns the gesture, so a resting palm cannot start a second one.</summary>
+    private uint _gesturePointerId;
+
     /// <summary>Bumped on every open, so results for a previous document are discarded.</summary>
     private int _documentGeneration;
 
@@ -187,6 +304,14 @@ public sealed partial class PdfTiledViewer : UserControl
 
     /// <summary>Raised when the sheets change shape — a turn — so previews can be redrawn.</summary>
     public event EventHandler? PagesChanged;
+
+    /// <summary>
+    /// Raised when a mark has just been placed that is waiting to be typed
+    /// into. The words live in the panel, so the panel is where the caret has
+    /// to go — otherwise the reader clicks, sees a marker appear, and types
+    /// into nothing.
+    /// </summary>
+    public event EventHandler? TextWanted;
 
     private readonly record struct TextLayerKey(int PageIndex, int Rotation);
 
@@ -228,12 +353,125 @@ public sealed partial class PdfTiledViewer : UserControl
     public int RotationOf(int pageIndex) =>
         pageIndex >= 0 && pageIndex < _rotations.Length ? _rotations[pageIndex] & 3 : 0;
 
+    /// <summary>Anything on screen that is not yet in the file: turns, marks, or both.</summary>
+    public bool HasUnsavedChanges => HasUnsavedRotations || _annotations.IsDirty;
+
+    /// <summary>The marks on this document. The panel reads it; nothing outside changes it.</summary>
+    public AnnotationStore Annotations => _annotations;
+
+    public bool CanUndo => _annotations.CanUndo;
+
+    public bool CanRedo => _annotations.CanRedo;
+
+    /// <summary>The mark the reader has hold of, if any.</summary>
+    public Annotation? SelectedAnnotation => _selected;
+
     /// <summary>
-    /// Anything on screen that is not yet in the file. Sheet turns are all
-    /// there is today; this is the seam annotations and comments will join, so
-    /// the toolbar asks this rather than asking about turns.
+    /// Which kind of mark the panel is talking about: the one the tool makes,
+    /// or the one in hand when the reader is picking marks up.
     /// </summary>
-    public bool HasUnsavedChanges => HasUnsavedRotations;
+    private AnnotationKind StyleKind =>
+        _tool == ViewerTool.SelectAnnotation ? _selected?.Kind ?? AnnotationKind.Ink : _tool.ToKind();
+
+    /// <summary>
+    /// Colour and width for the next mark of the current kind. Setting it while
+    /// a mark is selected changes that mark too: picking one up and then
+    /// choosing a colour can only mean recolouring it.
+    /// </summary>
+    public AnnotationStyle AnnotationStyle
+    {
+        get => StyleFor(StyleKind);
+        set
+        {
+            _styles[StyleKind] = value;
+
+            // A mark that cannot be changed is not recoloured by picking a
+            // colour for the next one.
+            if (_selected is { } selected && _selectedPage >= 0 && Annotation.CanBeChanged(selected.Kind))
+            {
+                var restyled = selected.WithStyle(value);
+                _annotations.Replace(_selectedPage, selected, restyled);
+                _selected = restyled;
+            }
+
+            Canvas.Invalidate();
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// The style a kind of mark is drawn with, falling back to what that kind
+    /// should look like before anyone has chosen: red for a drawn line, and a
+    /// highlighter that is yellow, because that is what a highlighter is.
+    /// </summary>
+    private AnnotationStyle StyleFor(AnnotationKind kind)
+    {
+        if (_styles.TryGetValue(kind, out var chosen)) return chosen;
+
+        return kind == AnnotationKind.Highlight
+            ? new AnnotationStyle(new AnnotationColor(255, 200, 0), 1f)
+            : AnnotationStyle.Default;
+    }
+
+    /// <summary>Rewrites the selected comment's text, as the panel is typed into.</summary>
+    public void SetSelectedText(string text)
+    {
+        if (_selected is not { } selected || _selectedPage < 0) return;
+        if (selected.Text == text) return;
+
+        var edited = selected.WithText(text);
+        _annotations.Replace(_selectedPage, selected, edited);
+        _selected = edited;
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void DeleteSelectedAnnotation()
+    {
+        if (_selected is not { } selected || _selectedPage < 0) return;
+
+        _annotations.Remove(_selectedPage, selected);
+        ClearAnnotationSelection();
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Takes back the last mark or change to one, and shows the sheet it was on.</summary>
+    public void UndoAnnotation() => StepHistory(_annotations.Undo());
+
+    public void RedoAnnotation() => StepHistory(_annotations.Redo());
+
+    private void StepHistory(int pageIndex)
+    {
+        if (pageIndex < 0) return;
+
+        // The mark that was selected may be the one that just vanished.
+        if (_selected is { } selected && !_annotations.TryFind(selected.Id, out _, out _))
+        {
+            ClearAnnotationSelection();
+        }
+        else if (_selected is { } current && _annotations.TryFind(current.Id, out int page, out var refreshed))
+        {
+            _selected = refreshed;
+            _selectedPage = page;
+        }
+
+        // Undoing something on a sheet you cannot see would look like nothing
+        // happening at all.
+        if (pageIndex != CurrentPageIndex)
+        {
+            GoToPage(pageIndex);
+        }
+
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ClearAnnotationSelection()
+    {
+        _selected = null;
+        _selectedPage = -1;
+    }
 
     /// <summary>True while a turn is on screen but not yet written to the file.</summary>
     public bool HasUnsavedRotations
@@ -432,10 +670,24 @@ public sealed partial class PdfTiledViewer : UserControl
         set
         {
             if (_tool == value) return;
+
+            // A shape half built is finished by the change of tool if it has
+            // enough corners to be a shape, and dropped if it has not: leaving
+            // it hanging on an invisible tool would lose it either way.
+            if (_placingVertices) FinishVertices();
+
             _tool = value;
             if (value == ViewerTool.Pan)
             {
                 ClearSelection();
+            }
+
+            // Reaching for a drawing tool means the mark in hand is done with.
+            // Left selected, its halo would sit over the sheet being drawn on,
+            // and the next colour chosen would recolour it by surprise.
+            if (value != ViewerTool.SelectAnnotation)
+            {
+                ClearAnnotationSelection();
             }
             UpdateCursor();
             Canvas.Invalidate();
@@ -460,6 +712,8 @@ public sealed partial class PdfTiledViewer : UserControl
         _textLru.Clear();
         _textInFlight.Clear();
         ClearSelection();
+        ClearAnnotationSelection();
+        _annotations.Clear();
         ResetSearch();
 
         _sourceSizes = info.Pages;
@@ -479,6 +733,34 @@ public sealed partial class PdfTiledViewer : UserControl
         Canvas.Focus(FocusState.Programmatic);
         DocumentOpened?.Invoke(this, EventArgs.Empty);
         ViewChanged?.Invoke(this, EventArgs.Empty);
+
+        // Awaited, not left running: a mark made in the moment before the
+        // file's own marks arrived would be wiped by them landing.
+        await LoadAnnotationsAsync(_documentId, _documentGeneration);
+    }
+
+    /// <summary>
+    /// Picks up the marks the file already carries. They come back as the
+    /// baseline — nothing to save, nothing to undo — which is what makes
+    /// "there are changes" mean something.
+    /// </summary>
+    private async Task LoadAnnotationsAsync(int documentId, int generation)
+    {
+        try
+        {
+            var marks = await _queue.ReadAnnotationsAsync(documentId);
+            if (generation != _documentGeneration) return;
+
+            _annotations.Load(marks);
+            Canvas.Invalidate();
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            // A drawing whose annotations cannot be read is still a drawing
+            // worth showing, so this does not take the document down with it.
+            System.Diagnostics.Debug.WriteLine($"ZenInk: no se pudieron leer las anotaciones: {ex.Message}");
+        }
     }
 
     /// <summary>Re-fits to the current mode; falls back to fitting the width.</summary>
@@ -574,24 +856,70 @@ public sealed partial class PdfTiledViewer : UserControl
     }
 
     /// <summary>
-    /// Writes the pending turns into the file the document came from, then
-    /// picks the reopened document back up where the reader left off. Returns
-    /// the failure to report, or null when it worked.
+    /// Writes the pending turns and marks into the file the document came from,
+    /// then picks the reopened document back up where the reader left off.
+    /// Returns the failure to report, or null when it worked.
     /// </summary>
-    public async Task<string?> SaveRotationsAsync()
+    public async Task<string?> SaveChangesAsync()
     {
         if (SourcePath is not { } path || _documentId < 0) return "El documento no tiene un archivo asociado.";
 
-        var outcome = await _queue.ApplyRotationsInPlaceAsync(_documentId, path, _rotations);
+        bool turned = HasUnsavedRotations;
+        var outcome = await _queue.ApplyChangesInPlaceAsync(_documentId, path, _rotations, _annotations.Snapshot());
         AdoptReopenedDocument(outcome.Document);
-        return outcome.Error;
+
+        if (!outcome.Saved) return outcome.Error;
+
+        if (turned)
+        {
+            // A saved turn moves into the page's own /Rotate, and with it the
+            // sheet space the marks are held in. Reading them back is how they
+            // arrive in the new one — and it is why the history goes: a step
+            // recorded in the old space would put a mark somewhere else.
+            await LoadAnnotationsAsync(_documentId, _documentGeneration);
+        }
+        else
+        {
+            _annotations.MarkSaved();
+        }
+
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+        return null;
     }
 
-    /// <summary>Writes the turns to another file, leaving this document as it is.</summary>
-    public Task SaveRotationsCopyAsync(string targetPath)
+    /// <summary>
+    /// Writes everything pending and then burns the marks into the drawing.
+    ///
+    /// This is the one change that cannot be taken back: what was an annotation
+    /// becomes part of the page, so nobody can move it, recolour it or delete
+    /// it — which is the point. The marks are written first, so a flatten of a
+    /// review that was never saved still burns in what is on screen.
+    /// </summary>
+    public async Task<string?> FlattenAsync()
+    {
+        if (SourcePath is not { } path || _documentId < 0) return "El documento no tiene un archivo asociado.";
+
+        var outcome = await _queue.ApplyChangesInPlaceAsync(
+            _documentId, path, _rotations, _annotations.Snapshot(), flatten: true);
+
+        AdoptReopenedDocument(outcome.Document);
+        if (!outcome.Saved) return outcome.Error;
+
+        // Nothing of ours is left in the file to pick up again: the marks are
+        // the drawing now, and the tiles are where they show from here on.
+        ClearAnnotationSelection();
+        _annotations.Clear();
+
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+        return null;
+    }
+
+    /// <summary>Writes the turns and marks to another file, leaving this document as it is.</summary>
+    public Task SaveChangesCopyAsync(string targetPath)
     {
         if (SourcePath is not { } path) throw new InvalidOperationException("El documento no tiene un archivo asociado.");
-        return _queue.SaveRotatedCopyAsync(path, targetPath, _rotations);
+        return _queue.SaveChangesCopyAsync(path, targetPath, _rotations, _annotations.Snapshot());
     }
 
     /// <summary>
@@ -712,6 +1040,8 @@ public sealed partial class PdfTiledViewer : UserControl
         _textLru.Clear();
         _textInFlight.Clear();
         ClearSelection();
+        ClearAnnotationSelection();
+        _annotations.Clear();
         ResetSearch();
 
         if (_documentId >= 0)
@@ -729,8 +1059,13 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private void UpdateCursor() => ProtectedCursor = InputSystemCursor.Create(_tool switch
     {
-        ViewerTool.SelectText => InputSystemCursorShape.IBeam,
+        // The highlighter picks out text, so it wears the text cursor.
+        ViewerTool.SelectText or ViewerTool.Highlight => InputSystemCursorShape.IBeam,
         ViewerTool.ZoomRectangle => InputSystemCursorShape.Cross,
+        ViewerTool.SelectAnnotation => InputSystemCursorShape.Arrow,
+        // Drawing wants a cursor whose hot spot you can aim: a hand would hide
+        // the very corner the mark is meant to start on.
+        _ when _tool.Draws() => InputSystemCursorShape.Cross,
         _ => InputSystemCursorShape.Hand,
     });
 
@@ -984,6 +1319,31 @@ public sealed partial class PdfTiledViewer : UserControl
 
         switch (e.Key)
         {
+            // Intro closes off a shape being built corner by corner, the way it
+            // does in every drawing program.
+            case VirtualKey.Enter when _placingVertices:
+                FinishVertices();
+                break;
+
+            // While placing corners, back takes one off rather than deleting
+            // the mark in hand: it is the more useful of the two just then.
+            case VirtualKey.Back when _placingVertices && _vertices.Count > 0:
+                _vertices.RemoveAt(_vertices.Count - 1);
+                if (_vertices.Count == 0) CancelMark();
+                Canvas.Invalidate();
+                break;
+
+            // Supr belongs to the mark in hand when there is one; with nothing
+            // selected the key has nothing to do here.
+            case VirtualKey.Delete when _selected is not null:
+            case VirtualKey.Back when _selected is not null:
+                DeleteSelectedAnnotation();
+                break;
+
+            case VirtualKey.Escape when _isDrawing || _placingVertices || _selected is not null:
+                CancelMark();
+                break;
+
             case VirtualKey.Left:
                 ScrollBy(new Vector2((float)-stepX, 0f));
                 break;
@@ -1138,7 +1498,9 @@ public sealed partial class PdfTiledViewer : UserControl
 
         // Middle-drag always pans, whichever tool is active — so the zoom
         // rectangle can stay selected while you still move around freely.
-        if (left && _tool == ViewerTool.SelectText)
+        // The highlighter works on text, not on the sheet: it takes the same
+        // drag the text tool does, and turns what was picked out into a wash.
+        if (left && (_tool == ViewerTool.SelectText || _tool == ViewerTool.Highlight))
         {
             BeginSelection(point.Position);
         }
@@ -1147,6 +1509,11 @@ public sealed partial class PdfTiledViewer : UserControl
             _isZoomBanding = true;
             _zoomBandStart = point.Position;
             _zoomBandEnd = point.Position;
+        }
+        else if (left && _tool.IsAnnotation() && CanMark(e))
+        {
+            _gesturePointerId = e.Pointer.PointerId;
+            BeginMark(point.Position, point.Properties.IsEraser || point.Properties.IsRightButtonPressed);
         }
         else
         {
@@ -1157,10 +1524,255 @@ public sealed partial class PdfTiledViewer : UserControl
         Canvas.CapturePointer(e.Pointer);
     }
 
+    /// <summary>
+    /// Whether this pointer should be drawing at all. A finger never draws: on
+    /// a pen tablet the hand that holds the drawing is on the glass, and a
+    /// finger that leaves ink would be a stray line across the sheet every
+    /// time. Touch pans instead, which is what a finger is for here.
+    /// </summary>
+    private static bool CanMark(PointerRoutedEventArgs e) =>
+        e.Pointer.PointerDeviceType != Microsoft.UI.Input.PointerDeviceType.Touch;
+
+    private void BeginMark(Point position, bool erase)
+    {
+        _pressPosition = position;
+
+        if (!TryHitSheet(position, out var page, out var sheetPoint)) return;
+
+        // The back of the pen rubs marks out, the way it does on paper.
+        if (erase)
+        {
+            EraseAt(page.Index, sheetPoint);
+            return;
+        }
+
+        if (_placingVertices)
+        {
+            // Another corner of the shape being built. It goes down on release,
+            // so that a press that turns into a drag is still a drag.
+            return;
+        }
+
+        if (_tool == ViewerTool.SelectAnnotation)
+        {
+            BeginSelectOrHandle(page, sheetPoint, position);
+            return;
+        }
+
+        // A comment and a written mark are both placed rather than dragged, and
+        // both are selected at once so the panel can take the words straight
+        // away — for the written one that is the whole of it.
+        if (_tool is ViewerTool.Note or ViewerTool.FreeText)
+        {
+            var typed = new Annotation(_tool.ToKind(), [sheetPoint], AnnotationStyle, author: Author);
+            _annotations.Add(page.Index, typed);
+            _selected = typed;
+            _selectedPage = page.Index;
+            Canvas.Invalidate();
+            TextWanted?.Invoke(this, EventArgs.Empty);
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        ClearAnnotationSelection();
+        _isDrawing = true;
+        _draftPage = page.Index;
+        _draft.Clear();
+        _draft.Add(sheetPoint);
+        _rubber = sheetPoint;
+        Canvas.Invalidate();
+    }
+
+    /// <summary>
+    /// A press with the selection tool: a grip of the mark in hand first, then
+    /// a mark under the pointer, and failing both the drawing moves instead.
+    /// The grips win because they sit on top of the mark's own edge, where a
+    /// click would otherwise be ambiguous.
+    /// </summary>
+    private void BeginSelectOrHandle(PageBox page, Vector2 sheetPoint, Point position)
+    {
+        float slop = (float)(Annotation.HitSlopPt / Math.Max(_scale, 0.05));
+
+        if (_selected is { } current && _selectedPage == page.Index)
+        {
+            var grip = AnnotationHandles.At(current, sheetPoint, slop * 2.5f, HandleOffsetPt);
+            if (grip != MarkHandle.None)
+            {
+                _handle = grip;
+                _movingFrom = current;
+                Canvas.Invalidate();
+                return;
+            }
+        }
+
+        var hit = _annotations.HitTest(page.Index, sheetPoint, slop);
+        if (hit is null)
+        {
+            ClearAnnotationSelection();
+            _isPanning = true;
+            _lastPointerPosition = position;
+        }
+        else
+        {
+            _selected = hit;
+            _selectedPage = page.Index;
+            _styles[hit.Kind] = hit.Style;
+
+            // A highlight is picked up only to be deleted, so the drag that
+            // would move anything else does nothing here.
+            if (AnnotationHandles.CanMove(hit))
+            {
+                _movingFrom = hit;
+                _moveAnchorSheet = sheetPoint;
+            }
+        }
+
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// How far above the mark the turn knob floats, in points at this zoom. The
+    /// knob is interface, so it keeps its distance on screen rather than
+    /// growing with the drawing.
+    /// </summary>
+    private float HandleOffsetPt => (float)(AnnotationHandles.RotateOffsetPt / Math.Max(_scale, 0.05));
+
+    private void EraseAt(int pageIndex, Vector2 sheetPoint)
+    {
+        var hit = _annotations.HitTest(pageIndex, sheetPoint, (float)(Annotation.HitSlopPt / Math.Max(_scale, 0.05)));
+        if (hit is null) return;
+
+        _annotations.Remove(pageIndex, hit);
+        if (_selected?.Id == hit.Id) ClearAnnotationSelection();
+
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// The mark being drawn, as it stands — the stroke under the pen, or the
+    /// vertices placed so far with the one the pointer is holding. Built
+    /// through the same constructor as a finished mark, so the preview cannot
+    /// differ from the result.
+    /// </summary>
+    private Annotation? BuildDraft()
+    {
+        var kind = _tool.ToKind();
+
+        if (_placingVertices)
+        {
+            if (_vertices.Count == 0) return null;
+
+            var placed = new List<Vector2>(_vertices) { _rubber };
+            return new Annotation(kind, placed, AnnotationStyle, author: Author);
+        }
+
+        if (_draft.Count == 0) return null;
+
+        IReadOnlyList<Vector2> points = kind == AnnotationKind.Ink ? _draft : [_draft[0], _draft[^1]];
+        if (kind != AnnotationKind.Ink && points.Count < 2) return null;
+
+        return new Annotation(kind, points, AnnotationStyle, author: Author);
+    }
+
+    /// <summary>Who the marks are attributed to, which is what a PDF reader shows as the author.</summary>
+    private static string Author
+    {
+        get
+        {
+            try
+            {
+                return Environment.UserName;
+            }
+            catch (Exception)
+            {
+                return string.Empty;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A pointer position as a point on a sheet, in the marks' own space. The
+    /// reader's turn comes off here, which is why nothing downstream has to
+    /// know about it.
+    /// </summary>
+    private bool TryHitSheet(Point position, out PageBox page, out Vector2 sheetPoint)
+    {
+        sheetPoint = default;
+        if (!TryHitPage(position, out page, out float localX, out float localY)) return false;
+
+        sheetPoint = ToSheetPoint(page, new Vector2(localX, localY));
+        return true;
+    }
+
+    /// <summary>
+    /// The same conversion for a pointer that has wandered off the sheet
+    /// mid-drag: the point is pulled back onto the paper rather than dropped,
+    /// so a stroke that overshoots the edge still ends on the sheet.
+    /// </summary>
+    private Vector2 SheetPointClamped(PageBox page, Point position)
+    {
+        double docX = _origin.X + position.X / _scale;
+        double docY = _origin.Y + position.Y / _scale;
+
+        var local = new Vector2(
+            (float)Math.Clamp(docX - page.XPt, 0, page.WidthPt),
+            (float)Math.Clamp(docY - page.YPt, 0, page.HeightPt));
+
+        return ToSheetPoint(page, local);
+    }
+
+    private Vector2 ToSheetPoint(PageBox page, Vector2 local)
+    {
+        var sheet = _sourceSizes.Count > page.Index
+            ? _sourceSizes[page.Index]
+            : new PdfPageSize(page.WidthPt, page.HeightPt);
+
+        return SheetTurn.ToSheet(local, sheet.WidthPt, sheet.HeightPt, RotationOf(page.Index));
+    }
+
+    private PageBox? PageBoxOf(int pageIndex)
+    {
+        if (_layout is not { } layout) return null;
+
+        foreach (var candidate in layout.Pages)
+        {
+            if (candidate.Index == pageIndex) return candidate;
+        }
+        return null;
+    }
+
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (_layout is null) return;
         var position = e.GetCurrentPoint(Canvas).Position;
+
+        if (_isDrawing && e.Pointer.PointerId == _gesturePointerId)
+        {
+            ExtendMark(position);
+            return;
+        }
+
+        if (_handle != MarkHandle.None && e.Pointer.PointerId == _gesturePointerId)
+        {
+            DragHandle(position, e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift));
+            return;
+        }
+
+        if (_movingFrom is not null && e.Pointer.PointerId == _gesturePointerId)
+        {
+            DragMark(position);
+            return;
+        }
+
+        // The segment that follows the cursor while a shape is being built.
+        if (_placingVertices && PageBoxOf(_draftPage) is { } vertexPage)
+        {
+            _rubber = SheetPointClamped(vertexPage, position);
+            Canvas.Invalidate();
+            return;
+        }
 
         if (_isSelecting)
         {
@@ -1195,10 +1807,303 @@ public sealed partial class PdfTiledViewer : UserControl
             return;
         }
 
+        if (_handle != MarkHandle.None)
+        {
+            if (_movingFrom is { } before && _selected is { } after && _selectedPage >= 0)
+            {
+                _annotations.Replace(_selectedPage, before, after);
+            }
+            _handle = MarkHandle.None;
+            _movingFrom = null;
+            Canvas.ReleasePointerCapture(e.Pointer);
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        if (_placingVertices)
+        {
+            PlaceVertex(e.GetCurrentPoint(Canvas).Position);
+            Canvas.ReleasePointerCapture(e.Pointer);
+            return;
+        }
+
+        if (_isDrawing)
+        {
+            var released = e.GetCurrentPoint(Canvas).Position;
+
+            // A shape built vertex by vertex starts as a press: if the pointer
+            // never moved, the reader is placing corners rather than dragging a
+            // box, and the gesture becomes the first vertex.
+            if (Annotation.TakesVertices(_tool.ToKind()) && !MovedEnough(released))
+            {
+                StartPlacingVertices();
+                Canvas.ReleasePointerCapture(e.Pointer);
+                return;
+            }
+
+            ExtendMark(released);
+            FinishMark();
+            Canvas.ReleasePointerCapture(e.Pointer);
+            return;
+        }
+
+        if (_movingFrom is { } origin)
+        {
+            // One step for the whole drag: the frames in between were the mark
+            // following the pointer, not a hundred decisions.
+            if (_selected is { } moved && _selectedPage >= 0)
+            {
+                _annotations.Replace(_selectedPage, origin, moved);
+            }
+            _movingFrom = null;
+            Canvas.ReleasePointerCapture(e.Pointer);
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
         if (!_isPanning && !_isSelecting) return;
+
+        if (_isSelecting && _tool == ViewerTool.Highlight)
+        {
+            FinishHighlight();
+        }
+
         _isPanning = false;
         _isSelecting = false;
         Canvas.ReleasePointerCapture(e.Pointer);
+    }
+
+    /// <summary>
+    /// Turns the text just picked out into a highlight.
+    ///
+    /// One mark, not one per line: a phrase that wraps is a single thing the
+    /// reviewer highlighted, and the PDF says so too — a highlight annotation
+    /// carries a box per line in its quad points. The boxes come from the same
+    /// text layer that draws the selection, so the wash lands exactly where the
+    /// blue was a moment ago.
+    /// </summary>
+    private void FinishHighlight()
+    {
+        if (_selectionPage < 0 || _selectionAnchor < 0) return;
+        if (!_textLayers.TryGetValue(new TextLayerKey(_selectionPage, RotationOf(_selectionPage)), out var layer))
+        {
+            return;
+        }
+
+        var sheet = _sourceSizes.Count > _selectionPage
+            ? _sourceSizes[_selectionPage]
+            : new PdfPageSize(0, 0);
+        int turn = RotationOf(_selectionPage);
+
+        var corners = new List<Vector2>();
+        foreach (var run in layer.BuildRuns(_selectionAnchor, _selectionFocus))
+        {
+            corners.Add(SheetTurn.ToSheet(new Vector2(run.Left, run.Top), sheet.WidthPt, sheet.HeightPt, turn));
+            corners.Add(SheetTurn.ToSheet(new Vector2(run.Right, run.Bottom), sheet.WidthPt, sheet.HeightPt, turn));
+        }
+
+        if (corners.Count >= 2)
+        {
+            _annotations.Add(
+                _selectionPage,
+                new Annotation(AnnotationKind.Highlight, corners, AnnotationStyle, author: Author));
+        }
+
+        ClearSelection();
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ExtendMark(Point position)
+    {
+        if (PageBoxOf(_draftPage) is not { } page) return;
+
+        var sheetPoint = SheetPointClamped(page, position);
+
+        // A pen reports far more samples than the drawing needs; the ones that
+        // land on top of each other are dropped here rather than kept and
+        // thinned later.
+        if (_draft.Count > 0 && Vector2.Distance(_draft[^1], sheetPoint) * _scale < 0.75) return;
+
+        _draft.Add(sheetPoint);
+        Canvas.Invalidate();
+    }
+
+    /// <summary>
+    /// A double click closes off a shape being built corner by corner. The
+    /// second click has already placed a vertex on the same spot, and
+    /// <see cref="PlaceVertex"/> drops that one for exactly this reason.
+    /// </summary>
+    private void OnCanvasDoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
+    {
+        if (!_placingVertices) return;
+
+        FinishVertices();
+        e.Handled = true;
+    }
+
+    private bool MovedEnough(Point position) =>
+        Math.Abs(position.X - _pressPosition.X) > MinShapeDips
+        || Math.Abs(position.Y - _pressPosition.Y) > MinShapeDips;
+
+    /// <summary>
+    /// Turns the press that has just happened into the first corner of a shape
+    /// built click by click.
+    /// </summary>
+    private void StartPlacingVertices()
+    {
+        if (_draft.Count == 0) return;
+
+        _placingVertices = true;
+        _isDrawing = false;
+        _vertices.Clear();
+        _vertices.Add(_draft[0]);
+        _rubber = _draft[0];
+        _draft.Clear();
+
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void PlaceVertex(Point position)
+    {
+        if (PageBoxOf(_draftPage) is not { } page) return;
+
+        var sheetPoint = SheetPointClamped(page, position);
+
+        // Two clicks in the same spot end the shape, which is what a reader
+        // does without being told.
+        if (_vertices.Count > 0 && Vector2.Distance(_vertices[^1], sheetPoint) * _scale < MinShapeDips)
+        {
+            FinishVertices();
+            return;
+        }
+
+        _vertices.Add(sheetPoint);
+        _rubber = sheetPoint;
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Closes off a shape built click by click. Too few corners to be a shape
+    /// and nothing is left behind — a stray click should not litter the sheet.
+    /// </summary>
+    public void FinishVertices()
+    {
+        if (!_placingVertices) return;
+
+        var kind = _tool.ToKind();
+        int least = kind == AnnotationKind.Polyline ? 2 : 3;
+
+        if (_vertices.Count >= least && _draftPage >= 0)
+        {
+            _annotations.Add(_draftPage, new Annotation(kind, [.. _vertices], AnnotationStyle, author: Author));
+        }
+
+        _placingVertices = false;
+        _vertices.Clear();
+        _draftPage = -1;
+
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>True while a shape is being built corner by corner, so the chrome can say so.</summary>
+    public bool IsPlacingVertices => _placingVertices;
+
+    private void DragHandle(Point position, bool snap)
+    {
+        if (_movingFrom is not { } original || _selectedPage < 0) return;
+        if (PageBoxOf(_selectedPage) is not { } page) return;
+
+        var sheetPoint = SheetPointClamped(page, position);
+
+        var changed = _handle == MarkHandle.Rotate
+            ? original.WithRotation(snap
+                ? AnnotationHandles.Snap(AnnotationHandles.RotationFor(original, sheetPoint))
+                : AnnotationHandles.RotationFor(original, sheetPoint))
+            : AnnotationHandles.Drag(original, _handle, sheetPoint);
+
+        if (_selected is { } previous)
+        {
+            _annotations.ReplaceLive(_selectedPage, previous, changed);
+        }
+        _selected = changed;
+        Canvas.Invalidate();
+    }
+
+    private void DragMark(Point position)
+    {
+        if (_selected is not { } selected || _selectedPage < 0) return;
+        if (PageBoxOf(_selectedPage) is not { } page) return;
+
+        var sheetPoint = SheetPointClamped(page, position);
+        var moved = selected.MovedBy(sheetPoint - _moveAnchorSheet);
+        _moveAnchorSheet = sheetPoint;
+
+        _annotations.ReplaceLive(_selectedPage, selected, moved);
+        _selected = moved;
+        Canvas.Invalidate();
+    }
+
+    /// <summary>
+    /// Turns the stroke on screen into a mark on the sheet. A drag too small to
+    /// be a shape is thrown away rather than left as a speck the reader then
+    /// has to find and delete.
+    /// </summary>
+    private void FinishMark()
+    {
+        _isDrawing = false;
+
+        var kind = _tool.ToKind();
+        if (_draft.Count == 0 || _draftPage < 0)
+        {
+            _draft.Clear();
+            Canvas.Invalidate();
+            return;
+        }
+
+        bool tooSmall = kind != AnnotationKind.Ink
+            && (_draft.Count < 2 || Vector2.Distance(_draft[0], _draft[^1]) * _scale < MinShapeDips);
+
+        if (!tooSmall)
+        {
+            IReadOnlyList<Vector2> points = kind == AnnotationKind.Ink
+                ? AnnotationGeometry.Simplify(_draft, InkSimplifyPt)
+                : [_draft[0], _draft[^1]];
+
+            _annotations.Add(_draftPage, new Annotation(kind, points, AnnotationStyle, author: Author));
+        }
+
+        _draft.Clear();
+        _draftPage = -1;
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Drops whatever gesture is in flight, without leaving a mark behind.</summary>
+    public void CancelMark()
+    {
+        bool anything = _isDrawing || _placingVertices || _movingFrom is not null || _selected is not null;
+        if (!anything) return;
+
+        if (_movingFrom is { } origin && _selected is not null && _selectedPage >= 0)
+        {
+            _annotations.ReplaceLive(_selectedPage, _selected, origin);
+        }
+
+        _isDrawing = false;
+        _placingVertices = false;
+        _vertices.Clear();
+        _handle = MarkHandle.None;
+        _movingFrom = null;
+        _draft.Clear();
+        _draftPage = -1;
+        ClearAnnotationSelection();
+
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -1333,9 +2238,12 @@ public sealed partial class PdfTiledViewer : UserControl
 
                 DrawSearchHits(ds, page);
                 DrawSelection(ds, page);
+                DrawAnnotations(ds, page);
             }
 
-            if (_tool == ViewerTool.SelectText)
+            // The highlighter needs the text as much as the text tool does:
+            // both work by picking words out of the sheet.
+            if (_tool is ViewerTool.SelectText or ViewerTool.Highlight)
             {
                 EnsureTextLayer(page.Index);
             }
@@ -1473,6 +2381,56 @@ public sealed partial class PdfTiledViewer : UserControl
                     ds.DrawRectangle(rect, SearchCurrentStroke, 1.4f);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Where this sheet's marks sit on the canvas. Built per page and per
+    /// frame, because it depends on the scroll position, the zoom and the
+    /// sheet's own turn — and it is the only thing that knows all three.
+    /// </summary>
+    private SheetPlacement PlacementOf(PageBox page)
+    {
+        var sheet = _sourceSizes.Count > page.Index ? _sourceSizes[page.Index] : new PdfPageSize(page.WidthPt, page.HeightPt);
+
+        return new SheetPlacement(
+            sheet.WidthPt,
+            sheet.HeightPt,
+            RotationOf(page.Index),
+            (page.XPt - _origin.X) * _scale,
+            (page.YPt - _origin.Y) * _scale,
+            _scale);
+    }
+
+    /// <summary>
+    /// Paints the sheet's marks over the drawing, and the stroke being made
+    /// right now on top of them. The mark in progress is drawn through the very
+    /// same code as a finished one, so nothing shifts at the moment the pen
+    /// comes up.
+    /// </summary>
+    private void DrawAnnotations(CanvasDrawingSession ds, PageBox page)
+    {
+        var marks = _annotations.ForPage(page.Index);
+        bool drafting = _draftPage == page.Index
+            && ((_isDrawing && _draft.Count > 0) || (_placingVertices && _vertices.Count > 0));
+
+        if (marks.Count == 0 && !drafting) return;
+
+        var placement = PlacementOf(page);
+
+        foreach (var mark in marks)
+        {
+            AnnotationRenderer.Draw(ds, mark, placement);
+        }
+
+        if (_selected is { } selected && _selectedPage == page.Index)
+        {
+            AnnotationRenderer.DrawSelection(ds, selected, placement, HandleOffsetPt);
+        }
+
+        if (drafting && BuildDraft() is { } preview)
+        {
+            AnnotationRenderer.Draw(ds, preview, placement);
         }
     }
 
