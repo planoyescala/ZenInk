@@ -174,21 +174,19 @@
             TabCloseRequested="OnTabCloseRequested"
             TabWidthMode="Equal">
             <TabView.TabStripHeader>
-                <!--  Marca dibujada, no un recurso de imagen: así sigue al tema y no depende de una ruta.  -->
+                <!--
+                    El logo de la app, en el sitio donde un navegador pone el
+                    suyo. Aquí sí es un mapa de bits y no geometría: es una
+                    marca de identidad a todo color, no un icono que deba
+                    seguir al tema. Va a 72 px y se reduce, para que a 200 % de
+                    escala siga habiendo píxeles de sobra.
+                -->
                 <Grid Width="42" Padding="13,0,0,0">
-                    <Border
+                    <Image
                         Width="18"
                         Height="18"
                         VerticalAlignment="Center"
-                        Background="{ThemeResource AccentFillColorDefaultBrush}"
-                        CornerRadius="4">
-                        <controls:ToolIcon
-                            Width="18"
-                            Height="18"
-                            Data="M6.6 7.4 L13.4 7.4 L6.6 12.6 L13.4 12.6"
-                            Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                            Thickness="1.6" />
-                    </Border>
+                        Source="ms-appx:///Assets/AppMark.png" />
                 </Grid>
             </TabView.TabStripHeader>
             <TabView.TabStripFooter>

@@ -24,6 +24,8 @@
     <Content Include="Assets\Square44x44Logo.targetsize-48_altform-lightunplated.png" />
     <Content Include="Assets\StoreLogo.png" />
     <Content Include="Assets\AppIcon.ico" />
+    <!--  El logo tal cual lo lleva la tira de pestañas; los demás son los que pide el paquete.  -->
+    <Content Include="Assets\AppMark.png" />
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
   </ItemGroup>
 
