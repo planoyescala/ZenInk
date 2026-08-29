@@ -164,6 +164,35 @@ public sealed partial class PdfTiledViewer : UserControl
     /// <summary>Arrow-key step, as a fraction of the viewport.</summary>
     private const double ArrowStepFraction = 0.12;
 
+    /// <summary>
+    /// How quickly the zoom closes the distance to where it was sent, in
+    /// seconds. The scale eases towards its target rather than jumping there:
+    /// each frame covers the same *fraction* of what is left, so the move
+    /// starts at once and settles softly instead of stopping dead.
+    ///
+    /// At 55 ms most of the travel is over in about a tenth of a second and the
+    /// last of it in a quarter — fast enough not to be a wait, gradual enough
+    /// that the eye keeps hold of what it was looking at. Notches that arrive
+    /// while it is still moving push the same target further out, so spinning
+    /// the wheel gives one long glide and not a stack of jumps.
+    /// </summary>
+    private const double ZoomEaseSeconds = 0.055;
+
+    /// <summary>
+    /// How close to the target counts as arrived, as a proportion of the scale.
+    /// A quarter of a percent is a fifth of a pixel on a 4K-wide sheet: past
+    /// this the frames are costing more than they show.
+    /// </summary>
+    private const double ZoomSettleRatio = 0.0025;
+
+    /// <summary>
+    /// How often the chrome hears about a zoom that is still moving. Every
+    /// frame would run the whole toolbar sixty times a second to animate a
+    /// percentage readout; a dozen times a second reads as live and costs
+    /// nothing. The end of the glide always reports, whatever this says.
+    /// </summary>
+    private const double ZoomReportSeconds = 0.08;
+
     private static readonly Color ZoomBandFill = Color.FromArgb(46, 0, 103, 192);
 
     private static readonly Color ZoomBandStroke = Color.FromArgb(210, 0, 103, 192);
@@ -232,6 +261,20 @@ public sealed partial class PdfTiledViewer : UserControl
     private ViewerTool _tool = ViewerTool.Pan;
     private bool _thinLines;
     private bool _suppressScrollEvents;
+
+    /// <summary>
+    /// The zoom in flight: where it is heading, and the point it turns about.
+    /// The anchor is kept in both spaces — where it is on the canvas and what
+    /// sheet point sits under it — so every frame can put that same point back
+    /// under the pointer instead of interpolating a corner, which is what would
+    /// make the drawing slide away from the cursor as it grows.
+    /// </summary>
+    private double _zoomTarget;
+    private Point _zoomAnchor;
+    private Vector2 _zoomAnchorDoc;
+    private bool _zoomGliding;
+    private long _zoomLastTick;
+    private double _zoomSinceReport;
 
     /// <summary>Every mark on this document, and the history to take them back.</summary>
     private readonly AnnotationStore _annotations = new();
@@ -426,6 +469,14 @@ public sealed partial class PdfTiledViewer : UserControl
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Puts the focus back on the drawing, for the chrome to call after a
+    /// button of its own has taken it. The keys that move around the sheet
+    /// live on the canvas, so leaving the focus on a toolbar button silently
+    /// turns half of them off.
+    /// </summary>
+    public void TakeKeyboard() => Canvas.Focus(FocusState.Programmatic);
+
     public void DeleteSelectedAnnotation()
     {
         if (_selected is not { } selected || _selectedPage < 0) return;
@@ -561,6 +612,8 @@ public sealed partial class PdfTiledViewer : UserControl
     public void GoToPage(int pageIndex)
     {
         if (_pageSizes.Count == 0 || _layout is null) return;
+
+        StopZoomGlide();
 
         int target = Math.Clamp(pageIndex, 0, _pageSizes.Count - 1);
         if (target == CurrentPageIndex && _layoutMode == ViewerLayoutMode.SinglePage) return;
@@ -706,6 +759,7 @@ public sealed partial class PdfTiledViewer : UserControl
         _documentId = info.DocumentId;
         SourcePath = path;
         _documentGeneration++;
+        StopZoomGlide();
         _cache.Clear();
         _inFlight.Clear();
         _textLayers.Clear();
@@ -783,19 +837,12 @@ public sealed partial class PdfTiledViewer : UserControl
     /// between "the whole sheet" and "this detail" all day, and a known
     /// magnification to return to is what keeps that from becoming guesswork.
     /// </summary>
-    public void ZoomToActualSize()
-    {
-        _fitMode = ViewerFitMode.Free;
-        _fitDirty = false;
-        _scale = 1.0;
-        ClampOrigin();
-        Canvas.Invalidate();
-        ViewChanged?.Invoke(this, EventArgs.Empty);
-    }
+    public void ZoomToActualSize() => ZoomTo(ViewportCentre(), 1.0);
 
     /// <summary>Zooms about the centre of the viewport, for the toolbar's zoom buttons.</summary>
-    public void ZoomBy(double factor) =>
-        ZoomAt(new Point(Canvas.ActualWidth / 2, Canvas.ActualHeight / 2), factor);
+    public void ZoomBy(double factor) => ZoomAt(ViewportCentre(), factor);
+
+    private Point ViewportCentre() => new(Canvas.ActualWidth / 2, Canvas.ActualHeight / 2);
 
     // --- rotation -------------------------------------------------------
 
@@ -825,6 +872,7 @@ public sealed partial class PdfTiledViewer : UserControl
 
         if (!changed) return;
 
+        StopZoomGlide();
         _pageSizes = BuildEffectiveSizes();
         ClearSelection();
 
@@ -1019,6 +1067,10 @@ public sealed partial class PdfTiledViewer : UserControl
             return;
         }
 
+        // The glide is driven by a static event: a tab that goes away without
+        // unhooking would keep drawing itself off screen, and keep itself
+        // alive doing it.
+        StopZoomGlide();
         _cache.Clear();
         _inFlight.Clear();
         if (_documentId >= 0)
@@ -1034,6 +1086,7 @@ public sealed partial class PdfTiledViewer : UserControl
     /// </summary>
     public void CloseDocument()
     {
+        StopZoomGlide();
         _cache.Clear();
         _inFlight.Clear();
         _textLayers.Clear();
@@ -1113,6 +1166,11 @@ public sealed partial class PdfTiledViewer : UserControl
         if (!_fitDirty || _fitMode == ViewerFitMode.Free || _layout is not { } layout) return;
         if (Canvas.ActualWidth <= 0 || Canvas.ActualHeight <= 0) return;
 
+        // A fit is a scale chosen by something other than the reader's hand —
+        // a menu, or the window changing size — and it replaces whatever the
+        // hand had asked for.
+        StopZoomGlide();
+
         var centre = _origin + new Vector2(
             (float)(Canvas.ActualWidth / _scale / 2.0),
             (float)(Canvas.ActualHeight / _scale / 2.0));
@@ -1165,25 +1223,38 @@ public sealed partial class PdfTiledViewer : UserControl
     /// </summary>
     private void ClampOrigin()
     {
-        if (_layout is not { } layout) return;
+        if (_layout is null) return;
 
-        double viewWidth = Canvas.ActualWidth / _scale;
-        double viewHeight = Canvas.ActualHeight / _scale;
+        _origin = ClampedOrigin(_origin, Canvas.ActualWidth / _scale, Canvas.ActualHeight / _scale);
+        SyncScrollBars();
+    }
+
+    /// <summary>
+    /// The same rule without moving anything, so a glide can ask where it is
+    /// going to end up before it gets there.
+    /// </summary>
+    private Vector2 ClampedOrigin(Vector2 origin, double viewWidth, double viewHeight)
+    {
+        if (_layout is not { } layout) return origin;
 
         float x = layout.WidthPt <= viewWidth
             ? (float)((layout.WidthPt - viewWidth) / 2.0)
-            : (float)Math.Clamp(_origin.X, 0, layout.WidthPt - viewWidth);
+            : (float)Math.Clamp(origin.X, 0, layout.WidthPt - viewWidth);
 
         float y = layout.HeightPt <= viewHeight
             ? (float)((layout.HeightPt - viewHeight) / 2.0)
-            : (float)Math.Clamp(_origin.Y, 0, layout.HeightPt - viewHeight);
+            : (float)Math.Clamp(origin.Y, 0, layout.HeightPt - viewHeight);
 
-        _origin = new Vector2(x, y);
-        SyncScrollBars();
+        return new Vector2(x, y);
     }
 
     private void ScrollBy(Vector2 deltaPt)
     {
+        // Moving the drawing takes the view over from any zoom still gliding:
+        // finishing that glide underneath the reader would slide the sheet
+        // again after they had already put it where they wanted it.
+        StopZoomGlide();
+
         _origin += deltaPt;
         ClampOrigin();
         Canvas.Invalidate();
@@ -1235,6 +1306,7 @@ public sealed partial class PdfTiledViewer : UserControl
     private void OnVerticalScroll(object sender, ScrollEventArgs e)
     {
         if (_suppressScrollEvents || _layout is null) return;
+        StopZoomGlide();
         _origin = new Vector2(_origin.X, (float)e.NewValue);
         ClampOrigin();
         Canvas.Invalidate();
@@ -1244,30 +1316,146 @@ public sealed partial class PdfTiledViewer : UserControl
     private void OnHorizontalScroll(object sender, ScrollEventArgs e)
     {
         if (_suppressScrollEvents || _layout is null) return;
+        StopZoomGlide();
         _origin = new Vector2((float)e.NewValue, _origin.Y);
         ClampOrigin();
         Canvas.Invalidate();
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Zooms about a point on the canvas, by a factor. A gesture that arrives
+    /// while the last one is still moving multiplies what is already on its
+    /// way, not what is on screen — so five quick notches of the wheel are one
+    /// glide to five notches away, and never five glides fighting each other.
+    /// </summary>
     private void ZoomAt(Point anchor, double factor)
     {
-        double newScale = Math.Clamp(_scale * factor, MinScale, MaxScale);
-        if (Math.Abs(newScale - _scale) < double.Epsilon) return;
+        double from = _zoomGliding ? _zoomTarget : _scale;
+        ZoomTo(anchor, from * factor);
+    }
 
-        var anchorPx = new Vector2((float)anchor.X, (float)anchor.Y);
-        var docUnderAnchor = _origin + anchorPx / (float)_scale;
+    /// <summary>
+    /// Sends the zoom to a scale, turning about a point on the canvas. The
+    /// sheet point under that anchor is worked out once, here, and held for the
+    /// whole glide.
+    /// </summary>
+    private void ZoomTo(Point anchor, double target, Vector2? anchorDoc = null)
+    {
+        double clamped = Math.Clamp(target, MinScale, MaxScale);
 
-        _scale = newScale;
-        _origin = docUnderAnchor - anchorPx / (float)_scale;
+        _zoomAnchor = anchor;
+        _zoomAnchorDoc = anchorDoc
+            ?? _origin + new Vector2((float)anchor.X, (float)anchor.Y) / (float)_scale;
+        _zoomTarget = clamped;
 
         // Zooming by hand is the reader overriding the standing fit.
         _fitMode = ViewerFitMode.Free;
         _fitDirty = false;
 
+        if (Math.Abs(clamped - _scale) <= _scale * ZoomSettleRatio)
+        {
+            SettleZoom();
+            return;
+        }
+
+        StartZoomGlide();
+    }
+
+    private void StartZoomGlide()
+    {
+        if (_zoomGliding) return;
+
+        _zoomGliding = true;
+        _zoomLastTick = System.Diagnostics.Stopwatch.GetTimestamp();
+        _zoomSinceReport = 0;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnZoomFrame;
+    }
+
+    /// <summary>
+    /// Puts the zoom exactly where it was heading and stops the glide — what
+    /// the last frame does, and what a target too close to bother moving to
+    /// does straight away.
+    /// </summary>
+    private void SettleZoom()
+    {
+        StopZoomGlide();
+        ApplyZoomScale(_zoomTarget);
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Leaves the zoom where it has got to. Panning, changing sheet or turning
+    /// one all take over the view, and finishing a glide underneath them would
+    /// move the drawing after the reader had already moved it themselves.
+    /// </summary>
+    private void StopZoomGlide()
+    {
+        if (!_zoomGliding) return;
+
+        _zoomGliding = false;
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnZoomFrame;
+    }
+
+    /// <summary>
+    /// One frame of the glide. Each tick closes the same fraction of whatever
+    /// distance is left — worked out from the real elapsed time, so a dropped
+    /// frame slows nothing down — and the distance is measured in log space,
+    /// because zoom is a ratio: going 100 % → 200 % has to look like the same
+    /// move as 200 % → 400 %.
+    /// </summary>
+    private void OnZoomFrame(object? sender, object e)
+    {
+        long now = System.Diagnostics.Stopwatch.GetTimestamp();
+        double elapsed = (now - _zoomLastTick) / (double)System.Diagnostics.Stopwatch.Frequency;
+        _zoomLastTick = now;
+
+        // A frame after the app was busy elsewhere would otherwise jump the
+        // whole way in one step, which is the very thing this is here to avoid.
+        elapsed = Math.Clamp(elapsed, 0, 0.1);
+
+        double remaining = Math.Log(_zoomTarget) - Math.Log(_scale);
+        if (Math.Abs(remaining) <= ZoomSettleRatio)
+        {
+            SettleZoom();
+            return;
+        }
+
+        double closed = 1.0 - Math.Exp(-elapsed / ZoomEaseSeconds);
+        ApplyZoomScale(Math.Exp(Math.Log(_scale) + (remaining * closed)));
+
+        _zoomSinceReport += elapsed;
+        if (_zoomSinceReport >= ZoomReportSeconds)
+        {
+            _zoomSinceReport = 0;
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Moves the view to a scale, keeping the anchored sheet point under the
+    /// same place on the canvas.
+    /// </summary>
+    private void ApplyZoomScale(double scale)
+    {
+        _scale = scale;
+        _origin = _zoomAnchorDoc - new Vector2((float)_zoomAnchor.X, (float)_zoomAnchor.Y) / (float)_scale;
         ClampOrigin();
         Canvas.Invalidate();
-        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Where the viewport will be once the glide in flight settles.</summary>
+    private Rect ViewportAt(double scale)
+    {
+        double width = Canvas.ActualWidth / scale;
+        double height = Canvas.ActualHeight / scale;
+
+        var origin = ClampedOrigin(
+            _zoomAnchorDoc - new Vector2((float)_zoomAnchor.X, (float)_zoomAnchor.Y) / (float)scale,
+            width,
+            height);
+
+        return new Rect(origin.X, origin.Y, Math.Max(width, 0), Math.Max(height, 0));
     }
 
     /// <summary>Maps a pointer position to the page under it and the point in that page's local space.</summary>
@@ -1861,7 +2049,14 @@ public sealed partial class PdfTiledViewer : UserControl
             return;
         }
 
-        if (!_isPanning && !_isSelecting) return;
+        // The capture is taken on every press, so it has to be given back on
+        // every release — including the press that only picked a mark up and
+        // started neither a pan nor a selection.
+        if (!_isPanning && !_isSelecting)
+        {
+            Canvas.ReleasePointerCapture(e.Pointer);
+            return;
+        }
 
         if (_isSelecting && _tool == ViewerTool.Highlight)
         {
@@ -2135,19 +2330,10 @@ public sealed partial class PdfTiledViewer : UserControl
             (float)((top + height / 2.0) / _scale));
 
         double target = Math.Min(Canvas.ActualWidth / (width / _scale), Canvas.ActualHeight / (height / _scale));
-        _scale = Math.Clamp(target, MinScale, MaxScale);
 
-        _origin = centre - new Vector2(
-            (float)(Canvas.ActualWidth / _scale / 2.0),
-            (float)(Canvas.ActualHeight / _scale / 2.0));
-
-        // The reader just chose a magnification by hand; no standing fit survives that.
-        _fitMode = ViewerFitMode.Free;
-        _fitDirty = false;
-
-        ClampOrigin();
-        Canvas.Invalidate();
-        ViewChanged?.Invoke(this, EventArgs.Empty);
+        // The band's centre ends up in the middle of the viewport, so that is
+        // the pair of points the glide turns about.
+        ZoomTo(ViewportCentre(), target, centre);
     }
 
     private void BeginSelection(Point position)
@@ -2209,6 +2395,15 @@ public sealed partial class PdfTiledViewer : UserControl
         double dpiScale = sender.Dpi / 96.0;
         int level = ZoomLevels.LevelForScale(_scale * dpiScale);
 
+        // While the zoom is gliding, what is asked of PDFium is what the view
+        // will need when it lands — not what each frame on the way happens to
+        // cross. A glide of a few notches passes through two or three tile
+        // levels, and rasterizing a dense A0 at each of them is work that
+        // reaches the screen for one frame and is thrown away. On the way there
+        // the frames are drawn from what is already cached, which is what makes
+        // the movement smooth in the first place.
+        bool gliding = _zoomGliding;
+
         foreach (var page in layout.PagesInBand(view.Top, view.Bottom))
         {
             var pageRect = ToScreenRect(page);
@@ -2232,7 +2427,7 @@ public sealed partial class PdfTiledViewer : UserControl
                     DrawPageTiles(ds, page, fallback, view, dpiScale, requestMissing: false);
                 }
 
-                DrawPageTiles(ds, page, level, view, dpiScale, requestMissing: true);
+                DrawPageTiles(ds, page, level, view, dpiScale, requestMissing: !gliding);
 
                 ds.Antialiasing = antialiasing;
 
@@ -2249,9 +2444,55 @@ public sealed partial class PdfTiledViewer : UserControl
             }
         }
 
+        if (gliding)
+        {
+            var landing = ViewportAt(_zoomTarget);
+            int landingLevel = ZoomLevels.LevelForScale(_zoomTarget * dpiScale);
+
+            foreach (var page in layout.PagesInBand(landing.Top, landing.Bottom))
+            {
+                RequestPageTiles(page, landingLevel, landing);
+            }
+        }
+
         // Outside the per-page clip: the band is a piece of interface, and it
         // may well be dragged across the gap between two sheets.
         DrawZoomBand(ds);
+    }
+
+    /// <summary>
+    /// Asks for the tiles a page needs to be drawn at a level, without drawing
+    /// any of it. This is how the render for where a zoom is heading gets under
+    /// way while the view is still travelling there, so the sharp version is
+    /// waiting rather than starting once the movement stops.
+    /// </summary>
+    private void RequestPageTiles(PageBox page, int level, Rect view)
+    {
+        double tilePt = ZoomLevels.TileSize / ZoomLevels.ScaleForLevel(level);
+        if (tilePt <= 0) return;
+
+        double left = Math.Max(0, view.Left - page.XPt);
+        double top = Math.Max(0, view.Top - page.YPt);
+        double right = Math.Min(page.WidthPt, view.Right - page.XPt);
+        double bottom = Math.Min(page.HeightPt, view.Bottom - page.YPt);
+        if (right <= left || bottom <= top) return;
+
+        int rotation = RotationOf(page.Index);
+        int colStart = (int)Math.Floor(left / tilePt);
+        int colEnd = (int)Math.Floor((right - 1e-6) / tilePt);
+        int rowStart = (int)Math.Floor(top / tilePt);
+        int rowEnd = (int)Math.Floor((bottom - 1e-6) / tilePt);
+
+        for (int row = rowStart; row <= rowEnd; row++)
+        {
+            for (int col = colStart; col <= colEnd; col++)
+            {
+                var key = new TileKey(page.Index, level, col, row, rotation);
+                if (_cache.TryGet(key, out _)) continue;
+
+                RequestTile(key);
+            }
+        }
     }
 
     private void DrawZoomBand(CanvasDrawingSession ds)

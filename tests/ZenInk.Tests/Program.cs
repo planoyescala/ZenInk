@@ -11,6 +11,7 @@ Console.WriteLine("ZenInk engine checks");
 try
 {
     LayoutTests.Run();
+    RecentDocumentsTests.Run();
     PrintLayoutTests.Run();
     RenderTests.Run();
     AnnotationTests.Run();

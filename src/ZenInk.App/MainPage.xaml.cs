@@ -27,6 +27,18 @@ public sealed partial class MainPage : Page
     /// </summary>
     private bool _syncingPanel;
 
+    /// <summary>
+    /// The drawings opened lately. Read from disk the first time something asks
+    /// for them and not at startup: opening the window must not wait on a file,
+    /// however small.
+    /// </summary>
+    private IReadOnlyList<string> _recent = [];
+
+    private bool _recentLoaded;
+
+    /// <summary>Set when the history changed; the start page rebuilds next time it is on screen.</summary>
+    private bool _startPageStale = true;
+
     public MainPage()
     {
         InitializeComponent();
@@ -91,9 +103,93 @@ public sealed partial class MainPage : Page
     /// </summary>
     private PdfTiledViewer? ActiveViewer => (Tabs.SelectedItem as TabViewItem)?.Tag as PdfTiledViewer;
 
-    private async void OnOpenClicked(object sender, RoutedEventArgs e) => await PickAndOpenAsync();
+    private async void OnOpenClicked(SplitButton sender, SplitButtonClickEventArgs args) => await PickAndOpenAsync();
 
     private async void OnAddTabClicked(TabView sender, object args) => await PickAndOpenAsync();
+
+    // --- planos abiertos hace poco ----------------------------------------
+
+    /// <summary>The history, read on first use.</summary>
+    private IReadOnlyList<string> Recent
+    {
+        get
+        {
+            if (_recentLoaded) return _recent;
+
+            _recentLoaded = true;
+            _recent = RecentDocuments.Load(RecentFiles.StorePath);
+            return _recent;
+        }
+    }
+
+    private void SetRecent(IReadOnlyList<string> paths)
+    {
+        _recent = paths;
+        _recentLoaded = true;
+        _startPageStale = true;
+        RecentDocuments.Save(RecentFiles.StorePath, paths);
+    }
+
+    /// <summary>
+    /// Fills the start page's list. Only when it is actually on screen and only
+    /// when the history has moved: the chrome is refreshed on every scroll and
+    /// every zoom, and rebuilding a list nobody is looking at on each of those
+    /// would be work for nothing.
+    /// </summary>
+    private void UpdateStartPage()
+    {
+        if (!_startPageStale || EmptyState.Visibility != Visibility.Visible) return;
+
+        _startPageStale = false;
+
+        var entries = Recent.Select(path => new RecentEntry(path)).ToList();
+        RecentList.ItemsSource = entries;
+        RecentSection.Visibility = entries.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Builds the menu each time it opens rather than keeping it in step: a
+    /// dozen items is nothing to make, and this way it cannot go stale.
+    /// </summary>
+    private void OnRecentFlyoutOpening(object? sender, object e)
+    {
+        RecentFlyout.Items.Clear();
+
+        if (Recent.Count == 0)
+        {
+            RecentFlyout.Items.Add(new MenuFlyoutItem
+            {
+                Text = "Todavía no has abierto ningún plano",
+                IsEnabled = false,
+            });
+            return;
+        }
+
+        foreach (string path in Recent)
+        {
+            var item = new MenuFlyoutItem { Text = new RecentEntry(path).Name, Tag = path };
+            ToolTipService.SetToolTip(item, path);
+            item.Click += OnRecentClicked;
+            RecentFlyout.Items.Add(item);
+        }
+
+        RecentFlyout.Items.Add(new MenuFlyoutSeparator());
+
+        var clear = new MenuFlyoutItem { Text = "Vaciar la lista" };
+        clear.Click += (_, _) =>
+        {
+            SetRecent([]);
+            UpdateStartPage();
+        };
+        RecentFlyout.Items.Add(clear);
+    }
+
+    private async void OnRecentClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string path }) return;
+
+        await OpenPathInNewTabAsync(path, System.IO.Path.GetFileName(path));
+    }
 
     private async Task PickAndOpenAsync()
     {
@@ -162,6 +258,10 @@ public sealed partial class MainPage : Page
                 Header = displayName,
                 // Long sheet names are the norm, so cap the tab and let the
                 // header trim rather than pushing every other tab off-screen.
+                // The floor is what keeps a dozen drawings on one strip: past
+                // it the tabs would start scrolling, and a tab you have to
+                // scroll to find is worse than a narrow one.
+                MinWidth = 54,
                 MaxWidth = 240,
                 IconSource = new SymbolIconSource { Symbol = Symbol.Document },
                 Tag = viewer,
@@ -173,10 +273,15 @@ public sealed partial class MainPage : Page
             ShowViewer(viewer);
 
             await viewer.OpenAsync(path);
+            SetRecent(RecentDocuments.Promote(Recent, path));
         }
         catch (Exception ex)
         {
             CloseTab(tab);
+
+            // A drawing that will not open is one the shortcut list should stop
+            // offering — a moved or deleted sheet is the usual reason.
+            SetRecent(RecentDocuments.Remove(Recent, path));
             await ShowErrorAsync(displayName, ex);
         }
         finally
@@ -854,6 +959,33 @@ public sealed partial class MainPage : Page
     {
         ActiveViewer?.DeleteSelectedAnnotation();
         UpdateChrome();
+
+        // The button took the focus to be clicked; handing it back means the
+        // next Supr goes to the drawing rather than to a button that no longer
+        // has anything to delete.
+        ActiveViewer?.TakeKeyboard();
+    }
+
+    /// <summary>
+    /// Supr removes the mark in hand from anywhere in the window. The canvas
+    /// handles the same key itself, but only while it holds the focus — and
+    /// picking a mark up and then touching its colour, its width or its text
+    /// leaves the focus in the properties panel, which is exactly when a
+    /// reviewer reaches for Supr.
+    /// </summary>
+    private void OnDeleteAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        // Not while someone is writing: there Supr is a character, not a mark.
+        if (XamlRoot is { } root && FocusManager.GetFocusedElement(root) is TextBox or RichEditBox or AutoSuggestBox)
+        {
+            return;
+        }
+
+        if (ActiveViewer is not { SelectedAnnotation: not null } viewer) return;
+
+        viewer.DeleteSelectedAnnotation();
+        UpdateChrome();
+        args.Handled = true;
     }
 
     private void SetTool(ViewerTool tool)
@@ -884,6 +1016,7 @@ public sealed partial class MainPage : Page
         bool interactive = hasDocument && !busy;
 
         EmptyState.Visibility = Tabs.TabItems.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateStartPage();
 
         ZoomInButton.IsEnabled = interactive;
         ZoomOutButton.IsEnabled = interactive;
