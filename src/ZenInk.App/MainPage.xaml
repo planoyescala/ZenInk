@@ -122,6 +122,7 @@
     -->
     <Page.KeyboardAccelerators>
         <KeyboardAccelerator Key="F" Modifiers="Control" Invoked="OnFindAccelerator" />
+        <KeyboardAccelerator Key="K" Modifiers="Control" Invoked="OnCommandPaletteAccelerator" />
         <KeyboardAccelerator Key="F3" Invoked="OnFindNextAccelerator" />
         <KeyboardAccelerator Key="F3" Modifiers="Shift" Invoked="OnFindPreviousAccelerator" />
         <KeyboardAccelerator Key="Escape" Invoked="OnEscapeAccelerator" />
@@ -220,7 +221,7 @@
                     x:Name="OpenButton"
                     Click="OnOpenClicked"
                     Style="{StaticResource SlimSplitButtonStyle}"
-                    ToolTipService.ToolTip="Abrir un plano">
+                    ToolTipService.ToolTip="Abrir un documento">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.5 5.5A1.5 1.5 0 0 1 4 4h3.4l1.6 2H16a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5Z" />
                         <TextBlock Text="Abrir" />
@@ -265,19 +266,6 @@
                             <MenuFlyoutSeparator />
 
                             <!--
-                                Aplanar es una forma de guardar, no una
-                                herramienta de dibujo: escribe el archivo y
-                                cambia lo que el archivo es. Por eso está aquí y
-                                no en el raíl.
-                            -->
-                            <MenuFlyoutItem
-                                x:Name="FlattenItem"
-                                Click="OnFlattenClicked"
-                                Text="Aplanar las marcas en el plano…" />
-
-                            <MenuFlyoutSeparator />
-
-                            <!--
                                 Descartar vive aquí, no en «Girar»: tira todo lo
                                 que no se ha escrito, marcas incluidas, y eso es
                                 asunto del documento y no de una herramienta.
@@ -289,6 +277,32 @@
                         </MenuFlyout>
                     </SplitButton.Flyout>
                 </SplitButton>
+
+                <!--
+                    Aplanar y firmar son formas de guardar, no herramientas de
+                    dibujo: escriben el archivo y cambian lo que el archivo es.
+                    Por eso están junto a «Guardar» y no en el raíl de la
+                    izquierda, que es para dibujar sobre la hoja.
+
+                    Los dos icons: dos capas cayendo sobre la hoja, y una rúbrica
+                    sobre su renglón.
+                -->
+                <Button
+                    x:Name="FlattenButton"
+                    Click="OnFlattenClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimIconButtonStyle}"
+                    ToolTipService.ToolTip="Aplanar las marcas en el documento (no se puede deshacer)">
+                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.6 4.6 L10 8 L16.4 4.6 M3.6 9 L10 12.4 L16.4 9 M3.6 16.4 H16.4" />
+                </Button>
+                <Button
+                    x:Name="SignButton"
+                    Click="OnSignClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimIconButtonStyle}"
+                    ToolTipService.ToolTip="Firmar el documento con un certificado">
+                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4.2 13.8 C 3.6 8.6, 6.2 4.2, 8.2 4.8 C 10 5.4, 9 9, 7.4 11.4 C 6.2 13.2, 7 14.2, 8.8 13.4 C 10.8 12.5, 12.6 10.6, 14.4 11 C 15.3 11.2, 15.6 12.2, 16.6 11.4 M3.4 16.6 H16.6" />
+                </Button>
 
                 <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
 
@@ -376,12 +390,12 @@
                                 x:Name="ContinuousItem"
                                 Click="OnContinuousModeClicked"
                                 GroupName="ZenInkFlow"
-                                Text="Continuo — todas las hojas en una tira" />
+                                Text="Continuo — todas las páginas en una tira" />
                             <RadioMenuFlyoutItem
                                 x:Name="SingleItem"
                                 Click="OnSingleModeClicked"
                                 GroupName="ZenInkFlow"
-                                Text="Hoja a hoja — la rueda hace zoom" />
+                                Text="Página a página — la rueda hace zoom" />
                         </MenuFlyout>
                     </DropDownButton.Flyout>
                 </DropDownButton>
@@ -390,7 +404,7 @@
                     x:Name="RotateButton"
                     IsEnabled="False"
                     Style="{StaticResource SlimDropDownStyle}"
-                    ToolTipService.ToolTip="Girar hojas">
+                    ToolTipService.ToolTip="Girar páginas">
                     <StackPanel Orientation="Horizontal" Spacing="7">
                         <!--
                             Three quarters of a circle, drawn clockwise from
@@ -405,13 +419,13 @@
                     </StackPanel>
                     <DropDownButton.Flyout>
                         <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                            <MenuFlyoutItem Click="OnRotateLeftClicked" Text="Girar la hoja a la izquierda" />
-                            <MenuFlyoutItem Click="OnRotateRightClicked" Text="Girar la hoja a la derecha" />
+                            <MenuFlyoutItem Click="OnRotateLeftClicked" Text="Girar la página a la izquierda" />
+                            <MenuFlyoutItem Click="OnRotateRightClicked" Text="Girar la página a la derecha" />
 
                             <MenuFlyoutSeparator />
 
-                            <MenuFlyoutItem Click="OnRotateAllLeftClicked" Text="Girar todas las hojas a la izquierda" />
-                            <MenuFlyoutItem Click="OnRotateAllRightClicked" Text="Girar todas las hojas a la derecha" />
+                            <MenuFlyoutItem Click="OnRotateAllLeftClicked" Text="Girar todas las páginas a la izquierda" />
+                            <MenuFlyoutItem Click="OnRotateAllRightClicked" Text="Girar todas las páginas a la derecha" />
                         </MenuFlyout>
                     </DropDownButton.Flyout>
                 </DropDownButton>
@@ -423,7 +437,7 @@
                     Click="OnPreviousPageClicked"
                     IsEnabled="False"
                     Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Hoja anterior">
+                    ToolTipService.ToolTip="Página anterior">
                     <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M5.5 12.25 L10 7.75 L14.5 12.25" />
                 </Button>
                 <TextBlock
@@ -436,7 +450,7 @@
                     Click="OnNextPageClicked"
                     IsEnabled="False"
                     Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Hoja siguiente">
+                    ToolTipService.ToolTip="Página siguiente">
                     <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M5.5 7.75 L10 12.25 L14.5 7.75" />
                 </Button>
 
@@ -481,6 +495,21 @@
                 </Button>
 
                 <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                <!--
+                    El buscador de comandos necesita botón: un atajo que nadie
+                    ve es un atajo que nadie usa. El icono es un cursor de
+                    consola —el chevrón y su raya— porque es lo que significa
+                    «escribe lo que quieras hacer», y no se confunde con la lupa
+                    de al lado, que busca dentro del documento.
+                -->
+                <Button
+                    x:Name="CommandButton"
+                    Click="OnCommandButtonClicked"
+                    Style="{StaticResource SlimIconButtonStyle}"
+                    ToolTipService.ToolTip="Buscar una herramienta o una acción (Ctrl+K)">
+                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.8 4.6h14.4a1 1 0 0 1 1 1v8.8a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1V5.6a1 1 0 0 1 1-1Z M5.6 8.2 L8 10.4 L5.6 12.6 M10 12.6h4.4" />
+                </Button>
 
                 <Button
                     x:Name="FindButton"
@@ -713,7 +742,7 @@
                         IsEnabled="False"
                         Style="{StaticResource RailToolStyle}"
                         ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Resaltar texto — arrastra sobre el texto del plano">
+                        ToolTipService.ToolTip="Resaltar texto — arrastra sobre el texto">
                         <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M5.6 12.2 12.4 5.4l2.6 2.6-6.8 6.8H5.6Z M3.8 17.2h12.4" />
                     </ToggleButton>
                     <ToggleButton
@@ -722,7 +751,7 @@
                         IsEnabled="False"
                         Style="{StaticResource RailToolStyle}"
                         ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Texto — clic en el plano y se escribe al lado">
+                        ToolTipService.ToolTip="Texto — clic en la página y se escribe al lado">
                         <!--  Una A sobre una línea de base: el texto que se queda en el plano.  -->
                         <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M4.6 13.4 9 3.6h2L15.4 13.4 M6.6 10.2h6.8 M3.6 16.6h12.8" />
                     </ToggleButton>
@@ -732,7 +761,7 @@
                         IsEnabled="False"
                         Style="{StaticResource RailToolStyle}"
                         ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Comentario — clic en el plano y se escribe al lado">
+                        ToolTipService.ToolTip="Comentario — clic en la página y se escribe al lado">
                         <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M3.8 5h12.4v8.2H9.4L6.2 16.4V13.2H3.8Z" />
                     </ToggleButton>
 
@@ -763,7 +792,7 @@
                         IsEnabled="False"
                         Style="{StaticResource RailToolStyle}"
                         ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Miniaturas de hojas">
+                        ToolTipService.ToolTip="Miniaturas de páginas">
                         <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M2.8 3.6h6v6h-6Z M11.2 3.6h6v6h-6Z M2.8 11.4h6v6h-6Z M11.2 11.4h6v6h-6Z" />
                     </ToggleButton>
                 </StackPanel>
@@ -783,6 +812,80 @@
                     x:Name="ViewerPresenter"
                     HorizontalContentAlignment="Stretch"
                     VerticalContentAlignment="Stretch" />
+
+                <!--
+                    Buscador de comandos. Aparece por encima del documento en
+                    vez de en un diálogo: es una forma de llegar a un botón, no
+                    una pregunta, y no debe apagar lo que hay detrás.
+                -->
+                <Border
+                    x:Name="CommandPalette"
+                    Width="440"
+                    Margin="0,60,0,0"
+                    Padding="6"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Top"
+                    Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Shadow="{ThemeResource CommandBarFlyoutOverflowShadow}"
+                    Visibility="Collapsed">
+                    <StackPanel Spacing="6">
+                        <TextBox
+                            x:Name="CommandQuery"
+                            KeyDown="OnCommandQueryKeyDown"
+                            PlaceholderText="Buscar una herramienta o una acción…"
+                            TextChanged="OnCommandQueryChanged" />
+                        <ListView
+                            x:Name="CommandList"
+                            MaxHeight="320"
+                            IsItemClickEnabled="True"
+                            ItemClick="OnCommandChosen"
+                            SelectionMode="Single" />
+                    </StackPanel>
+                </Border>
+
+                <!--
+                    Firmar escribe el archivo y no tiene vuelta atrás, así que la
+                    firma se coloca primero y se escribe después. Mientras tanto
+                    esta barra flota sobre el documento: se ve dónde va, se
+                    arrastra y se puede tirar.
+                -->
+                <Border
+                    x:Name="SignatureStrip"
+                    Margin="0,12,0,0"
+                    Padding="14,8"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Top"
+                    Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Shadow="{ThemeResource CommandBarFlyoutOverflowShadow}"
+                    Visibility="Collapsed">
+                    <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="10"
+                        VerticalAlignment="Center">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            Text="Arrastra la firma para moverla" />
+                        <Button
+                            x:Name="SignConfirmButton"
+                            Click="OnSignConfirmClicked"
+                            Content="Firmar aquí"
+                            Style="{StaticResource AccentButtonStyle}" />
+                        <Button
+                            x:Name="SignRedrawButton"
+                            Click="OnSignRedrawClicked"
+                            Content="Dibujarla otra vez" />
+                        <Button
+                            x:Name="SignDropButton"
+                            Click="OnSignDropClicked"
+                            Content="Quitarla" />
+                    </StackPanel>
+                </Border>
 
                 <!--
                     Página de inicio. No es una pestaña: una pestaña es un
@@ -812,7 +915,7 @@
                         <TextBlock
                             HorizontalAlignment="Center"
                             Opacity="0.55"
-                            Text="Abre un plano para empezar" />
+                            Text="Abre un documento para empezar" />
 
                         <StackPanel
                             x:Name="RecentSection"
@@ -921,7 +1024,7 @@
                             <TextBlock
                                 x:Name="SelectionStatus"
                                 Opacity="0.6"
-                                Text="Arrastra sobre el plano para seleccionar."
+                                Text="Arrastra sobre la página para seleccionar."
                                 TextWrapping="Wrap" />
                             <Button
                                 x:Name="CopySelectionButton"
@@ -939,7 +1042,7 @@
                                 Click="OnSelectAllClicked">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.4 6.2V4.6a1.2 1.2 0 0 1 1.2-1.2h1.6 M16.6 6.2V4.6a1.2 1.2 0 0 0-1.2-1.2h-1.6 M3.4 13.8v1.6a1.2 1.2 0 0 0 1.2 1.2h1.6 M16.6 13.8v1.6a1.2 1.2 0 0 1-1.2 1.2h-1.6 M6.6 6.8h6.8v6.4H6.6Z" />
-                                    <TextBlock Text="Seleccionar la hoja" />
+                                    <TextBlock Text="Seleccionar la página" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>

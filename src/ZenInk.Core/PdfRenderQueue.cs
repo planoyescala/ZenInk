@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using PDFiumCore;
@@ -21,6 +22,26 @@ public readonly record struct TileBitmapData(byte[] Bgra, int Width, int Height)
 public sealed record PdfSaveOutcome(PdfDocumentInfo Document, string? Error)
 {
     public bool Saved => Error is null;
+}
+
+/// <summary>
+/// The file is locked and the password given — none, or the wrong one — did not
+/// open it.
+///
+/// It is its own exception rather than a message because it is the one failure
+/// the reader can do something about, and telling them apart from a corrupt
+/// file matters: one is «type your password», the other is «this file is
+/// broken».
+/// </summary>
+public sealed class PdfPasswordRequiredException(string path, bool wasTried)
+    : Exception(wasTried
+        ? "La contraseña no abre este PDF."
+        : "Este PDF está protegido con contraseña.")
+{
+    public string Path { get; } = path;
+
+    /// <summary>True when a password was already offered and refused.</summary>
+    public bool WasTried { get; } = wasTried;
 }
 
 /// <summary>
@@ -128,6 +149,26 @@ public sealed class PdfRenderQueue : IDisposable
         public Dictionary<int, FpdfPageT> Pages { get; } = new();
 
         public LinkedList<int> PageLru { get; } = new();
+
+        /// <summary>
+        /// PDFium's form environment. Without one it draws every annotation
+        /// except the widgets that belong to a form — which is exactly what a
+        /// signature's visible stamp is, so a signed drawing would look unsigned
+        /// in the only viewer that matters here.
+        /// </summary>
+        public FpdfFormHandleT? Form { get; set; }
+
+        /// <summary>
+        /// Held only so it outlives the environment built from it: it wraps
+        /// native memory PDFium keeps a pointer to.
+        /// </summary>
+        public FPDF_FORMFILLINFO? FormInfo { get; set; }
+
+        /// <summary>
+        /// Kept so the document survives its own save: writing closes the file
+        /// and opens it again, and a locked one cannot be reopened without it.
+        /// </summary>
+        public string? Password { get; init; }
     }
 
     private PdfRenderQueue()
@@ -140,14 +181,20 @@ public sealed class PdfRenderQueue : IDisposable
         _worker.Start();
     }
 
-    public Task<PdfDocumentInfo> OpenDocumentAsync(string path)
+    /// <summary>
+    /// Opens a document. <paramref name="password"/> is only for files that ask
+    /// for one; it is kept for as long as the document is open, because saving
+    /// closes and reopens the file and a locked document would otherwise die on
+    /// its first save.
+    /// </summary>
+    public Task<PdfDocumentInfo> OpenDocumentAsync(string path, string? password = null)
     {
         var tcs = new TaskCompletionSource<PdfDocumentInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
         EnqueueControl(() =>
         {
             try
             {
-                tcs.TrySetResult(OpenDocumentCore(path));
+                tcs.TrySetResult(OpenDocumentCore(path, password));
             }
             catch (Exception ex)
             {
@@ -335,10 +382,11 @@ public sealed class PdfRenderQueue : IDisposable
         {
             string? error = null;
             string? staged = null;
+            string? password = PasswordFor(documentId);
 
             try
             {
-                staged = WriteChangesCore(path, path, quarterTurns, annotations, flatten);
+                staged = WriteChangesCore(path, path, quarterTurns, annotations, flatten, password);
             }
             catch (Exception ex)
             {
@@ -373,7 +421,7 @@ public sealed class PdfRenderQueue : IDisposable
 
             try
             {
-                tcs.TrySetResult(new PdfSaveOutcome(OpenDocumentCore(path), error));
+                tcs.TrySetResult(new PdfSaveOutcome(OpenDocumentCore(path, password), error));
             }
             catch (Exception ex)
             {
@@ -388,12 +436,19 @@ public sealed class PdfRenderQueue : IDisposable
     /// <paramref name="targetPath"/>, leaving the source untouched. No document
     /// handle is involved, so the tab the reader is looking at carries on
     /// undisturbed.
+    ///
+    /// <paramref name="flatten"/> burns the marks into the copy's drawing. That
+    /// pairing is the whole point of allowing it here: flattening is the one
+    /// change that cannot be taken back, so being able to aim it at a copy is
+    /// what lets the reader keep a version whose marks are still marks.
     /// </summary>
     public Task SaveChangesCopyAsync(
         string sourcePath,
         string targetPath,
         IReadOnlyList<int> quarterTurns,
-        IReadOnlyDictionary<int, IReadOnlyList<Annotation>>? annotations = null)
+        IReadOnlyDictionary<int, IReadOnlyList<Annotation>>? annotations = null,
+        bool flatten = false,
+        string? password = null)
     {
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         EnqueueControl(() =>
@@ -401,7 +456,7 @@ public sealed class PdfRenderQueue : IDisposable
             string? staged = null;
             try
             {
-                staged = WriteChangesCore(sourcePath, targetPath, quarterTurns, annotations);
+                staged = WriteChangesCore(sourcePath, targetPath, quarterTurns, annotations, flatten, password);
                 File.Move(staged, targetPath, overwrite: true);
                 tcs.TrySetResult();
             }
@@ -415,6 +470,158 @@ public sealed class PdfRenderQueue : IDisposable
             }
         });
         return tcs.Task;
+    }
+
+    /// <summary>
+    /// Turns a rectangle in sheet space into the page's own coordinates, which
+    /// is what a /Rect is written in, and reports the page's /Rotate along with
+    /// it.
+    ///
+    /// It runs here because the conversion asks PDFium for the page's matrix —
+    /// see <see cref="SheetTransform"/> — and there is no honest way to
+    /// reconstruct that from outside for a page with a turn or a crop box that
+    /// does not start at the origin.
+    /// </summary>
+    public Task<(RectPt Rect, int QuarterTurns)> ToPdfRectAsync(int documentId, int pageIndex, RectPt sheetRect)
+    {
+        var tcs = new TaskCompletionSource<(RectPt, int)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        EnqueueControl(() =>
+        {
+            try
+            {
+                var page = LoadPageCore(documentId, pageIndex);
+                var transform = SheetTransform.ForPage(page);
+
+                // All four corners, because a turned page swaps which is which.
+                var corners = new[]
+                {
+                    transform.ToPdf(new Vector2(sheetRect.Left, sheetRect.Top)),
+                    transform.ToPdf(new Vector2(sheetRect.Right, sheetRect.Top)),
+                    transform.ToPdf(new Vector2(sheetRect.Left, sheetRect.Bottom)),
+                    transform.ToPdf(new Vector2(sheetRect.Right, sheetRect.Bottom)),
+                };
+
+                float left = corners.Min(c => c.X), right = corners.Max(c => c.X);
+                float bottom = corners.Min(c => c.Y), top = corners.Max(c => c.Y);
+
+                tcs.TrySetResult((
+                    new RectPt(left, bottom, right - left, top - bottom),
+                    fpdf_edit.FPDFPageGetRotation(page) & 3));
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        });
+        return tcs.Task;
+    }
+
+    /// <summary>
+    /// Signs the file the document was opened from, then reopens it.
+    ///
+    /// The sequence is the one the save path already uses and for the same
+    /// reason: PDFium holds the source open, so the signed bytes cannot take
+    /// its place until the handle is gone. What is different is that the
+    /// signature is <em>appended</em> — nothing in the file is rewritten — so a
+    /// signature that was already on the drawing stays valid.
+    ///
+    /// The staged copy is verified before it replaces anything, inside
+    /// <see cref="PdfSignatures.Sign"/>. A signature that does not check out is
+    /// worse than none at all: it reads as a tampered drawing.
+    /// </summary>
+    public Task<PdfSaveOutcome> SignInPlaceAsync(
+        int documentId,
+        string path,
+        IPdfSigner signer,
+        PdfSignatureOptions? options = null)
+    {
+        var tcs = new TaskCompletionSource<PdfSaveOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
+        EnqueueControl(() =>
+        {
+            string? error = null;
+            string staged = Staging(path);
+            string? password = PasswordFor(documentId);
+
+            try
+            {
+                PdfSignatures.Sign(path, staged, signer, options);
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                TryDelete(staged);
+
+                // Nothing was touched, so the document in hand is still good.
+                try
+                {
+                    tcs.TrySetResult(new PdfSaveOutcome(DescribeOpenDocument(documentId), error));
+                }
+                catch (Exception inner)
+                {
+                    tcs.TrySetException(inner);
+                }
+                return;
+            }
+
+            CloseDocumentCore(documentId);
+
+            try
+            {
+                File.Move(staged, path, overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                TryDelete(staged);
+            }
+
+            try
+            {
+                tcs.TrySetResult(new PdfSaveOutcome(OpenDocumentCore(path, password), error));
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        });
+        return tcs.Task;
+    }
+
+    /// <summary>
+    /// Signs into a copy, leaving the source alone.
+    ///
+    /// Unlike the other copy paths this one does not go through the queue,
+    /// because it never calls PDFium: it reads bytes and writes bytes. Putting
+    /// a fifty-megabyte drawing's signature in front of the tiles would stall
+    /// the view for no reason.
+    /// </summary>
+    public static Task SignCopyAsync(
+        string sourcePath,
+        string targetPath,
+        IPdfSigner signer,
+        PdfSignatureOptions? options = null) =>
+        Task.Run(() =>
+        {
+            string staged = Staging(targetPath);
+            try
+            {
+                PdfSignatures.Sign(sourcePath, staged, signer, options);
+                File.Move(staged, targetPath, overwrite: true);
+            }
+            catch
+            {
+                TryDelete(staged);
+                throw;
+            }
+        });
+
+    /// <summary>A temporary name beside the target, so the move that follows stays on one volume.</summary>
+    private static string Staging(string targetPath)
+    {
+        string full = Path.GetFullPath(targetPath);
+        string directory = Path.GetDirectoryName(full) ?? Directory.GetCurrentDirectory();
+
+        return Path.Combine(directory, $"{Path.GetFileName(full)}.zenink-{Guid.NewGuid():N}.tmp");
     }
 
     /// <summary>
@@ -666,16 +873,37 @@ public sealed class PdfRenderQueue : IDisposable
 
     // --- PDFium thread-affine work below: only ever called from WorkerLoop ---
 
-    private PdfDocumentInfo OpenDocumentCore(string path)
+    /// <summary>FPDF_ERR_PASSWORD: the file is locked, and this password is not the one.</summary>
+    private const ulong PdfiumPasswordError = 4;
+
+    private PdfDocumentInfo OpenDocumentCore(string path, string? password = null)
     {
-        var handle = fpdfview.FPDF_LoadDocument(path, null);
+        var handle = fpdfview.FPDF_LoadDocument(path, password);
         if (handle is null)
         {
-            throw new InvalidOperationException($"No se pudo abrir el PDF (PDFium error {fpdfview.FPDF_GetLastError()}).");
+            ulong error = fpdfview.FPDF_GetLastError();
+            throw error == PdfiumPasswordError
+                ? new PdfPasswordRequiredException(path, wasTried: !string.IsNullOrEmpty(password))
+                : new InvalidOperationException($"No se pudo abrir el PDF (PDFium error {error}).");
         }
 
         int documentId = ++_nextDocumentId;
-        _documents[documentId] = new OpenDocument(handle);
+        var document = new OpenDocument(handle) { Password = password };
+
+        // Version 2 with no callbacks at all: nothing here fills in a form, it
+        // only needs PDFium willing to draw one.
+        var info = new FPDF_FORMFILLINFO { Version = 2 };
+        if (fpdf_formfill.FPDFDOC_InitFormFillEnvironment(handle, info) is { } form)
+        {
+            document.Form = form;
+            document.FormInfo = info;
+        }
+        else
+        {
+            info.Dispose();
+        }
+
+        _documents[documentId] = document;
 
         return new PdfDocumentInfo(documentId, ReadPageSizes(handle));
     }
@@ -721,20 +949,26 @@ public sealed class PdfRenderQueue : IDisposable
     /// space of the page as it was read, so it has to be written before the page
     /// is turned under it.
     /// </summary>
+    /// <summary>The password a document was opened with, or null. Worker thread only.</summary>
+    private string? PasswordFor(int documentId) =>
+        _documents.TryGetValue(documentId, out var document) ? document.Password : null;
+
     private static string WriteChangesCore(
         string sourcePath,
         string targetPath,
         IReadOnlyList<int> quarterTurns,
         IReadOnlyDictionary<int, IReadOnlyList<Annotation>>? annotations,
-        bool flatten = false)
+        bool flatten = false,
+        string? password = null)
     {
-        string full = Path.GetFullPath(targetPath);
-        string directory = Path.GetDirectoryName(full) ?? Directory.GetCurrentDirectory();
-        string staged = Path.Combine(directory, $"{Path.GetFileName(full)}.zenink-{Guid.NewGuid():N}.tmp");
+        string staged = Staging(targetPath);
 
         try
         {
-            var handle = fpdfview.FPDF_LoadDocument(sourcePath, null)
+            // Its own handle, and its own password with it: a locked document
+            // has to be opened again here, and there is nothing to open it with
+            // unless the one that worked is carried along.
+            var handle = fpdfview.FPDF_LoadDocument(sourcePath, password)
                 ?? throw new InvalidOperationException(
                     $"No se pudo leer el PDF para guardarlo (PDFium error {fpdfview.FPDF_GetLastError()}).");
 
@@ -1013,6 +1247,11 @@ public sealed class PdfRenderQueue : IDisposable
         // save, which is exactly the kind of difference nobody looks for.
         PdfAnnotations.HideOwned(page);
 
+        if (document.Form is { } form)
+        {
+            fpdf_formfill.FORM_OnAfterLoadPage(page, form);
+        }
+
         document.Pages[pageIndex] = page;
         document.PageLru.AddLast(pageIndex);
 
@@ -1022,7 +1261,7 @@ public sealed class PdfRenderQueue : IDisposable
             document.PageLru.RemoveFirst();
             if (document.Pages.Remove(oldest, out var stale))
             {
-                fpdfview.FPDF_ClosePage(stale);
+                ClosePage(document, stale);
             }
         }
 
@@ -1103,6 +1342,10 @@ public sealed class PdfRenderQueue : IDisposable
                 rotation,
                 (int)RenderFlags.RenderAnnotations);
 
+            DrawFormFields(
+                request.DocumentId, bitmap, page,
+                -key.Col * tileSize, -key.Row * tileSize, scaledWidth, scaledHeight, rotation);
+
             int stride = fpdfview.FPDFBitmapGetStride(bitmap);
             IntPtr buffer = fpdfview.FPDFBitmapGetBuffer(bitmap);
 
@@ -1174,6 +1417,10 @@ public sealed class PdfRenderQueue : IDisposable
                 request.Rotation,
                 (int)RenderFlags.RenderAnnotations);
 
+            DrawFormFields(
+                request.DocumentId, bitmap, page,
+                -request.StartX, -request.StartY, scaledWidth, scaledHeight, request.Rotation);
+
             int stride = fpdfview.FPDFBitmapGetStride(bitmap);
             IntPtr buffer = fpdfview.FPDFBitmapGetBuffer(bitmap);
 
@@ -1241,6 +1488,7 @@ public sealed class PdfRenderQueue : IDisposable
         {
             fpdfview.FPDFBitmapFillRect(bitmap, 0, 0, width, height, 0xFFFFFFFFUL);
             fpdfview.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, rotation, (int)RenderFlags.RenderAnnotations);
+            DrawFormFields(request.DocumentId, bitmap, page, 0, 0, width, height, rotation);
 
             int stride = fpdfview.FPDFBitmapGetStride(bitmap);
             IntPtr buffer = fpdfview.FPDFBitmapGetBuffer(bitmap);
@@ -1356,10 +1604,23 @@ public sealed class PdfRenderQueue : IDisposable
     {
         foreach (var page in document.Pages.Values)
         {
-            fpdfview.FPDF_ClosePage(page);
+            ClosePage(document, page);
         }
         document.Pages.Clear();
         document.PageLru.Clear();
+    }
+
+    /// <summary>
+    /// A page that was announced to the form environment has to be withdrawn
+    /// from it before it goes, or PDFium is left holding a page that is gone.
+    /// </summary>
+    private static void ClosePage(OpenDocument document, FpdfPageT page)
+    {
+        if (document.Form is { } form)
+        {
+            fpdf_formfill.FORM_OnBeforeClosePage(page, form);
+        }
+        fpdfview.FPDF_ClosePage(page);
     }
 
     private void CloseDocumentCore(int documentId)
@@ -1368,7 +1629,36 @@ public sealed class PdfRenderQueue : IDisposable
         if (!_documents.Remove(documentId, out var document)) return;
 
         ClosePages(document);
+
+        // The environment goes before the document it was built on.
+        if (document.Form is { } form)
+        {
+            fpdf_formfill.FPDFDOC_ExitFormFillEnvironment(form);
+            document.Form = null;
+        }
+        document.FormInfo?.Dispose();
+        document.FormInfo = null;
+
         fpdfview.FPDF_CloseDocument(document.Handle);
+    }
+
+    /// <summary>
+    /// Draws the document's form fields over a render that has just been made.
+    ///
+    /// PDFium leaves widgets out of <c>FPDF_RenderPageBitmap</c> even with
+    /// annotations turned on — they belong to the form layer, and this is the
+    /// call that paints it. Same geometry as the render it follows, or the
+    /// fields land somewhere else.
+    /// </summary>
+    private void DrawFormFields(
+        int documentId, FpdfBitmapT bitmap, FpdfPageT page,
+        int startX, int startY, int sizeX, int sizeY, int rotation)
+    {
+        if (!_documents.TryGetValue(documentId, out var document) || document.Form is not { } form) return;
+
+        fpdf_formfill.FPDF_FFLDraw(
+            form, bitmap, page, startX, startY, sizeX, sizeY, rotation,
+            (int)RenderFlags.RenderAnnotations);
     }
 
     public void Dispose()

@@ -55,7 +55,7 @@ public static class DefaultPdfApp
         {
             TextWrapping = TextWrapping.Wrap,
             Text = current.FriendlyName is { Length: > 0 } name
-                ? $"Ahora los planos se abren con {name}. Windows solo permite cambiarlo desde sus ajustes, así que ZenInk no puede hacerlo por su cuenta: se abrirá la página de aplicaciones predeterminadas, y ahí ZenInk aparece ya en la lista."
+                ? $"Ahora los PDF se abren con {name}. Windows solo permite cambiarlo desde sus ajustes, así que ZenInk no puede hacerlo por su cuenta: se abrirá la página de aplicaciones predeterminadas, y ahí ZenInk aparece ya en la lista."
                 : "Windows solo permite cambiar esto desde sus ajustes, así que ZenInk no puede hacerlo por su cuenta: se abrirá la página de aplicaciones predeterminadas, y ahí ZenInk aparece ya en la lista.",
         };
 
@@ -73,7 +73,7 @@ public static class DefaultPdfApp
 
         AppTheme.Dress(dialog);
 
-        ContentDialogResult result = await dialog.ShowAsync();
+        ContentDialogResult result = await Dialogs.ShowAsync(dialog);
 
         // The tick is honoured whichever button closed the dialog: someone who
         // goes to the settings page has answered the question either way.

@@ -20,6 +20,13 @@
   -->
   <ItemGroup>
     <PackageReference Include="PDFiumCore" Version="153.0.7999" />
+    <!--
+      CMS/CAdES for signing. It is Microsoft's own, MIT, and it is not in the
+      plain net10.0 shared framework — only the Windows Desktop one — so it has
+      to be asked for by name. Nothing else is needed to sign: the key stays in
+      the Windows store and this signs through its handle.
+    -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.11" />
   </ItemGroup>
 
 </Project>

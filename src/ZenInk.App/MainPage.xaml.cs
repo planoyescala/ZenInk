@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -18,6 +19,12 @@ public sealed partial class MainPage : Page
 
     /// <summary>Set while a file operation is running; the bar is locked and says so.</summary>
     private string? _busyMessage;
+
+    /// <summary>
+    /// Shown where the busy message goes, but without locking anything: the
+    /// reader is being asked to do something on the sheet, not waited on.
+    /// </summary>
+    private string? _hintMessage;
 
     /// <summary>
     /// Set while the panel is being filled in from the viewer. The slider and
@@ -196,7 +203,7 @@ public sealed partial class MainPage : Page
         {
             RecentFlyout.Items.Add(new MenuFlyoutItem
             {
-                Text = "Todavía no has abierto ningún plano",
+                Text = "Todavía no has abierto ningún documento",
                 IsEnabled = false,
             });
             return;
@@ -279,6 +286,79 @@ public sealed partial class MainPage : Page
         }
     }
 
+    /// <summary>
+    /// Opens a document, asking for a password if the file wants one and
+    /// letting the reader try again if they get it wrong.
+    ///
+    /// The password is never stored anywhere: it is held for as long as the
+    /// document is open — a save closes and reopens the file, and without it the
+    /// document would die on its first save — and goes when the tab does.
+    /// </summary>
+    private async Task OpenUnlockingAsync(PdfTiledViewer viewer, string path, string displayName)
+    {
+        string? password = null;
+
+        while (true)
+        {
+            try
+            {
+                await viewer.OpenAsync(path, password);
+                return;
+            }
+            catch (PdfPasswordRequiredException locked)
+            {
+                password = await AskForPasswordAsync(displayName, locked.WasTried)
+                    ?? throw new OperationCanceledException();
+            }
+        }
+    }
+
+    private async Task<string?> AskForPasswordAsync(string displayName, bool wasWrong)
+    {
+        var box = new PasswordBox { PlaceholderText = "Contraseña" };
+
+        var body = new StackPanel { Spacing = 10, Width = 380 };
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = wasWrong
+                ? $"Esa contraseña no abre «{displayName}». Prueba otra vez."
+                : $"«{displayName}» está protegido con contraseña.",
+        });
+        body.Children.Add(box);
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Este PDF está protegido",
+            Content = body,
+            PrimaryButtonText = "Abrir",
+            CloseButtonText = "Cancelar",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+
+        AppTheme.Dress(dialog);
+
+        // Enter on the password box is what everyone does, and a dialog that
+        // ignores it reads as broken.
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key == Windows.System.VirtualKey.Enter)
+            {
+                e.Handled = true;
+                dialog.Hide();
+                _passwordAccepted = true;
+            }
+        };
+
+        _passwordAccepted = false;
+        var answer = await Dialogs.ShowAsync(dialog);
+
+        return answer == ContentDialogResult.Primary || _passwordAccepted ? box.Password : null;
+    }
+
+    private bool _passwordAccepted;
+
     private async Task OpenPathInNewTabAsync(string path, string displayName)
     {
         OpenButton.IsEnabled = false;
@@ -309,8 +389,14 @@ public sealed partial class MainPage : Page
             Tabs.SelectedItem = tab;
             ShowViewer(viewer);
 
-            await viewer.OpenAsync(path);
+            await OpenUnlockingAsync(viewer, path, displayName);
             SetRecent(RecentDocuments.Promote(Recent, path));
+        }
+        catch (OperationCanceledException)
+        {
+            // The reader shut the password box. Nothing is wrong with the file,
+            // so it stays in the shortcut list and nothing is reported.
+            CloseTab(tab);
         }
         catch (Exception ex)
         {
@@ -349,7 +435,7 @@ public sealed partial class MainPage : Page
         };
 
         AppTheme.Dress(dialog);
-        await dialog.ShowAsync();
+        await Dialogs.ShowAsync(dialog);
     }
 
     /// <summary>
@@ -379,7 +465,7 @@ public sealed partial class MainPage : Page
 
         AppTheme.Dress(dialog);
 
-        var answer = await dialog.ShowAsync();
+        var answer = await Dialogs.ShowAsync(dialog);
         if (answer == ContentDialogResult.None) return;
 
         if (answer == ContentDialogResult.Primary)
@@ -593,7 +679,7 @@ public sealed partial class MainPage : Page
 
         AppTheme.Dress(dialog);
 
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        if (await Dialogs.ShowAsync(dialog) != ContentDialogResult.Primary) return;
 
         await ReloadAsync(viewer, path);
     }
@@ -652,42 +738,98 @@ public sealed partial class MainPage : Page
             Title = "Aplanar las marcas",
             Content = $"{count}\n\nDespués nadie podrá moverlas, cambiarlas ni borrarlas, "
                 + "ni en ZenInk ni en otro programa. También se aplanan las anotaciones "
-                + "que traía el archivo de otras herramientas.\n\nEsto no se puede deshacer.",
+                + "que traía el archivo de otras herramientas.\n\nEsto no se puede deshacer: "
+                + "si aplanas sobre este archivo, no hay vuelta atrás. Aplanar en una copia "
+                + "deja este documento como está, con sus marcas todavía editables.",
             PrimaryButtonText = "Aplanar y guardar",
+            SecondaryButtonText = "Aplanar en una copia…",
             CloseButtonText = "Cancelar",
-            DefaultButton = ContentDialogButton.Close,
+            // The way out is the default: pressing Enter without reading should
+            // land on the choice that keeps a version with live marks, not on
+            // the one that cannot be undone.
+            DefaultButton = ContentDialogButton.Secondary,
         };
 
         AppTheme.Dress(dialog);
 
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-
-        using (BusyScope("Aplanando las marcas…"))
+        switch (await Dialogs.ShowAsync(dialog))
         {
-            string? error = await viewer.FlattenAsync();
-            if (error is not null)
-            {
-                await ShowMessageAsync("No se pudieron aplanar las marcas", error);
-            }
+            case ContentDialogResult.Primary:
+                using (BusyScope("Aplanando las marcas…"))
+                {
+                    string? error = await viewer.FlattenAsync();
+                    if (error is not null)
+                    {
+                        await ShowMessageAsync("No se pudieron aplanar las marcas", error);
+                    }
+                }
+                break;
+
+            case ContentDialogResult.Secondary:
+                await FlattenToCopyAsync(viewer);
+                break;
+
+            default:
+                return;
         }
 
         UpdateChrome();
+    }
+
+    /// <summary>
+    /// Burns the marks into a copy. The document in hand is not touched, which
+    /// is the whole reason this exists next to the flatten that cannot be undone.
+    /// </summary>
+    private async Task FlattenToCopyAsync(PdfTiledViewer viewer)
+    {
+        if (viewer.SourcePath is not { } source) return;
+
+        var file = await PickPdfDestinationAsync($"{Path.GetFileNameWithoutExtension(source)} aplanado");
+        if (file is null) return;
+
+        if (IsSamePath(file.Path, source))
+        {
+            // Aiming the copy at the original is the flatten that cannot be
+            // undone, and it should not happen by accident through this door.
+            await ShowMessageAsync(
+                "Elige otro archivo",
+                "Ese es el documento que estás mirando. Para aplanarlo sobre sí mismo, usa «Aplanar y guardar».");
+            return;
+        }
+
+        using (BusyScope("Aplanando en una copia…"))
+        {
+            try
+            {
+                await viewer.SaveChangesCopyAsync(file.Path, flatten: true);
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("No se pudo aplanar en una copia", ex.Message);
+            }
+        }
+    }
+
+    /// <summary>Asks where a copy should go. The name is a suggestion, nothing more.</summary>
+    private static async Task<StorageFile?> PickPdfDestinationAsync(string suggestedName)
+    {
+        var picker = new FileSavePicker();
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(App.Current.MainWindow));
+        picker.FileTypeChoices.Add("Documento PDF", [".pdf"]);
+        picker.SuggestedFileName = suggestedName;
+        picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+
+        return await picker.PickSaveFileAsync();
     }
 
     private async void OnSaveCopyClicked(object sender, RoutedEventArgs e)
     {
         if (ActiveViewer is not { } viewer || viewer.SourcePath is not { } source) return;
 
-        var picker = new FileSavePicker();
-        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(App.Current.MainWindow));
-        picker.FileTypeChoices.Add("Documento PDF", [".pdf"]);
         // The document's own name: this saves whatever the document carries,
         // and naming it after one kind of change would go stale the moment
         // there is another.
-        picker.SuggestedFileName = Path.GetFileNameWithoutExtension(source);
-        picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
-
-        StorageFile? file = await picker.PickSaveFileAsync();
+        var file = await PickPdfDestinationAsync(Path.GetFileNameWithoutExtension(source));
         if (file is null) return;
 
         // Choosing the file it is already reading is a plain save, and has to
@@ -712,6 +854,518 @@ public sealed partial class MainPage : Page
         }
 
         UpdateChrome();
+    }
+
+    /// <summary>
+    /// Signing the plan with a certificate.
+    ///
+    /// A signature is appended, never written over the drawing, so a signature
+    /// that came with the plan stays valid and this one can sit on top of it.
+    /// That is the whole reason the app can offer signing at all — see
+    /// <see cref="PdfSignatures"/>.
+    /// </summary>
+    private async void OnSignClicked(object sender, RoutedEventArgs e) => await AskAndSignAsync();
+
+    private async Task AskAndSignAsync()
+    {
+        if (ActiveViewer is not { } viewer || viewer.SourcePath is not { } source) return;
+
+        var certificates = PdfSignatures.AvailableCertificates();
+        if (certificates.Count == 0)
+        {
+            var nothing = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = "No hay ningún certificado",
+                Content = "Windows no encuentra ningún certificado con el que firmar. "
+                        + "Si tienes el tuyo en un archivo —el de la FNMT viene en un .pfx— "
+                        + "puedes instalarlo ahora: lo abre el asistente de Windows, que es "
+                        + "quien te pide la contraseña.",
+                PrimaryButtonText = "Importar un certificado…",
+                CloseButtonText = "Cancelar",
+                DefaultButton = ContentDialogButton.Primary,
+            };
+            AppTheme.Dress(nothing);
+
+            if (await Dialogs.ShowAsync(nothing) == ContentDialogResult.Primary && await ImportCertificateAsync())
+            {
+                await AskAndSignAsync();
+            }
+            return;
+        }
+
+        // The name alone in the list, and who issued it underneath: a name plus
+        // an expiry date on one line is longer than the box, and what got cut
+        // off was the year.
+        var picker = new ComboBox
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            SelectedIndex = 0,
+            ItemsSource = certificates
+                .Select(c => c.GetNameInfo(X509NameType.SimpleName, false))
+                .ToList(),
+        };
+
+        var issuer = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.75 };
+        var who = new TextBox { PlaceholderText = "Nombre y apellidos" };
+        var papers = new TextBox { PlaceholderText = "DNI" };
+
+        // The name and the identity number come out of the certificate, and stay
+        // editable: what a certificate calls someone — surnames first, all in
+        // capitals — is not always what belongs on a drawing.
+        void DescribeChosen()
+        {
+            var chosen = certificates[Math.Max(0, picker.SelectedIndex)];
+            issuer.Text = $"Emitido por {chosen.GetNameInfo(X509NameType.SimpleName, forIssuer: true)}"
+                        + $" · caduca el {chosen.NotAfter:dd/MM/yyyy}";
+
+            var (name, id) = IdentityIn(chosen);
+            who.Text = name;
+            papers.Text = id;
+        }
+
+        picker.SelectionChanged += (_, _) => DescribeChosen();
+        DescribeChosen();
+
+        // Empty by default: a reason is a claim about why this was signed, and
+        // one that was never typed is worse than none at all.
+        var reason = new TextBox { PlaceholderText = "Motivo de la firma" };
+        var heading = new TextBox { Text = "Firmado digitalmente por" };
+        var visible = new CheckBox { Content = "Ponerla a la vista sobre el documento", IsChecked = true };
+        var withDate = new CheckBox { Content = "Poner la fecha", IsChecked = true };
+        var importer = new HyperlinkButton { Content = "Importar o añadir un certificado…", Padding = new Thickness(0) };
+
+        var stampFields = new StackPanel { Spacing = 6 };
+
+        // What the stamp will say, kept in step as it is typed.
+        //
+        // It is here because it replaces a row of switches. There used to be one
+        // tick per line, which is two things to understand — the field and the
+        // switch — and they could disagree. Now an empty field is a line that
+        // does not appear, and this shows that without having to be explained.
+        var sample = new StackPanel { Spacing = 2 };
+        var preview = new Border
+        {
+            Padding = new Thickness(10, 8, 10, 8),
+            CornerRadius = new CornerRadius(4),
+            BorderThickness = new Thickness(1),
+            BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                Windows.UI.Color.FromArgb(255, 76, 107, 158)),
+            Child = sample,
+        };
+
+        void Redraw()
+        {
+            var stamp = new PdfSignatureAppearance(
+                who.Text.Trim(), papers.Text.Trim(), heading.Text.Trim(), withDate.IsChecked == true);
+
+            sample.Children.Clear();
+            foreach (var (text, strong) in PdfSignatureStamp.Lines(
+                         stamp, reason.Text.Trim(), "", DateTimeOffset.Now))
+            {
+                sample.Children.Add(new TextBlock
+                {
+                    Text = text,
+                    FontWeight = strong ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                });
+            }
+
+            bool showing = visible.IsChecked == true;
+            preview.Visibility = showing ? Visibility.Visible : Visibility.Collapsed;
+            stampFields.Visibility = showing ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        foreach (var field in new[] { who, papers, reason, heading })
+        {
+            field.TextChanged += (_, _) => Redraw();
+        }
+        withDate.Checked += (_, _) => Redraw();
+        withDate.Unchecked += (_, _) => Redraw();
+        visible.Checked += (_, _) => Redraw();
+        visible.Unchecked += (_, _) => Redraw();
+
+        bool wantsImport = false;
+
+        var body = new StackPanel { Spacing = 8, Width = 460 };
+
+        // Only said when there is something to say. «This document carries no
+        // signatures yet» is a line that costs two rows to tell the reader
+        // nothing they will act on.
+        var already = viewer.ReadSignatures();
+        if (already.Count > 0)
+        {
+            body.Children.Add(new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                Text = DescribeSignatures(already),
+                Margin = new Thickness(0, 0, 0, 8),
+            });
+        }
+
+        body.Children.Add(new TextBlock { Text = "Firmar con" });
+        body.Children.Add(picker);
+        body.Children.Add(issuer);
+        body.Children.Add(importer);
+        body.Children.Add(visible);
+
+        stampFields.Children.Add(Labelled("Encabezado", heading));
+
+        // Name and identity number share a row: they are short, they belong
+        // together, and the dialog is already as tall as a laptop screen holds.
+        var identity = new Grid
+        {
+            ColumnSpacing = 10,
+            ColumnDefinitions = { new ColumnDefinition(), new ColumnDefinition { Width = new GridLength(150) } },
+        };
+        var namePair = Labelled("Nombre", who);
+        var idPair = Labelled("DNI", papers);
+        Grid.SetColumn(idPair, 1);
+        identity.Children.Add(namePair);
+        identity.Children.Add(idPair);
+
+        stampFields.Children.Add(identity);
+        stampFields.Children.Add(Labelled("Motivo", reason));
+        stampFields.Children.Add(withDate);
+        stampFields.Children.Add(new TextBlock
+        {
+            Opacity = 0.75,
+            Margin = new Thickness(0, 2, 0, 2),
+            Text = "Lo que dejes en blanco no aparece:",
+        });
+        stampFields.Children.Add(preview);
+
+        body.Children.Add(stampFields);
+
+        if (viewer.HasUnsavedChanges)
+        {
+            // A signature covers the file, so anything still only on screen has
+            // to be written first — and the reader should know that before the
+            // signing, not after.
+            body.Children.Add(new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 8, 0, 0),
+                Text = "Hay cambios sin guardar. Se guardarán antes de firmar: "
+                     + "una firma cubre el archivo, y lo que no esté escrito no queda firmado.",
+            });
+        }
+
+        // Signing a copy is the primary way out. A signature cannot be taken
+        // back and the original often has to survive it — for a second signer,
+        // for a correction — so the safe one is the one under the cursor, and
+        // the dialog says the name it will use rather than springing it.
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.75,
+            Margin = new Thickness(0, 4, 0, 0),
+            Text = $"La copia: «{Path.GetFileName(SignedCopyPath(source))}», junto al original. "
+                 + "Después dibujarás dónde va la firma.",
+        });
+
+        Redraw();
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Firmar el documento",
+            Content = new ScrollViewer { Content = body, MaxHeight = 560, HorizontalContentAlignment = HorizontalAlignment.Stretch },
+            PrimaryButtonText = "Firmar una copia",
+            SecondaryButtonText = "Firmar este archivo",
+            CloseButtonText = "Cancelar",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+
+        // Importing needs the dialog out of the way — Windows' wizard is its own
+        // window, and the list of certificates has to be read again afterwards.
+        importer.Click += (_, _) => { wantsImport = true; dialog.Hide(); };
+
+        AppTheme.Dress(dialog);
+
+        var answer = await Dialogs.ShowAsync(dialog);
+
+        if (wantsImport)
+        {
+            await ImportCertificateAsync();
+            await AskAndSignAsync();
+            return;
+        }
+
+        if (answer == ContentDialogResult.None) return;
+
+        var certificate = certificates[Math.Max(0, picker.SelectedIndex)];
+        var signer = new CertificateSigner(certificate);
+        var options = new PdfSignatureOptions(Reason: reason.Text.Trim());
+
+        if (visible.IsChecked == true)
+        {
+            var stamp = new PdfSignatureAppearance(
+                who.Text.Trim(), papers.Text.Trim(), heading.Text.Trim(), withDate.IsChecked == true);
+
+            if (await PlaceSignatureAsync(viewer, stamp, options.Reason) is not { } placed) return;
+            options = placed with { Reason = options.Reason };
+        }
+
+        if (answer == ContentDialogResult.Secondary)
+        {
+            await SignInPlaceAsync(viewer, signer, options);
+        }
+        else
+        {
+            await SignSignedCopyAsync(viewer, source, signer, options);
+        }
+
+        UpdateChrome();
+    }
+
+    /// <summary>A label over its field, which is the shape every field in this dialog takes.</summary>
+    private static StackPanel Labelled(string label, FrameworkElement field)
+    {
+        var pair = new StackPanel { Spacing = 2 };
+        pair.Children.Add(new TextBlock { Text = label });
+        pair.Children.Add(field);
+        return pair;
+    }
+
+    /// <summary>
+    /// Where a signed copy goes: beside the original, with «signed» on the end.
+    /// A number is added rather than a file overwritten — a signed document is
+    /// not something to quietly replace with another signed document.
+    /// </summary>
+    private static string SignedCopyPath(string source)
+    {
+        string directory = Path.GetDirectoryName(Path.GetFullPath(source)) ?? "";
+        string stem = Path.GetFileNameWithoutExtension(source);
+
+        string candidate = Path.Combine(directory, $"{stem} signed.pdf");
+        for (int n = 2; File.Exists(candidate); n++)
+        {
+            candidate = Path.Combine(directory, $"{stem} signed {n}.pdf");
+        }
+        return candidate;
+    }
+
+    /// <summary>
+    /// Signs into «… signed.pdf» beside the original and opens it, so the
+    /// signature can be seen rather than taken on trust.
+    /// </summary>
+    private async Task SignSignedCopyAsync(
+        PdfTiledViewer viewer, string source, IPdfSigner signer, PdfSignatureOptions options)
+    {
+        string target = SignedCopyPath(source);
+
+        using (BusyScope("Firmando una copia…"))
+        {
+            try
+            {
+                await viewer.SignCopyAsync(target, signer, options);
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("No se pudo firmar la copia", ex.Message);
+                return;
+            }
+        }
+
+        await OpenPathInNewTabAsync(target, Path.GetFileName(target));
+    }
+
+    /// <summary>
+    /// Asks the reader to drag out where the stamp goes, and turns what they
+    /// drew into the page's own coordinates.
+    ///
+    /// The conversion is not arithmetic that can be done here: a sheet with a
+    /// /Rotate, or a crop box that does not start at the origin, needs the
+    /// page's own matrix, and that lives behind the render queue.
+    /// </summary>
+    private async Task<PdfSignatureOptions?> PlaceSignatureAsync(
+        PdfTiledViewer viewer, PdfSignatureAppearance stamp, string reason)
+    {
+        var lines = PdfSignatureStamp.Lines(stamp, reason, "", DateTimeOffset.Now);
+
+        while (true)
+        {
+            _hintMessage = "Dibuja un rectángulo para colocar la firma · Esc para dejarlo";
+            UpdateChrome();
+
+            var spot = await AskForSpotAsync(viewer);
+
+            _hintMessage = null;
+            UpdateChrome();
+
+            if (spot is null) return null;
+
+            // Placed, not written. From here the reader can drag it, draw it
+            // again somewhere else, or throw it away — and nothing has touched
+            // the file yet.
+            viewer.ShowPendingSignature(new PendingSignature(spot.PageIndex, spot.SheetRect, lines));
+            SignatureStrip.Visibility = Visibility.Visible;
+
+            var decision = await WaitForSignatureDecisionAsync();
+            var placed = viewer.Pending;
+
+            SignatureStrip.Visibility = Visibility.Collapsed;
+            viewer.ClearPendingSignature();
+
+            if (decision == SignatureDecision.Drop || placed is null) return null;
+            if (decision == SignatureDecision.Redraw) continue;
+
+            var (rect, turns) = await viewer.ToPdfRectAsync(placed.PageIndex, placed.SheetRect);
+
+            return new PdfSignatureOptions(
+                PageIndex: placed.PageIndex,
+                Rectangle: rect,
+                PageQuarterTurns: turns,
+                Appearance: stamp);
+        }
+    }
+
+    private enum SignatureDecision { Sign, Redraw, Drop }
+
+    /// <summary>Set while the strip is up; the three buttons answer through it.</summary>
+    private TaskCompletionSource<SignatureDecision>? _signatureDecision;
+
+    private Task<SignatureDecision> WaitForSignatureDecisionAsync()
+    {
+        _signatureDecision = new TaskCompletionSource<SignatureDecision>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        return _signatureDecision.Task;
+    }
+
+    private void OnSignConfirmClicked(object sender, RoutedEventArgs e) =>
+        _signatureDecision?.TrySetResult(SignatureDecision.Sign);
+
+    private void OnSignRedrawClicked(object sender, RoutedEventArgs e) =>
+        _signatureDecision?.TrySetResult(SignatureDecision.Redraw);
+
+    private void OnSignDropClicked(object sender, RoutedEventArgs e) =>
+        _signatureDecision?.TrySetResult(SignatureDecision.Drop);
+
+    private static Task<SignatureSpot?> AskForSpotAsync(PdfTiledViewer viewer)
+    {
+        var waiting = new TaskCompletionSource<SignatureSpot?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void Placed(object? sender, SignatureSpot? spot)
+        {
+            viewer.SignaturePlaced -= Placed;
+            waiting.TrySetResult(spot);
+        }
+
+        viewer.SignaturePlaced += Placed;
+        viewer.IsPlacingSignature = true;
+        return waiting.Task;
+    }
+
+    /// <summary>
+    /// Hands a certificate file to Windows' own import wizard.
+    ///
+    /// Deliberately not done here: a .pfx is opened with a password, and ZenInk
+    /// has no business asking for one, holding one, or being the thing that gets
+    /// it wrong. The wizard asks, and the key lands in the user's store where
+    /// signing can reach it without anyone seeing it.
+    /// </summary>
+    private static async Task<bool> ImportCertificateAsync()
+    {
+        var picker = new FileOpenPicker();
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(App.Current.MainWindow));
+        picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+        foreach (string kind in new[] { ".pfx", ".p12", ".cer", ".crt", ".p7b" })
+        {
+            picker.FileTypeFilter.Add(kind);
+        }
+
+        var file = await picker.PickSingleFileAsync();
+        if (file is null) return false;
+
+        string entry = Path.GetExtension(file.Path).ToLowerInvariant() switch
+        {
+            ".pfx" or ".p12" => "CryptExtAddPFX",
+            ".p7b" => "CryptExtAddPKCS7",
+            _ => "CryptExtAddCER",
+        };
+
+        try
+        {
+            using var wizard = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "rundll32.exe",
+                Arguments = $"cryptext.dll,{entry} \"{file.Path}\"",
+                UseShellExecute = true,
+            });
+
+            // Waiting matters: the list of certificates is read again straight
+            // after, and reading it while the wizard is still open would find
+            // the store exactly as it was.
+            if (wizard is not null) await wizard.WaitForExitAsync();
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The name and identity number a certificate carries. The FNMT writes the
+    /// DNI twice — in SERIALNUMBER as <c>IDCES-00000000X</c>, and again on the
+    /// end of the common name — and other issuers write neither, so both are
+    /// tried and neither is required.
+    /// </summary>
+    private static (string Name, string Id) IdentityIn(X509Certificate2 certificate)
+    {
+        string simple = certificate.GetNameInfo(X509NameType.SimpleName, forIssuer: false);
+
+        var serial = System.Text.RegularExpressions.Regex.Match(
+            certificate.Subject, @"SERIALNUMBER=(?:IDC[A-Z]{2}-)?([0-9A-Za-z]+)");
+        string id = serial.Success ? serial.Groups[1].Value : "";
+
+        var trailing = System.Text.RegularExpressions.Regex.Match(simple, @"^(.*?)\s*-\s*(\d{7,8}[A-Za-z])$");
+        if (!trailing.Success) return (simple, id);
+
+        return (trailing.Groups[1].Value.Trim(), id.Length > 0 ? id : trailing.Groups[2].Value);
+    }
+
+    private async Task SignInPlaceAsync(PdfTiledViewer viewer, IPdfSigner signer, PdfSignatureOptions options)
+    {
+        using (BusyScope("Firmando…"))
+        {
+            if (viewer.HasUnsavedChanges && await viewer.SaveChangesAsync() is { } failure)
+            {
+                await ShowMessageAsync("No se pudo guardar antes de firmar", failure);
+                return;
+            }
+
+            if (await viewer.SignAsync(signer, options) is { } error)
+            {
+                await ShowMessageAsync("No se pudo firmar el documento", error);
+            }
+        }
+    }
+
+    /// <summary>
+    /// What the plan already carries. An earlier signature covering only part of
+    /// the file is normal and not a fault: it covers the document as it stood
+    /// when it was signed. What matters is whether it still adds up.
+    /// </summary>
+    private static string DescribeSignatures(IReadOnlyList<PdfSignatureInfo> signatures)
+    {
+        if (signatures.Count == 0)
+        {
+            return "Este documento no lleva ninguna firma todavía.";
+        }
+
+        var lines = signatures.Select(s =>
+            $"· {(s.Signer.Length > 0 ? s.Signer : "firmante desconocido")}"
+            + (s.SignedAt is { } when ? $", {when:d} {when:t}" : "")
+            + (s.DigestMatches ? "" : " — NO cuadra con el archivo"));
+
+        string heading = signatures.Count == 1
+            ? "Este documento ya lleva una firma:"
+            : $"Este documento ya lleva {signatures.Count} firmas:";
+
+        return $"{heading}\n{string.Join("\n", lines)}\n\nLa tuya se añade encima sin tocarlas.";
     }
 
     private static bool IsSamePath(string left, string right)
@@ -1104,9 +1758,9 @@ public sealed partial class MainPage : Page
         SelectAllButton.IsEnabled = hasDocument;
         SelectionStatus.Text = hasSelection
             ? "Texto seleccionado. Ctrl+C también copia."
-            : "Arrastra sobre el plano para seleccionar.";
+            : "Arrastra sobre la página para seleccionar.";
 
-        if (_busyMessage is { } message)
+        if ((_busyMessage ?? _hintMessage) is { } message)
         {
             DocumentNameText.Text = message;
             return;
@@ -1120,7 +1774,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        PageIndicator.Text = $"Hoja {viewer.CurrentPageNumber} de {viewer.PageCount}";
+        PageIndicator.Text = $"Página {viewer.CurrentPageNumber} de {viewer.PageCount}";
         ZoomIndicator.Text = $"{viewer.ZoomPercent:0} %";
 
         // A permanent Save button says "there is something to write" only by
@@ -1215,7 +1869,7 @@ public sealed partial class MainPage : Page
                 NoteEditorLabel.Text = selected!.Kind == AnnotationKind.Note ? "Comentario" : "Texto";
                 NoteText.PlaceholderText = selected.Kind == AnnotationKind.Note
                     ? "Qué hay que revisar"
-                    : "Lo que se lee en el plano";
+                    : "Lo que se lee en la página";
 
                 if (NoteText.Text != selected.Text)
                 {
@@ -1242,21 +1896,21 @@ public sealed partial class MainPage : Page
                 : tool switch
                 {
                     ViewerTool.SelectAnnotation => $"Haz clic en una marca para cogerla. {Sheet(onSheet)}",
-                    ViewerTool.Note => $"Haz clic en el plano para dejar un comentario. {Sheet(onSheet)}",
-                    ViewerTool.FreeText => $"Haz clic en el plano y escribe en el panel. {Sheet(onSheet)}",
+                    ViewerTool.Note => $"Haz clic en la página para dejar un comentario. {Sheet(onSheet)}",
+                    ViewerTool.FreeText => $"Haz clic en la página y escribe en el panel. {Sheet(onSheet)}",
                     ViewerTool.Ink => $"Dibuja con el lápiz o el ratón. La otra punta del lápiz borra. {Sheet(onSheet)}",
-                    ViewerTool.Highlight => $"Arrastra sobre el texto del plano para resaltarlo. {Sheet(onSheet)}",
+                    ViewerTool.Highlight => $"Arrastra sobre el texto para resaltarlo. {Sheet(onSheet)}",
                     ViewerTool.Cloud => $"Arrastra un recuadro, o haz clic en cada vértice. {Sheet(onSheet)}",
                     ViewerTool.Polyline or ViewerTool.Polygon =>
                         $"Haz clic en cada vértice; Intro o doble clic lo termina. {Sheet(onSheet)}",
-                    _ => $"Arrastra sobre el plano para dibujar. {Sheet(onSheet)}",
+                    _ => $"Arrastra sobre la página para dibujar. {Sheet(onSheet)}",
                 };
 
         static string Sheet(int count) => count switch
         {
-            0 => "Esta hoja no tiene marcas.",
-            1 => "Hay 1 marca en esta hoja.",
-            _ => $"Hay {count} marcas en esta hoja.",
+            0 => "Esta página no tiene marcas.",
+            1 => "Hay 1 marca en esta página.",
+            _ => $"Hay {count} marcas en esta página.",
         };
     }
 
@@ -1325,7 +1979,7 @@ public sealed partial class MainPage : Page
         // Two-up only means anything as a way of laying sheets out side by
         // side; on one sheet at a time it is the spread that changes, so the
         // choice stays available and the label carries the distinction.
-        string flow = continuous ? "Continuo" : "Hoja a hoja";
+        string flow = continuous ? "Continuo" : "Página a página";
         string spread = columns == 2 ? " · 2 pág." : string.Empty;
         ViewModeText.Text = $"{flow}{spread}";
     }
@@ -1343,7 +1997,9 @@ public sealed partial class MainPage : Page
         SaveButton.IsEnabled = hasDocument;
         SaveItem.IsEnabled = pending;
         SaveCopyItem.IsEnabled = hasDocument;
-        FlattenItem.IsEnabled = hasDocument;
         DiscardChangesItem.IsEnabled = pending;
+
+        FlattenButton.IsEnabled = hasDocument;
+        SignButton.IsEnabled = hasDocument;
     }
 }

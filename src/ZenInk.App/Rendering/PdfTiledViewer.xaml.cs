@@ -1,4 +1,5 @@
 using System.Numerics;
+using Microsoft.Graphics.Canvas.Text;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI;
@@ -16,6 +17,21 @@ using Windows.UI;
 using ZenInk.Core;
 
 namespace ZenInk_App.Rendering;
+
+/// <summary>Where a visible signature was asked to go: the sheet, and the box on it.</summary>
+public sealed record SignatureSpot(int PageIndex, RectPt SheetRect);
+
+/// <summary>
+/// A signature that has been placed but not yet written.
+///
+/// It exists so that placing and signing are two steps and not one. Signing
+/// writes the file and cannot be taken back, so the box gets a moment on screen
+/// first — to be looked at, dragged somewhere better, or thrown away.
+/// </summary>
+public sealed record PendingSignature(
+    int PageIndex,
+    RectPt SheetRect,
+    IReadOnlyList<(string Text, bool Strong)> Lines);
 
 public enum ViewerTool
 {
@@ -257,6 +273,22 @@ public sealed partial class PdfTiledViewer : UserControl
     private bool _isZoomBanding;
     private Point _zoomBandStart;
     private Point _zoomBandEnd;
+
+    /// <summary>
+    /// Set while the reader is dragging out where a visible signature goes. It
+    /// borrows the zoom rectangle's band rather than growing a second one: the
+    /// gesture is the same, and only what happens on release differs.
+    ///
+    /// It is a passing mode and not a tool on the rail. The rail is what the
+    /// reader draws with and stays chosen; this is one rectangle asked for by a
+    /// dialog, and it ends the moment it is given.
+    /// </summary>
+    private bool _bandIsForSignature;
+
+    /// <summary>Set while the placed-but-unwritten signature is being dragged somewhere else.</summary>
+    private bool _draggingPending;
+
+    private Vector2 _pendingGrabbedAt;
     private Point _lastPointerPosition;
     private ViewerTool _tool = ViewerTool.Pan;
     private bool _thinLines;
@@ -748,9 +780,9 @@ public sealed partial class PdfTiledViewer : UserControl
         }
     }
 
-    public async Task OpenAsync(string path)
+    public async Task OpenAsync(string path, string? password = null)
     {
-        var info = await _queue.OpenDocumentAsync(path);
+        var info = await _queue.OpenDocumentAsync(path, password);
 
         if (_documentId >= 0)
         {
@@ -963,11 +995,112 @@ public sealed partial class PdfTiledViewer : UserControl
         return null;
     }
 
-    /// <summary>Writes the turns and marks to another file, leaving this document as it is.</summary>
-    public Task SaveChangesCopyAsync(string targetPath)
+    /// <summary>
+    /// Writes the turns and marks to another file, leaving this document as it
+    /// is. With <paramref name="flatten"/>, the copy is the flattened one and
+    /// the document in hand keeps its marks editable.
+    /// </summary>
+    public Task SaveChangesCopyAsync(string targetPath, bool flatten = false)
     {
         if (SourcePath is not { } path) throw new InvalidOperationException("El documento no tiene un archivo asociado.");
-        return _queue.SaveChangesCopyAsync(path, targetPath, _rotations, _annotations.Snapshot());
+        return _queue.SaveChangesCopyAsync(path, targetPath, _rotations, _annotations.Snapshot(), flatten);
+    }
+
+    /// <summary>
+    /// True while the reader is being asked to drag out where the signature
+    /// goes. Setting it changes the pointer and nothing else; the gesture ends
+    /// by raising <see cref="SignaturePlaced"/>.
+    /// </summary>
+    public bool IsPlacingSignature
+    {
+        get;
+        set
+        {
+            if (field == value) return;
+
+            field = value;
+            _bandIsForSignature = false;
+            _isZoomBanding = false;
+            UpdateCursor();
+            Canvas.Invalidate();
+        }
+    }
+
+    /// <summary>
+    /// The box the reader drew, or null if they gave up on it. In sheet points,
+    /// which is the same space marks are held in — the caller turns it into the
+    /// page's own coordinates through the queue.
+    /// </summary>
+    public event EventHandler<SignatureSpot?>? SignaturePlaced;
+
+    /// <summary>The signature waiting to be written, drawn on the sheet where it will land.</summary>
+    public PendingSignature? Pending { get; private set; }
+
+    public void ShowPendingSignature(PendingSignature pending)
+    {
+        Pending = pending;
+        Canvas.Invalidate();
+    }
+
+    public void ClearPendingSignature()
+    {
+        if (Pending is null) return;
+
+        Pending = null;
+        _draggingPending = false;
+        Canvas.Invalidate();
+    }
+
+    /// <summary>The signatures the file carries, and whether each of them adds up.</summary>
+    public IReadOnlyList<PdfSignatureInfo> ReadSignatures() =>
+        SourcePath is { } path && File.Exists(path) ? PdfSignatures.Read(path) : [];
+
+    /// <summary>
+    /// Turns a box the reader drew on the sheet into the page's own coordinates,
+    /// and reports the page's /Rotate with it so the stamp can be drawn level.
+    /// </summary>
+    public Task<(RectPt Rect, int QuarterTurns)> ToPdfRectAsync(int pageIndex, RectPt sheetRect) =>
+        _queue.ToPdfRectAsync(_documentId, pageIndex, sheetRect);
+
+    /// <summary>
+    /// Signs the file this document came from, then picks the reopened document
+    /// back up.
+    ///
+    /// Nothing pending is written here on purpose. A signature covers the file
+    /// as it stands, so saving has to have happened first and visibly — see the
+    /// caller, which says so before it signs.
+    /// </summary>
+    public async Task<string?> SignAsync(IPdfSigner signer, PdfSignatureOptions options)
+    {
+        if (SourcePath is not { } path || _documentId < 0) return "El documento no tiene un archivo asociado.";
+
+        var outcome = await _queue.SignInPlaceAsync(_documentId, path, signer, options);
+        AdoptReopenedDocument(outcome.Document);
+
+        if (!outcome.Saved) return outcome.Error;
+
+        // The signature's own form field is now an annotation on the page, and
+        // the marks were reloaded with the document: nothing of ours changed,
+        // but the tiles have.
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+        return null;
+    }
+
+    /// <summary>
+    /// Signs into another file, leaving this one unsigned and its marks still
+    /// editable.
+    ///
+    /// The copy is written first and signed second, in that order and not the
+    /// other way round: a signature covers the file it sits in, so a mark that
+    /// was not in the file yet would not be signed.
+    /// </summary>
+    public async Task SignCopyAsync(string targetPath, IPdfSigner signer, PdfSignatureOptions options)
+    {
+        if (SourcePath is null) throw new InvalidOperationException("El documento no tiene un archivo asociado.");
+
+        await SaveChangesCopyAsync(targetPath);
+        await PdfRenderQueue.SignCopyAsync(targetPath, targetPath, signer, options);
     }
 
     /// <summary>
@@ -1110,7 +1243,10 @@ public sealed partial class PdfTiledViewer : UserControl
         Canvas.RemoveFromVisualTree();
     }
 
-    private void UpdateCursor() => ProtectedCursor = InputSystemCursor.Create(_tool switch
+    private void UpdateCursor() => ProtectedCursor = InputSystemCursor.Create(
+        IsPlacingSignature ? InputSystemCursorShape.Cross : CursorForTool());
+
+    private InputSystemCursorShape CursorForTool() => _tool switch
     {
         // The highlighter picks out text, so it wears the text cursor.
         ViewerTool.SelectText or ViewerTool.Highlight => InputSystemCursorShape.IBeam,
@@ -1120,7 +1256,7 @@ public sealed partial class PdfTiledViewer : UserControl
         // the very corner the mark is meant to start on.
         _ when _tool.Draws() => InputSystemCursorShape.Cross,
         _ => InputSystemCursorShape.Hand,
-    });
+    };
 
     private void ClearSelection()
     {
@@ -1528,6 +1664,11 @@ public sealed partial class PdfTiledViewer : UserControl
                 DeleteSelectedAnnotation();
                 break;
 
+            case VirtualKey.Escape when IsPlacingSignature:
+                IsPlacingSignature = false;
+                SignaturePlaced?.Invoke(this, null);
+                break;
+
             case VirtualKey.Escape when _isDrawing || _placingVertices || _selected is not null:
                 CancelMark();
                 break;
@@ -1692,9 +1833,18 @@ public sealed partial class PdfTiledViewer : UserControl
         {
             BeginSelection(point.Position);
         }
-        else if (left && _tool == ViewerTool.ZoomRectangle)
+        // A signature that is placed but not yet written can be dragged
+        // somewhere better, whatever tool happens to be chosen: it is not a
+        // mark, and it is only on screen for as long as it takes to decide.
+        else if (left && Pending is { } waiting && HitsPending(point.Position, waiting, out var grabbed))
+        {
+            _draggingPending = true;
+            _pendingGrabbedAt = grabbed;
+        }
+        else if (left && (IsPlacingSignature || _tool == ViewerTool.ZoomRectangle))
         {
             _isZoomBanding = true;
+            _bandIsForSignature = IsPlacingSignature;
             _zoomBandStart = point.Position;
             _zoomBandEnd = point.Position;
         }
@@ -1968,6 +2118,27 @@ public sealed partial class PdfTiledViewer : UserControl
             return;
         }
 
+        if (_draggingPending && Pending is { } dragged)
+        {
+            var page = PageAt(dragged.PageIndex);
+            if (page is not null)
+            {
+                var now = SheetPointClamped(page.Value, position);
+                var moved = dragged.SheetRect;
+                Pending = dragged with
+                {
+                    SheetRect = new RectPt(
+                        moved.X + (now.X - _pendingGrabbedAt.X),
+                        moved.Y + (now.Y - _pendingGrabbedAt.Y),
+                        moved.Width,
+                        moved.Height),
+                };
+                _pendingGrabbedAt = now;
+                Canvas.Invalidate();
+            }
+            return;
+        }
+
         if (_isZoomBanding)
         {
             _zoomBandEnd = position;
@@ -1987,10 +2158,28 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private void OnPointerReleased(object sender, PointerRoutedEventArgs e)
     {
+        if (_draggingPending)
+        {
+            _draggingPending = false;
+            Canvas.ReleasePointerCapture(e.Pointer);
+            return;
+        }
+
         if (_isZoomBanding)
         {
             _isZoomBanding = false;
-            ApplyZoomBand(e.GetCurrentPoint(Canvas).Position);
+            var where = e.GetCurrentPoint(Canvas).Position;
+
+            if (_bandIsForSignature)
+            {
+                _bandIsForSignature = false;
+                ApplySignatureBand(where);
+            }
+            else
+            {
+                ApplyZoomBand(where);
+            }
+
             Canvas.ReleasePointerCapture(e.Pointer);
             return;
         }
@@ -2336,6 +2525,39 @@ public sealed partial class PdfTiledViewer : UserControl
         ZoomTo(ViewportCentre(), target, centre);
     }
 
+    /// <summary>
+    /// Turns the band the reader just dragged into the box a visible signature
+    /// will occupy, in sheet points on the page it was drawn over.
+    ///
+    /// A band too small to hold a stamp is a cancelled gesture, not a tiny
+    /// signature: nobody means to sign inside four points of paper.
+    /// </summary>
+    private void ApplySignatureBand(Point end)
+    {
+        _zoomBandEnd = end;
+        IsPlacingSignature = false;
+        Canvas.Invalidate();
+
+        double width = Math.Abs(end.X - _zoomBandStart.X);
+        double height = Math.Abs(end.Y - _zoomBandStart.Y);
+
+        if (width < MinZoomBandDips || height < MinZoomBandDips
+            || !TryHitSheet(_zoomBandStart, out var page, out var corner))
+        {
+            SignaturePlaced?.Invoke(this, null);
+            return;
+        }
+
+        var opposite = SheetPointClamped(page, end);
+        var box = new RectPt(
+            Math.Min(corner.X, opposite.X),
+            Math.Min(corner.Y, opposite.Y),
+            Math.Abs(opposite.X - corner.X),
+            Math.Abs(opposite.Y - corner.Y));
+
+        SignaturePlaced?.Invoke(this, new SignatureSpot(page.Index, box));
+    }
+
     private void BeginSelection(Point position)
     {
         if (!TryHitPage(position, out var page, out float localX, out float localY)) return;
@@ -2434,6 +2656,7 @@ public sealed partial class PdfTiledViewer : UserControl
                 DrawSearchHits(ds, page);
                 DrawSelection(ds, page);
                 DrawAnnotations(ds, page);
+                DrawPendingSignature(ds, page);
             }
 
             // The highlighter needs the text as much as the text tool does:
@@ -2674,6 +2897,103 @@ public sealed partial class PdfTiledViewer : UserControl
             AnnotationRenderer.Draw(ds, preview, placement);
         }
     }
+
+    /// <summary>The page with a given index, as it is laid out right now.</summary>
+    private PageBox? PageAt(int index)
+    {
+        if (_layout is not { } layout) return null;
+
+        foreach (var page in layout.Pages)
+        {
+            if (page.Index == index) return page;
+        }
+        return null;
+    }
+
+    private bool HitsPending(Point position, PendingSignature pending, out Vector2 sheetPoint)
+    {
+        sheetPoint = default;
+
+        if (!TryHitSheet(position, out var hit, out var point) || hit.Index != pending.PageIndex) return false;
+
+        sheetPoint = point;
+
+        var box = pending.SheetRect;
+        return point.X >= box.X && point.X <= box.X + box.Width
+            && point.Y >= box.Y && point.Y <= box.Y + box.Height;
+    }
+
+    /// <summary>
+    /// Draws the signature that is placed but not yet written, as it will look
+    /// once it is.
+    ///
+    /// The lines and the type size come from the engine — the same
+    /// <see cref="PdfSignatureStamp"/> that writes the appearance into the file —
+    /// so what is on screen is not a sketch of the stamp but the stamp itself,
+    /// measured the same way.
+    /// </summary>
+    private void DrawPendingSignature(CanvasDrawingSession ds, PageBox page)
+    {
+        if (Pending is not { } pending || pending.PageIndex != page.Index) return;
+
+        var placement = PlacementOf(page);
+        var box = placement.ToScreen(pending.SheetRect);
+        if (box.Width < 1 || box.Height < 1) return;
+
+        // Blue and dashed while it is only a proposal, so it cannot be mistaken
+        // for something already written into the drawing.
+        ds.FillRectangle(box, Color.FromArgb(26, 60, 110, 200));
+        ds.DrawRectangle(box, Color.FromArgb(220, 60, 110, 200), 1.4f);
+
+        float size = PdfSignatureStamp.FitSize(
+            pending.Lines, pending.SheetRect.Width, pending.SheetRect.Height) * placement.Scale;
+
+        if (size < 3f) return;
+
+        float padding = 4f * placement.Scale;
+        float room = (float)box.Width - padding * 2f;
+
+        // The engine sizes the type with Helvetica's metrics, and the canvas
+        // draws it in Arial. They are metrically the same face, but "the same"
+        // is not "identical", and the preview has to be the promise the file
+        // keeps — so what is about to be drawn is measured, and shrunk if the
+        // last few thousandths do not fit.
+        float widest = 0f;
+        foreach (var (text, strong) in pending.Lines)
+        {
+            using var trial = Face(size, strong);
+            using var laid = new CanvasTextLayout(ds, text, trial, 0f, 0f);
+            widest = Math.Max(widest, (float)laid.LayoutBounds.Width);
+        }
+
+        if (widest > room && widest > 0f) size *= room / widest;
+        if (size < 3f) return;
+
+        // Baselines exactly where the appearance stream puts them: one type size
+        // below the top, then a line and a quarter apart.
+        float baseline = (float)box.Top + padding + size;
+
+        foreach (var (text, strong) in pending.Lines)
+        {
+            using var format = Face(size, strong);
+            using var layout = new CanvasTextLayout(ds, text, format, 0f, 0f);
+
+            ds.DrawTextLayout(
+                layout,
+                new Vector2((float)box.Left + padding, baseline - layout.LineMetrics[0].Baseline),
+                Color.FromArgb(255, 30, 30, 36));
+
+            baseline += size * 1.25f;
+        }
+    }
+
+    private static CanvasTextFormat Face(float size, bool strong) => new()
+    {
+        FontFamily = "Arial",
+        FontSize = size,
+        FontWeight = strong ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
+        WordWrapping = CanvasWordWrapping.NoWrap,
+    };
 
     private Rect ToScreenRect(PageBox page, TextRun run) => new(
         (page.XPt + run.Left - _origin.X) * _scale,

@@ -29,13 +29,17 @@ La medición calibrada estaba fuera de alcance en el planteamiento inicial y
 
 - **Renderizado PDF y anotaciones**: [PDFium](https://pdfium.googlesource.com/pdfium/)
   (BSD-3-Clause) vía [PDFiumCore](https://github.com/bblanchon/PDFiumCore) (Apache-2.0)
-- **Gestión de páginas**: [PDFsharp](https://www.pdfsharp.net/) (MIT) — previsto
-  para el hito 3; todavía sin usar
+- **Firma**: `System.Security.Cryptography.Pkcs` (MIT, de Microsoft) para el
+  CMS/CAdES; el diccionario de firma y la actualización incremental los escribe
+  ZenInk
 - **UI y dibujo**: WinUI 3 (.NET 10) con Win2D
 
 Las anotaciones no necesitaron ninguna dependencia nueva: PDFium escribe las
 anotaciones, los objetos de trazado con su transparencia, los objetos de texto y
 el aplanado.
+
+**PDFsharp se probó y se descartó** para la firma y para el hito 3: reescribe el
+archivo entero, así que una segunda firma invalida la primera. Ver `ESTADO.md`.
 
 Todas las dependencias son gratuitas y libres para uso comercial/cerrado. Ver
 `THIRD-PARTY-NOTICES.md` para atribuciones de terceros empaquetadas en los binarios
@@ -97,24 +101,29 @@ el propio centro y qué coge un clic.
       lápiz. Se guardan en el PDF como anotaciones estándar —se ven en Acrobat
       o Bluebeam—, se reabren para seguir editándolas, se imprimen en vector, y
       se pueden **aplanar** para que nadie las cambie.
+- [x] **Firma digital**: firmar con certificado —el de la FNMT— produciendo
+      firmas PAdES (`ETSI.CAdES.detached`) que se **añaden** al archivo sin
+      reescribirlo, de modo que una firma que ya venía en el documento sigue
+      valiendo y la nueva se apila encima. Sello visible con encabezado,
+      nombre, DNI, fecha y motivo, colocado dibujando un rectángulo y movible
+      antes de escribir nada. Importar certificados por el asistente de
+      Windows. Por defecto firma en una copia `… signed.pdf`.
 - [ ] Hito 3: gestión de páginas.
 - [ ] Hito 4: captura de pantalla integrada.
+- [ ] Comparar revisiones.
 
 ## Pendiente
 
-**Firma digital de PDF — lo siguiente, y antes del hito 3.** Poder firmar un
-plano con certificado de la FNMT y con DNIe, y producir firmas CMS/CAdES.
-Requisito de trabajo, no un extra: un plano visado o entregado a cliente se
-firma. Va antes de la gestión de páginas porque decide con qué librería se
-escribe el PDF, y hacerlo al revés obliga a rehacer el hito 3.
+**Comparar dos revisiones — después del hito 4.** Superponer la revisión nueva
+sobre la vieja y enseñar qué ha cambiado: lo que sobra en un color, lo que
+falta en otro. Un BIM Manager no lee un plano, lee *qué ha cambiado* entre la
+revisión J y la K, y hoy eso se hace a ojo o pagando Bluebeam.
 
-Sin decidir todavía, y con un punto que conviene mirar antes de elegir
-librería: PDFsharp no firma, e iText —la opción habitual— es AGPL, lo que
-choca con la condición de que todo el stack sea libre para uso comercial y
-cerrado. La vía probable es BouncyCastle (MIT) para el CMS más construir a
-mano el diccionario de firma del PDF, pero hay que verificarlo. El acceso al
-DNIe y a los certificados de la FNMT va por el almacén de certificados de
-Windows (CNG/CAPI), que no es problema de licencia pero sí de integración.
+Lo difícil ya está hecho: los tiles, las transformaciones por hoja y el dibujo
+sobre el lienzo. Queda alinear las dos hojas —que pueden diferir en tamaño de
+papel o en giro— y componer la diferencia. Va después del hito 4 porque la
+captura integrada da la forma de exportar el resultado, que es la mitad del
+valor: la comparación se enseña en una reunión.
 
 **Medición sobre el plano.** Distancias, áreas, perímetros y ángulos, con la
 escala calibrada por hoja. Revierte la exclusión del planteamiento inicial.

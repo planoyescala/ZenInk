@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!--
+      Windows-only on purpose: what this measures is signing with a certificate
+      out of the Windows store, which is where an FNMT certificate lives. There
+      is no cross-platform equivalent to check.
+    -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ZenInk.Signing</RootNamespace>
+    <!-- PDFium hands strings back through a pointer, the same as in the engine. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Only to render before and after, and check the drawing survived. -->
+    <PackageReference Include="PDFiumCore" Version="153.0.7999" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The signing itself lives in the engine; this only drives it. -->
+    <ProjectReference Include="../../src/ZenInk.Core/ZenInk.Core.csproj" />
+  </ItemGroup>
+
+</Project>

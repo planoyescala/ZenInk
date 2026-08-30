@@ -16,10 +16,13 @@ try
     PrintLayoutTests.Run();
     RenderTests.Run();
     AnnotationTests.Run();
+    SignatureTests.Run();
     await TextLayerTests.RunAsync();
     await RenderQueueTests.RunAsync();
     await RotationTests.RunAsync();
     await AnnotationTests.RunAsync();
+    await SignatureTests.RunAsync();
+    await SignatureTests.LockedAsync();
     await PrintLayoutTests.RunRenderAsync();
 }
 finally

@@ -964,6 +964,52 @@ public static class AnnotationTests
         }
 
         File.Delete(path);
+
+        await FlatteningToACopyAsync(marks);
+    }
+
+    /// <summary>
+    /// The same burn, aimed at a copy. This is the way out of the change that
+    /// cannot be taken back: the copy is flattened and the original is left with
+    /// its marks still editable, so both checks matter equally.
+    /// </summary>
+    private static async Task FlatteningToACopyAsync(Annotation[] marks)
+    {
+        var queue = PdfRenderQueue.Shared;
+        string source = Path.Combine(Path.GetTempPath(), "zenink-annot-flat-orig.pdf");
+        string copy = Path.Combine(Path.GetTempPath(), "zenink-annot-flat-copy.pdf");
+        File.Copy(TestPdf.WriteRectangle("zenink-annot-flat-src2", "0 450 100 150"), source, overwrite: true);
+
+        byte[] before = File.ReadAllBytes(source);
+        await queue.SaveChangesCopyAsync(source, copy, [0], OnePage(0, marks), flatten: true);
+
+        Check("flatten to a copy: the original is not touched at all",
+            File.ReadAllBytes(source).SequenceEqual(before));
+
+        var flattened = fpdfview.FPDF_LoadDocument(copy, null);
+        Check("flatten to a copy: the copy opens", flattened is not null);
+
+        if (flattened is not null)
+        {
+            var page = fpdfview.FPDF_LoadPage(flattened, 0);
+            var plain = Bitmap.Render(page, 1.0, 0, 0, TestPdf.PageWidth, TestPdf.PageHeight);
+
+            int red = 0;
+            for (int i = 0; i + 3 < plain.Length; i += 4)
+            {
+                if (plain[i + 2] > 150 && plain[i + 1] < 110 && plain[i] < 110) red++;
+            }
+
+            Check("flatten to a copy: the marks are the drawing in the copy", red > 500, $"{red} píxeles rojos");
+            Check("flatten to a copy: nothing is left as an annotation",
+                fpdf_annot.FPDFPageGetAnnotCount(page) == 0);
+
+            fpdfview.FPDF_ClosePage(page);
+            fpdfview.FPDF_CloseDocument(flattened);
+        }
+
+        File.Delete(source);
+        File.Delete(copy);
     }
 
     private static int CountRed(TileBitmapData image) =>

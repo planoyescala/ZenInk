@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 
 namespace ZenInk.Tests;
@@ -68,6 +69,232 @@ public static class TestPdf
             withFont: false,
             extraPageEntries: "/Annots[5 0 R]",
             extraObjects: ["<</Type/Annot/Subtype/Square/Rect[200 100 350 250]/C[0 0.35 0.78]/F 4/Border[0 0 3]>>"]);
+
+    /// <summary>
+    /// The same drawing written the way a real plan is: a cross-reference
+    /// stream instead of a table, with the catalogue and the page tucked inside
+    /// a compressed object stream, and the rows packed behind a PNG predictor.
+    ///
+    /// This is not an exotic case to be thorough about — every drawing out of
+    /// Revit or AutoCAD looks like this, and anything that reads only the
+    /// classic table works on every fixture here and on no actual plan.
+    /// </summary>
+    public static string WriteModern(string name)
+    {
+        const string content = "0 0 0 rg\n0 450 100 150 re f\n";
+
+        // Objects 2, 3 and 4 go inside the object stream. The content stream
+        // cannot: a stream is never packed into another one.
+        string[] packed =
+        [
+            "<</Type/Catalog/Pages 3 0 R>>",
+            "<</Type/Pages/Kids[4 0 R]/Count 1>>",
+            $"<</Type/Page/Parent 3 0 R/MediaBox[0 0 {PageWidth} {PageHeight}]/Contents 5 0 R>>",
+        ];
+
+        var bodies = new StringBuilder();
+        var pairs = new StringBuilder();
+        for (int i = 0; i < packed.Length; i++)
+        {
+            pairs.Append($"{i + 2} {bodies.Length} ");
+            bodies.Append(packed[i]).Append('\n');
+        }
+
+        string header = pairs.ToString();
+        byte[] objectStream = Deflate(Encoding.Latin1.GetBytes(header + bodies));
+
+        var output = new MemoryStream();
+        Put(output, "%PDF-1.5\n");
+
+        long objectStreamAt = output.Position;
+        Put(output, $"1 0 obj\n<</Type/ObjStm/N {packed.Length}/First {header.Length}"
+                    + $"/Filter/FlateDecode/Length {objectStream.Length}>>\nstream\n");
+        output.Write(objectStream);
+        Put(output, "\nendstream\nendobj\n");
+
+        long contentAt = output.Position;
+        Put(output, $"5 0 obj\n<</Length {content.Length}>>\nstream\n{content}endstream\nendobj\n");
+
+        long xrefAt = output.Position;
+
+        // type, then two fields whose meaning depends on it: an offset and a
+        // generation for a plain object, the holding stream and an index for a
+        // packed one.
+        var rows = new List<byte[]>
+        {
+            Row(0, 0, 65535),
+            Row(1, objectStreamAt, 0),
+            Row(2, 1, 0),
+            Row(2, 1, 1),
+            Row(2, 1, 2),
+            Row(1, contentAt, 0),
+            Row(1, xrefAt, 0),
+        };
+
+        byte[] table = Deflate(PngUp(rows));
+        Put(output, $"6 0 obj\n<</Type/XRef/Size {rows.Count}/Index[0 {rows.Count}]/W[1 4 2]"
+                    + $"/Root 2 0 R/Filter/FlateDecode/DecodeParms<</Predictor 12/Columns 7>>"
+                    + $"/Length {table.Length}>>\nstream\n");
+        output.Write(table);
+        Put(output, $"\nendstream\nendobj\nstartxref\n{xrefAt}\n%%EOF\n");
+
+        string path = Path.Combine(Path.GetTempPath(), $"{name}.pdf");
+        File.WriteAllBytes(path, output.ToArray());
+        return path;
+    }
+
+    /// <summary>
+    /// A PDF locked with a password, written the oldest and simplest way the
+    /// format allows: the standard security handler, revision 2, RC4 at 40 bits.
+    ///
+    /// Weak on purpose — it is a fixture, not a safe — and it is what every
+    /// reader has understood since 1996, so what it proves is that ZenInk tells
+    /// «locked» apart from «broken», which is the only thing being tested.
+    /// </summary>
+    public static string WriteEncrypted(string name, string password)
+    {
+        const string content = "0 0 0 rg\n0 450 100 150 re f\n";
+        byte[] id = Convert.FromHexString("0123456789ABCDEF0123456789ABCDEF");
+
+        byte[] padded = Pad(password);
+        byte[] owner = Rc4(MD5.HashData(padded)[..5], padded);
+
+        var forKey = new MemoryStream();
+        forKey.Write(padded);
+        forKey.Write(owner);
+        forKey.Write(BitConverter.GetBytes(-1));   // /P, little-endian
+        forKey.Write(id);
+        byte[] fileKey = MD5.HashData(forKey.ToArray())[..5];
+
+        byte[] user = Rc4(fileKey, Padding);
+        byte[] stream = Rc4(ObjectKey(fileKey, 4, 0), Encoding.Latin1.GetBytes(content));
+
+        var objects = new List<string>
+        {
+            "<</Type/Catalog/Pages 2 0 R>>",
+            "<</Type/Pages/Kids[3 0 R]/Count 1>>",
+            $"<</Type/Page/Parent 2 0 R/MediaBox[0 0 {PageWidth} {PageHeight}]/Contents 4 0 R>>",
+            $"<</Length {stream.Length}>>\nstream\n{Encoding.Latin1.GetString(stream)}\nendstream",
+            // The encryption dictionary is the one thing that is never encrypted.
+            $"<</Filter/Standard/V 1/R 2/O <{Convert.ToHexString(owner)}>/U <{Convert.ToHexString(user)}>/P -1>>",
+        };
+
+        var output = new MemoryStream();
+        Put(output, "%PDF-1.4\n");
+
+        var offsets = new List<long>();
+        for (int i = 0; i < objects.Count; i++)
+        {
+            offsets.Add(output.Position);
+            Put(output, $"{i + 1} 0 obj\n{objects[i]}\nendobj\n");
+        }
+
+        long xrefAt = output.Position;
+        Put(output, $"xref\n0 {objects.Count + 1}\n0000000000 65535 f \n");
+        foreach (long offset in offsets)
+        {
+            Put(output, $"{offset:D10} 00000 n \n");
+        }
+        Put(output, $"trailer\n<</Size {objects.Count + 1}/Root 1 0 R/Encrypt {objects.Count} 0 R"
+                    + $"/ID[<{Convert.ToHexString(id)}><{Convert.ToHexString(id)}>]>>\n"
+                    + $"startxref\n{xrefAt}\n%%EOF\n");
+
+        string path = Path.Combine(Path.GetTempPath(), $"{name}.pdf");
+        File.WriteAllBytes(path, output.ToArray());
+        return path;
+    }
+
+    /// <summary>The pad the standard security handler tops every password up with.</summary>
+    private static readonly byte[] Padding =
+    [
+        0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01, 0x08,
+        0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A,
+    ];
+
+    private static byte[] Pad(string password)
+    {
+        var bytes = Encoding.Latin1.GetBytes(password);
+        var padded = new byte[32];
+
+        int taken = Math.Min(32, bytes.Length);
+        Array.Copy(bytes, padded, taken);
+        Array.Copy(Padding, 0, padded, taken, 32 - taken);
+        return padded;
+    }
+
+    /// <summary>Every object gets its own key, mixed from the file's and the object's number.</summary>
+    private static byte[] ObjectKey(byte[] fileKey, int number, int generation)
+    {
+        var mixed = new MemoryStream();
+        mixed.Write(fileKey);
+        mixed.Write([(byte)number, (byte)(number >> 8), (byte)(number >> 16)]);
+        mixed.Write([(byte)generation, (byte)(generation >> 8)]);
+
+        return MD5.HashData(mixed.ToArray())[..Math.Min(fileKey.Length + 5, 16)];
+    }
+
+    private static byte[] Rc4(byte[] key, byte[] data)
+    {
+        var s = new byte[256];
+        for (int i = 0; i < 256; i++) s[i] = (byte)i;
+
+        for (int i = 0, j = 0; i < 256; i++)
+        {
+            j = (j + s[i] + key[i % key.Length]) & 0xFF;
+            (s[i], s[j]) = (s[j], s[i]);
+        }
+
+        var output = new byte[data.Length];
+        for (int n = 0, i = 0, j = 0; n < data.Length; n++)
+        {
+            i = (i + 1) & 0xFF;
+            j = (j + s[i]) & 0xFF;
+            (s[i], s[j]) = (s[j], s[i]);
+            output[n] = (byte)(data[n] ^ s[(s[i] + s[j]) & 0xFF]);
+        }
+        return output;
+    }
+
+    private static void Put(Stream output, string text)
+    {
+        var bytes = Encoding.Latin1.GetBytes(text);
+        output.Write(bytes, 0, bytes.Length);
+    }
+
+    private static byte[] Row(byte kind, long second, int third) =>
+        [kind, (byte)(second >> 24), (byte)(second >> 16), (byte)(second >> 8), (byte)second,
+         (byte)(third >> 8), (byte)third];
+
+    /// <summary>Packs the rows with the PNG "Up" filter, which is what writers use here.</summary>
+    private static byte[] PngUp(List<byte[]> rows)
+    {
+        int columns = rows[0].Length;
+        var packed = new byte[rows.Count * (columns + 1)];
+        var previous = new byte[columns];
+
+        for (int r = 0; r < rows.Count; r++)
+        {
+            int at = r * (columns + 1);
+            packed[at] = 2;
+            for (int i = 0; i < columns; i++)
+            {
+                packed[at + 1 + i] = (byte)(rows[r][i] - previous[i]);
+            }
+            previous = rows[r];
+        }
+        return packed;
+    }
+
+    private static byte[] Deflate(byte[] data)
+    {
+        var output = new MemoryStream();
+        using (var zlib = new System.IO.Compression.ZLibStream(
+                   output, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true))
+        {
+            zlib.Write(data, 0, data.Length);
+        }
+        return output.ToArray();
+    }
 
     private static string Write(
         string name,
