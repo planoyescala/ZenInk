@@ -40,6 +40,26 @@ public static class AppTheme
     }
 
     /// <summary>
+    /// Puts a dialog in the window's theme.
+    ///
+    /// The theme is set on the window's root element, and a dialog is not
+    /// under it: it opens in the popup layer, which hangs off the same XamlRoot
+    /// as a sibling. So it inherits nothing and falls back to the
+    /// Application's theme, which is always light — a white dialog over a dark
+    /// window. Reading <see cref="FrameworkElement.ActualTheme"/> rather than
+    /// <see cref="Current"/> is what makes "según el sistema" come out right:
+    /// as a request, Default means light, and only the root knows what the
+    /// system actually chose.
+    /// </summary>
+    public static void Dress(FrameworkElement dialog)
+    {
+        if (App.Current.MainWindowOrNull?.Content is FrameworkElement root)
+        {
+            dialog.RequestedTheme = root.ActualTheme;
+        }
+    }
+
+    /// <summary>
     /// The caption buttons are drawn by the window frame, not by XAML, so they
     /// have to be recoloured by hand or they stay dark-on-dark after a switch.
     /// </summary>

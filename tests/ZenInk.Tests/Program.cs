@@ -12,6 +12,7 @@ try
 {
     LayoutTests.Run();
     RecentDocumentsTests.Run();
+    PdfAssociationTests.Run();
     PrintLayoutTests.Run();
     RenderTests.Run();
     AnnotationTests.Run();

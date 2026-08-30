@@ -15,6 +15,13 @@ pantalla integrada en una sola herramienta.
 
 Fuera de alcance: comparación y superposición de revisiones de planos.
 
+ZenInk se declara como programa que abre PDF: aparece en «Abrir con» y en la
+lista de aplicaciones predeterminadas de Windows, y ofrece una vez —con un
+«no volver a preguntar»— llevarte a la página donde se elige. Ponerlo como
+predeterminado es cosa del usuario: desde Windows 10, ningún programa puede
+hacerlo por su cuenta. Los planos que se abran así van a pestañas de la misma
+ventana, no a una ventana cada uno.
+
 La medición calibrada estaba fuera de alcance en el planteamiento inicial y
 **se ha vuelto a incluir**; está en "Pendiente".
 
@@ -42,7 +49,13 @@ src/
   ZenInk.Core/      # Motor sin interfaz: PDFium, tiles, texto, geometría de papel
 tests/
   ZenInk.Tests/     # Comprobaciones del motor de renderizado
+tools/              # Fuera de la solución: planos de prueba, capturas e iconos
+design/             # El maestro del logo; de ahí sale todo el juego de iconos
 ```
+
+Los iconos **no se editan a mano**: se regeneran con
+`dotnet run --project tools/ZenInk.Icons`, que escribe los 82 assets del
+paquete desde `design/LogoZenInk.png`. Ver `tools/README.md`.
 
 ## Pruebas
 
@@ -89,9 +102,11 @@ el propio centro y qué coge un clic.
 
 ## Pendiente
 
-**Firma digital de PDF.** Poder firmar un plano con certificado de la FNMT y
-con DNIe, y producir firmas CMS/CAdES. Requisito de trabajo, no un extra:
-un plano visado o entregado a cliente se firma.
+**Firma digital de PDF — lo siguiente, y antes del hito 3.** Poder firmar un
+plano con certificado de la FNMT y con DNIe, y producir firmas CMS/CAdES.
+Requisito de trabajo, no un extra: un plano visado o entregado a cliente se
+firma. Va antes de la gestión de páginas porque decide con qué librería se
+escribe el PDF, y hacerlo al revés obliga a rehacer el hito 3.
 
 Sin decidir todavía, y con un punto que conviene mirar antes de elegir
 librería: PDFsharp no firma, e iText —la opción habitual— es AGPL, lo que

@@ -10,14 +10,14 @@
 
   <Identity
     Name="A4591607-E02F-4E53-8EEA-B13F1FB2EC71"
-    Publisher="CN=AppPublisher"
+    Publisher="CN=plano y escala"
     Version="1.0.0.0" />
 
   <mp:PhoneIdentity PhoneProductId="A4591607-E02F-4E53-8EEA-B13F1FB2EC71" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
     <DisplayName>ZenInk</DisplayName>
-    <PublisherDisplayName>AppPublisher</PublisherDisplayName>
+    <PublisherDisplayName>plano y escala</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
@@ -43,6 +43,29 @@
         <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
       </uap:VisualElements>
+
+      <Extensions>
+        <!--
+            Declara que ZenInk abre PDF. Con esto entra en «Abrir con» y en la
+            lista de aplicaciones predeterminadas de Windows; ponerlo como
+            predeterminado sigue siendo cosa del usuario, que es lo único que
+            Windows permite desde hace diez versiones.
+
+            El icono es el mismo dibujo que el de la aplicación, con nombre
+            propio: el Explorador lo pide en tamaños que el de la aplicación
+            no, y así uno se puede cambiar sin arrastrar al otro.
+        -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="pdf">
+            <uap:DisplayName>Documento PDF</uap:DisplayName>
+            <uap:InfoTip>Abrir con ZenInk</uap:InfoTip>
+            <uap:Logo>Assets\PdfFileType.png</uap:Logo>
+            <uap:SupportedFileTypes>
+              <uap:FileType ContentType="application/pdf">.pdf</uap:FileType>
+            </uap:SupportedFileTypes>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+      </Extensions>
     </Application>
   </Applications>
 

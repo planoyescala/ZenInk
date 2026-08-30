@@ -542,6 +542,17 @@
                                     GroupName="AppTheme"
                                     Text="Oscuro" />
                             </MenuFlyoutSubItem>
+                            <MenuFlyoutSeparator />
+                            <!--
+                                Windows no deja que un programa se ponga como
+                                predeterminado: esto lleva a la página donde se
+                                elige. Está aquí para quien dijo que no volviera
+                                a preguntar y luego cambió de idea.
+                            -->
+                            <MenuFlyoutItem
+                                x:Name="DefaultPdfItem"
+                                Click="OnDefaultPdfClicked"
+                                Text="Abrir los PDF con ZenInk…" />
                         </MenuFlyout>
                     </Button.Flyout>
                 </Button>

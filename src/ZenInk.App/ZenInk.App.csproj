@@ -13,20 +13,26 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!--  Lo que Windows enseña en las propiedades del ejecutable.  -->
+    <Product>ZenInk</Product>
+    <Company>plano y escala</Company>
+    <Authors>plano y escala</Authors>
+    <Copyright>© plano y escala</Copyright>
+    <AssemblyTitle>ZenInk</AssemblyTitle>
+    <Description>Visor y editor de planos PDF</Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="Assets\SplashScreen.scale-200.png" />
-    <Content Include="Assets\LockScreenLogo.scale-200.png" />
-    <Content Include="Assets\Square150x150Logo.scale-200.png" />
-    <Content Include="Assets\Square44x44Logo.scale-200.png" />
-    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
-    <Content Include="Assets\Square44x44Logo.targetsize-48_altform-lightunplated.png" />
-    <Content Include="Assets\StoreLogo.png" />
+    <!--
+      El juego entero entra por comodín. Son ochenta y pico ficheros —cada
+      logo en todos los tamaños que Windows sabe pedir— y los genera el
+      proyecto `tools/ZenInk.Icons`. Enumerarlos a mano era una
+      lista que se quedaba corta en silencio: faltaba el de 36 px, que es el
+      que usa la barra de tareas al 150 %, y Windows lo suplía ampliando el
+      de 24.
+    -->
+    <Content Include="Assets\*.png" />
     <Content Include="Assets\AppIcon.ico" />
-    <!--  El logo tal cual lo lleva la tira de pestañas; los demás son los que pide el paquete.  -->
-    <Content Include="Assets\AppMark.png" />
-    <Content Include="Assets\Wide310x150Logo.scale-200.png" />
   </ItemGroup>
 
   <ItemGroup>

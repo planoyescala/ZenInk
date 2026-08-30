@@ -39,6 +39,13 @@ public sealed partial class MainPage : Page
     /// <summary>Set when the history changed; the start page rebuilds next time it is on screen.</summary>
     private bool _startPageStale = true;
 
+    /// <summary>
+    /// Set once the page has done its start-up work. <c>Loaded</c> can come
+    /// round again, and opening the drawings of the launch a second time — or
+    /// listening for activations twice — would show every sheet twice.
+    /// </summary>
+    private bool _started;
+
     public MainPage()
     {
         InitializeComponent();
@@ -47,7 +54,7 @@ public sealed partial class MainPage : Page
         Loaded += OnLoaded;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         var window = App.Current.MainWindow;
         window.SetTitleBar(TitleBarDragRegion);
@@ -60,7 +67,37 @@ public sealed partial class MainPage : Page
         };
         SizeTitleBarDragRegion();
         AppTheme.Apply(AppTheme.Current, persist: false);
+
+        if (_started) return;
+
+        _started = true;
+
+        // Without a package there is no file association and no settings entry
+        // to send anyone to, so the menu does not offer one either.
+        DefaultPdfItem.Visibility = DefaultPdfApp.IsPackaged() ? Visibility.Visible : Visibility.Collapsed;
+
+        App.Current.FilesActivated += OnFilesActivated;
+        await OpenAllAsync(App.Current.LaunchFiles);
+
+        // After the drawings, never before: this opens a dialog, and one that
+        // stands between the reader and the sheet they double-clicked is a
+        // dialog they will resent.
+        await DefaultPdfApp.OfferAsync(XamlRoot);
     }
+
+    /// <summary>Drawings handed over by a second launch — see <see cref="App.FilesActivated"/>.</summary>
+    private async void OnFilesActivated(IReadOnlyList<string> paths) => await OpenAllAsync(paths);
+
+    private async Task OpenAllAsync(IReadOnlyList<string> paths)
+    {
+        foreach (string path in paths)
+        {
+            await OpenPathInNewTabAsync(path, System.IO.Path.GetFileName(path));
+        }
+    }
+
+    private async void OnDefaultPdfClicked(object sender, RoutedEventArgs e) =>
+        await DefaultPdfApp.OpenSettingsAsync();
 
     /// <summary>
     /// Reserves room for the caption buttons at the end of the tab strip. Their
@@ -310,6 +347,8 @@ public sealed partial class MainPage : Page
             Content = message,
             CloseButtonText = "Cerrar",
         };
+
+        AppTheme.Dress(dialog);
         await dialog.ShowAsync();
     }
 
@@ -337,6 +376,8 @@ public sealed partial class MainPage : Page
             CloseButtonText = "Cancelar",
             DefaultButton = ContentDialogButton.Primary,
         };
+
+        AppTheme.Dress(dialog);
 
         var answer = await dialog.ShowAsync();
         if (answer == ContentDialogResult.None) return;
@@ -550,6 +591,8 @@ public sealed partial class MainPage : Page
             DefaultButton = ContentDialogButton.Close,
         };
 
+        AppTheme.Dress(dialog);
+
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
 
         await ReloadAsync(viewer, path);
@@ -614,6 +657,8 @@ public sealed partial class MainPage : Page
             CloseButtonText = "Cancelar",
             DefaultButton = ContentDialogButton.Close,
         };
+
+        AppTheme.Dress(dialog);
 
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
 

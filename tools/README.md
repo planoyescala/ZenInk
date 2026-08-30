@@ -24,6 +24,29 @@ dotnet run --project tools/ZenInk.Fixtures -- conjunto   # 6 hojas con texto
 
 Escriben a `%TEMP%` salvo que se les dé una ruta como segundo argumento.
 
+## `ZenInk.Icons` — el juego de iconos
+
+Rehace los ochenta y pico iconos de `src/ZenInk.App/Assets` a partir del
+maestro `design/LogoZenInk.png`. Sin argumentos: lo lee, lo recorta, lo escala
+y los escribe.
+
+```bash
+dotnet run --project tools/ZenInk.Icons
+```
+
+**Se le dan a Windows todos los tamaños que sabe pedir**, en vez de unos pocos
+y el trabajo de estirarlos. La barra de tareas pide el icono a 24 píxeles
+efectivos: al 150 % de escala son 36 reales, y con solo un asset de 24 el shell
+lo amplía y el resultado se ve borroso. Ampliar un mapa de bits es lo único que
+no tiene arreglo después, así que la escalera cubre 100, 125, 150, 200 y 400 %
+más una lista de tamaños concretos de 16 a 256. El `.csproj` los recoge por
+comodín justamente porque la lista a mano se quedaba corta en silencio.
+
+Escala promediando en alfa premultiplicado. El maestro lleva blanco debajo de
+sus píxeles transparentes, y cualquier redimensionado que ignore el alfa lo
+arrastra a los bordes como una orla pálida. Se nota primero a 16 px, que es el
+tamaño que nadie mira.
+
 ## `ZenInk.Shots` — mirar las capturas
 
 La app puede capturarse a sí misma (ver «Depurar la interfaz» en `CLAUDE.md`).
