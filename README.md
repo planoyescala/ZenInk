@@ -39,7 +39,9 @@ anotaciones, los objetos de trazado con su transparencia, los objetos de texto y
 el aplanado.
 
 **PDFsharp se probó y se descartó** para la firma y para el hito 3: reescribe el
-archivo entero, así que una segunda firma invalida la primera. Ver `ESTADO.md`.
+archivo entero, así que una segunda firma invalida la primera. El hito 3 acabó
+sin necesitarlo —PDFium mueve, importa y borra páginas—, así que no se usa en
+ninguna parte. Ver `ESTADO.md`.
 
 Todas las dependencias son gratuitas y libres para uso comercial/cerrado. Ver
 `THIRD-PARTY-NOTICES.md` para atribuciones de terceros empaquetadas en los binarios
@@ -108,7 +110,13 @@ el propio centro y qué coge un clic.
       nombre, DNI, fecha y motivo, colocado dibujando un rectángulo y movible
       antes de escribir nada. Importar certificados por el asistente de
       Windows. Por defecto firma en una copia `… signed.pdf`.
-- [ ] Hito 3: gestión de páginas.
+- [x] **Hito 3**: gestión de páginas. Mover, quitar, duplicar y girar hojas
+      desde el panel lateral —arrastrando, con botones, o diciendo a qué hoja
+      van—, insertar hojas de otros PDF (varios archivos de una vez, ordenados
+      por nombre) y hojas en blanco, extraer una selección a un PDF nuevo y
+      dividir el juego en varios. Todo queda pendiente hasta guardar, y entra
+      en el mismo deshacer que las marcas. Además, el **índice de marcadores**
+      del PDF en su propia pestaña del panel.
 - [ ] Hito 4: captura de pantalla integrada.
 - [ ] Comparar revisiones.
 
