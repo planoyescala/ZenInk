@@ -11,6 +11,7 @@ Console.WriteLine("ZenInk engine checks");
 try
 {
     LayoutTests.Run();
+    PageTests.Run();
     RecentDocumentsTests.Run();
     PdfAssociationTests.Run();
     PrintLayoutTests.Run();
@@ -20,6 +21,7 @@ try
     await TextLayerTests.RunAsync();
     await RenderQueueTests.RunAsync();
     await RotationTests.RunAsync();
+    await PageTests.RunAsync();
     await AnnotationTests.RunAsync();
     await SignatureTests.RunAsync();
     await SignatureTests.LockedAsync();

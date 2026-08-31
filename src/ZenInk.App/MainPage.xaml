@@ -792,17 +792,18 @@
                         IsEnabled="False"
                         Style="{StaticResource RailToolStyle}"
                         ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Miniaturas de páginas">
+                        ToolTipService.ToolTip="Panel de hojas">
                         <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M2.8 3.6h6v6h-6Z M11.2 3.6h6v6h-6Z M2.8 11.4h6v6h-6Z M11.2 11.4h6v6h-6Z" />
                     </ToggleButton>
                 </StackPanel>
             </Grid>
 
-            <!--  Miniaturas  -->
-            <rendering:PageThumbnailStrip
-                x:Name="Thumbnails"
+            <!--  Panel de hojas: miniaturas e índice  -->
+            <rendering:PagesPanel
+                x:Name="Pages"
                 Grid.Column="1"
-                Width="196"
+                Width="232"
+                ActionRequested="OnPageActionRequested"
                 Visibility="Collapsed" />
 
             <!--  Lienzo  -->

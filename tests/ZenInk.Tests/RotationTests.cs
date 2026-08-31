@@ -226,7 +226,7 @@ public static class RotationTests
         string copy = Path.Combine(Path.GetTempPath(), "zenink-rotate-save-copy.pdf");
         long originalLength = new FileInfo(source).Length;
 
-        await queue.SaveChangesCopyAsync(source, copy, [1]);
+        await queue.SaveChangesCopyAsync(TestPlan.Turns(source, 1), copy);
 
         Check("a copy is written", File.Exists(copy));
         Check("the original is left alone", new FileInfo(source).Length == originalLength);
@@ -247,7 +247,7 @@ public static class RotationTests
         // Turning twice more must land at 180 relative to the original, not
         // reset to it: the saved turn adds to whatever /Rotate the page had.
         string twice = Path.Combine(Path.GetTempPath(), "zenink-rotate-save-twice.pdf");
-        await queue.SaveChangesCopyAsync(copy, twice, [1]);
+        await queue.SaveChangesCopyAsync(TestPlan.Turns(copy, 1), twice);
         var again = await queue.OpenDocumentAsync(twice);
         Check("a further turn adds to the one already in the file",
             Math.Abs(again.Pages[0].WidthPt - TestPdf.PageWidth) < 0.5f,
@@ -270,7 +270,7 @@ public static class RotationTests
         string path = TestPdf.WriteRectangle("zenink-rotate-inplace", "0 450 100 150");
 
         var document = await queue.OpenDocumentAsync(path);
-        var outcome = await queue.ApplyChangesInPlaceAsync(document.DocumentId, path, [1]);
+        var outcome = await queue.ApplyChangesInPlaceAsync(document.DocumentId, path, TestPlan.Turns(path, 1));
 
         Check("the save reports success", outcome.Saved, outcome.Error);
         Check("the document comes back reopened, under a new id",
@@ -308,7 +308,7 @@ public static class RotationTests
         Check($"hairline mode is in force while saving ({authored} -> {hairline} px)",
             hairline > 0 && hairline < authored / 2);
 
-        await queue.SaveChangesCopyAsync(path, copy, [0]);
+        await queue.SaveChangesCopyAsync(TestPlan.Turns(path, 0), copy);
 
         var saved = await queue.OpenDocumentAsync(copy);
         int savedInk = InkOf(await queue.RequestTileAsync(saved.DocumentId, new TileKey(0, 0, 0, 0), 512));

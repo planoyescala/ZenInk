@@ -39,6 +39,67 @@ public static class TestPdf
     }
 
     /// <summary>
+    /// A set of sheets, each one a different width and each with its ink at a
+    /// different height.
+    ///
+    /// Both on purpose: the width says which sheet a page is without rendering
+    /// anything, and the ink says the drawing travelled with it. A set where
+    /// every sheet looked alike — which is what a real set of plans looks
+    /// like — would let a reordering check pass on a document that never
+    /// moved.
+    /// </summary>
+    public static string WriteSheets(string name, int sheets)
+    {
+        var objects = new List<string> { "<</Type/Catalog/Pages 2 0 R>>", "" };
+
+        var kids = new List<string>();
+        for (int i = 0; i < sheets; i++)
+        {
+            // Page object then content object, so a page's number is 3 + 2i.
+            int page = 3 + (i * 2);
+            kids.Add($"{page} 0 R");
+
+            string content = $"0 0 0 rg\n20 {40 + (i * 60)} 100 40 re f\n";
+            objects.Add($"<</Type/Page/Parent 2 0 R/MediaBox[0 0 {SheetWidth(i)} {PageHeight}]/Contents {page + 1} 0 R>>");
+            objects.Add($"<</Length {content.Length}>>\nstream\n{content}endstream");
+        }
+
+        objects[1] = $"<</Type/Pages/Kids[{string.Join(' ', kids)}]/Count {sheets}>>";
+        return WriteObjects(name, objects);
+    }
+
+    /// <summary>The width of sheet <paramref name="index"/> of a <see cref="WriteSheets"/> set.</summary>
+    public static float SheetWidth(int index) => PageWidth + (index * 10);
+
+    /// <summary>
+    /// Three sheets with an index over them: two headings, the first with a
+    /// child. A set of floor plans out of Revit brings one of these, and
+    /// nothing else in the suite exercises the bookmark tree.
+    /// </summary>
+    public static string WriteOutlined(string name)
+    {
+        var objects = new List<string>
+        {
+            "<</Type/Catalog/Pages 2 0 R/Outlines 9 0 R>>",
+            "<</Type/Pages/Kids[3 0 R 5 0 R 7 0 R]/Count 3>>",
+        };
+
+        for (int i = 0; i < 3; i++)
+        {
+            string content = $"0 0 0 rg\n20 {40 + (i * 60)} 100 40 re f\n";
+            objects.Add($"<</Type/Page/Parent 2 0 R/MediaBox[0 0 {PageWidth} {PageHeight}]/Contents {4 + (i * 2)} 0 R>>");
+            objects.Add($"<</Length {content.Length}>>\nstream\n{content}endstream");
+        }
+
+        objects.Add("<</Type/Outlines/First 10 0 R/Last 12 0 R/Count 3>>");
+        objects.Add("<</Title(Planta baja)/Parent 9 0 R/Dest[3 0 R/Fit]/First 11 0 R/Last 11 0 R/Count 1/Next 12 0 R>>");
+        objects.Add("<</Title(Detalle de escalera)/Parent 10 0 R/Dest[5 0 R/Fit]>>");
+        objects.Add("<</Title(Planta primera)/Parent 9 0 R/Dest[7 0 R/Fit]/Prev 10 0 R>>");
+
+        return WriteObjects(name, objects);
+    }
+
+    /// <summary>
     /// A single page holding stroked lines wide enough that forcing them to
     /// hairline is unmistakable, unlike the sub-point strokes typical of a
     /// real drawing.
@@ -294,6 +355,35 @@ public static class TestPdf
             zlib.Write(data, 0, data.Length);
         }
         return output.ToArray();
+    }
+
+    /// <summary>
+    /// Writes numbered objects out with a classic cross-reference table. Object
+    /// 1 is the catalogue, which is what the trailer points at.
+    /// </summary>
+    private static string WriteObjects(string name, IReadOnlyList<string> objects)
+    {
+        var sb = new StringBuilder();
+        var offsets = new List<int>();
+        sb.Append("%PDF-1.4\n");
+
+        for (int i = 0; i < objects.Count; i++)
+        {
+            offsets.Add(Encoding.ASCII.GetByteCount(sb.ToString()));
+            sb.Append($"{i + 1} 0 obj\n{objects[i]}\nendobj\n");
+        }
+
+        int xrefOffset = Encoding.ASCII.GetByteCount(sb.ToString());
+        sb.Append($"xref\n0 {objects.Count + 1}\n0000000000 65535 f \n");
+        foreach (int offset in offsets)
+        {
+            sb.Append($"{offset:D10} 00000 n \n");
+        }
+        sb.Append($"trailer\n<</Size {objects.Count + 1}/Root 1 0 R>>\nstartxref\n{xrefOffset}\n%%EOF\n");
+
+        string path = Path.Combine(Path.GetTempPath(), $"{name}.pdf");
+        File.WriteAllBytes(path, Encoding.ASCII.GetBytes(sb.ToString()));
+        return path;
     }
 
     private static string Write(

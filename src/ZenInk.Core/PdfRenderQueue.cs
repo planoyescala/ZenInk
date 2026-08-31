@@ -360,7 +360,32 @@ public sealed class PdfRenderQueue : IDisposable
     }
 
     /// <summary>
-    /// Writes the given quarter-turns and marks into the file the document was
+    /// The document's own index of bookmarks, or an empty list if it has none.
+    /// A set of floor plans out of Revit usually brings one.
+    /// </summary>
+    public Task<IReadOnlyList<OutlineEntry>> ReadOutlineAsync(int documentId)
+    {
+        var tcs = new TaskCompletionSource<IReadOnlyList<OutlineEntry>>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        EnqueueControl(() =>
+        {
+            try
+            {
+                tcs.TrySetResult(_documents.TryGetValue(documentId, out var document)
+                    ? PdfOutline.Read(document.Handle)
+                    : []);
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        });
+        return tcs.Task;
+    }
+
+    /// <summary>
+    /// Writes the given arrangement and marks into the file the document was
     /// opened from, then reopens it.
     ///
     /// Reopening is not optional: PDFium holds the source file open, so the new
@@ -373,7 +398,7 @@ public sealed class PdfRenderQueue : IDisposable
     public Task<PdfSaveOutcome> ApplyChangesInPlaceAsync(
         int documentId,
         string path,
-        IReadOnlyList<int> quarterTurns,
+        PagePlan plan,
         IReadOnlyDictionary<int, IReadOnlyList<Annotation>>? annotations = null,
         bool flatten = false)
     {
@@ -386,7 +411,7 @@ public sealed class PdfRenderQueue : IDisposable
 
             try
             {
-                staged = WriteChangesCore(path, path, quarterTurns, annotations, flatten, password);
+                staged = WriteChangesCore(plan, path, annotations, flatten, password);
             }
             catch (Exception ex)
             {
@@ -443,9 +468,8 @@ public sealed class PdfRenderQueue : IDisposable
     /// what lets the reader keep a version whose marks are still marks.
     /// </summary>
     public Task SaveChangesCopyAsync(
-        string sourcePath,
+        PagePlan plan,
         string targetPath,
-        IReadOnlyList<int> quarterTurns,
         IReadOnlyDictionary<int, IReadOnlyList<Annotation>>? annotations = null,
         bool flatten = false,
         string? password = null)
@@ -456,7 +480,7 @@ public sealed class PdfRenderQueue : IDisposable
             string? staged = null;
             try
             {
-                staged = WriteChangesCore(sourcePath, targetPath, quarterTurns, annotations, flatten, password);
+                staged = WriteChangesCore(plan, targetPath, annotations, flatten, password);
                 File.Move(staged, targetPath, overwrite: true);
                 tcs.TrySetResult();
             }
@@ -954,30 +978,39 @@ public sealed class PdfRenderQueue : IDisposable
         _documents.TryGetValue(documentId, out var document) ? document.Password : null;
 
     private static string WriteChangesCore(
-        string sourcePath,
+        PagePlan plan,
         string targetPath,
-        IReadOnlyList<int> quarterTurns,
         IReadOnlyDictionary<int, IReadOnlyList<Annotation>>? annotations,
         bool flatten = false,
         string? password = null)
     {
         string staged = Staging(targetPath);
 
+        // Everything opened along the way, so one place lets go of all of it —
+        // the document being written and whatever files sheets were brought
+        // from.
+        var opened = new List<FpdfDocumentT>();
+        var expected = new PageExpectation[plan.Count];
+
         try
         {
+            var source = plan.Sources[0];
+
             // Its own handle, and its own password with it: a locked document
             // has to be opened again here, and there is nothing to open it with
             // unless the one that worked is carried along.
-            var handle = fpdfview.FPDF_LoadDocument(sourcePath, password)
+            var handle = fpdfview.FPDF_LoadDocument(source.Path, password ?? source.Password)
                 ?? throw new InvalidOperationException(
                     $"No se pudo leer el PDF para guardarlo (PDFium error {fpdfview.FPDF_GetLastError()}).");
+            opened.Add(handle);
 
-            var expected = new PageExpectation[fpdfview.FPDF_GetPageCount(handle)];
             try
             {
+                ArrangePages(handle, plan, opened, password);
+
                 for (int i = 0; i < expected.Length; i++)
                 {
-                    int turns = i < quarterTurns.Count ? quarterTurns[i] & 3 : 0;
+                    int turns = plan[i].QuarterTurns & 3;
                     var marks = annotations is not null && annotations.TryGetValue(i, out var forPage)
                         ? forPage
                         : [];
@@ -1004,6 +1037,8 @@ public sealed class PdfRenderQueue : IDisposable
                         }
 
                         int objects = fpdf_edit.FPDFPageCountObjects(page);
+                        float width = fpdfview.FPDF_GetPageWidthF(page);
+                        float height = fpdfview.FPDF_GetPageHeightF(page);
 
                         if (flatten)
                         {
@@ -1019,7 +1054,7 @@ public sealed class PdfRenderQueue : IDisposable
                             names = [];
                         }
 
-                        expected[i] = new PageExpectation(rotation, names, flatten ? objects : 0);
+                        expected[i] = new PageExpectation(rotation, names, width, height, objects, flatten);
                     }
                     finally
                     {
@@ -1039,7 +1074,10 @@ public sealed class PdfRenderQueue : IDisposable
             }
             finally
             {
-                fpdfview.FPDF_CloseDocument(handle);
+                foreach (var open in opened)
+                {
+                    fpdfview.FPDF_CloseDocument(open);
+                }
             }
 
             if (!ChangesMatch(staged, expected))
@@ -1057,16 +1095,162 @@ public sealed class PdfRenderQueue : IDisposable
     }
 
     /// <summary>
+    /// Brings the document's pages into the order the plan asks for, on the
+    /// handle that is about to be written.
+    ///
+    /// It works on the document itself rather than building a new one, and that
+    /// is the whole point: everything a plan does not describe — the index of
+    /// bookmarks, the form fields, the metadata, the viewer's own preferences —
+    /// stays where it is instead of being left behind by a rebuild. What a
+    /// rearrangement does cost is any signature the file carried: the bytes a
+    /// signature covers are not these bytes any more. The caller says so before
+    /// it gets here.
+    ///
+    /// Three moves, in an order chosen so that no step invalidates the indices
+    /// the next one is counting from: append what is missing, drop what nobody
+    /// asked for, and only then sort.
+    /// </summary>
+    private static void ArrangePages(FpdfDocumentT working, PagePlan plan, List<FpdfDocumentT> opened, string? password)
+    {
+        int original = fpdfview.FPDF_GetPageCount(working);
+
+        // Which page already in the file answers for which sheet of the plan. A
+        // sheet asked for twice is one page in the file, so every copy after the
+        // first has to be made.
+        var answers = new int[plan.Count];
+        var claimed = new bool[original];
+        bool untouched = plan.Count == original;
+
+        for (int i = 0; i < plan.Count; i++)
+        {
+            var slot = plan[i];
+            answers[i] = slot.Source == 0
+                         && slot.PageIndex >= 0
+                         && slot.PageIndex < original
+                         && !claimed[slot.PageIndex]
+                ? slot.PageIndex
+                : -1;
+
+            if (answers[i] >= 0)
+            {
+                claimed[slot.PageIndex] = true;
+            }
+
+            untouched &= answers[i] == i;
+        }
+
+        if (untouched) return;
+
+        // What each page of the working document is destined to be, by sheet
+        // number in the plan; −1 for a page nobody asked for.
+        var sheetOfPage = new List<int>(original);
+        for (int i = 0; i < original; i++) sheetOfPage.Add(-1);
+        for (int i = 0; i < plan.Count; i++)
+        {
+            if (answers[i] >= 0) sheetOfPage[answers[i]] = i;
+        }
+
+        var donors = new Dictionary<int, FpdfDocumentT>();
+
+        // Appending is the one insertion that leaves every page already there at
+        // the index this is still counting from.
+        for (int i = 0; i < plan.Count; i++)
+        {
+            if (answers[i] >= 0) continue;
+
+            var slot = plan[i];
+            int at = sheetOfPage.Count;
+
+            if (slot.IsBlank)
+            {
+                var blank = fpdf_edit.FPDFPageNew(working, at, slot.Size.WidthPt, slot.Size.HeightPt)
+                    ?? throw new InvalidOperationException("No se pudo crear una hoja en blanco.");
+                fpdfview.FPDF_ClosePage(blank);
+            }
+            else
+            {
+                // A copy of a sheet from this same file is read through a second
+                // handle onto the same bytes: PDFium will not import a document
+                // into itself.
+                var donor = Donor(donors, plan, slot.Source, opened, password);
+                int page = slot.PageIndex;
+
+                if (fpdf_ppo.FPDF_ImportPagesByIndex(working, donor, ref page, 1, at) == 0)
+                {
+                    string file = Path.GetFileName(plan.Sources[slot.Source].Path);
+                    throw new InvalidOperationException($"No se pudo traer la hoja {slot.PageIndex + 1} de «{file}».");
+                }
+            }
+
+            sheetOfPage.Add(i);
+        }
+
+        // From the back, so the indices still to be visited do not move.
+        for (int i = sheetOfPage.Count - 1; i >= 0; i--)
+        {
+            if (sheetOfPage[i] >= 0) continue;
+
+            fpdf_edit.FPDFPageDelete(working, i);
+            sheetOfPage.RemoveAt(i);
+        }
+
+        // Sorted from the front, which makes every move a move *down*. That is
+        // not a detail: moving a page to a lower index cannot shift the pages
+        // before the destination, so the destination means the same thing
+        // whether it is read before or after the page is lifted out — and the
+        // documentation does not say which PDFium means.
+        for (int destination = 0; destination < sheetOfPage.Count; destination++)
+        {
+            int at = sheetOfPage.IndexOf(destination);
+            if (at < 0 || at == destination) continue;
+
+            int index = at;
+            if (fpdf_edit.FPDF_MovePages(working, ref index, 1, destination) == 0)
+            {
+                throw new InvalidOperationException($"No se pudo colocar la hoja {destination + 1}.");
+            }
+
+            sheetOfPage.RemoveAt(at);
+            sheetOfPage.Insert(destination, destination);
+        }
+    }
+
+    /// <summary>A file sheets are brought from, opened once however many come out of it.</summary>
+    private static FpdfDocumentT Donor(
+        Dictionary<int, FpdfDocumentT> donors,
+        PagePlan plan,
+        int source,
+        List<FpdfDocumentT> opened,
+        string? password)
+    {
+        if (donors.TryGetValue(source, out var already)) return already;
+
+        var origin = plan.Sources[source];
+        var handle = fpdfview.FPDF_LoadDocument(origin.Path, source == 0 ? password ?? origin.Password : origin.Password)
+            ?? throw new InvalidOperationException(
+                $"No se pudo leer «{Path.GetFileName(origin.Path)}» para traer sus hojas.");
+
+        donors[source] = handle;
+        opened.Add(handle);
+        return handle;
+    }
+
+    /// <summary>
     /// What a written page has to come back with for the save to be trusted.
     ///
-    /// <see cref="LeastObjects"/> is only used by a flatten, where there is
-    /// nothing left to check by name: a page whose marks were burnt in must
-    /// still carry at least the drawing it had before.
+    /// The paper size and the object count are what tell a rearranged document
+    /// apart: in a set where every sheet is the same A0, "the file has twenty
+    /// pages" says nothing about whether they came out in the order asked for.
+    /// A flatten is the one case where the count is allowed to have grown,
+    /// because that is what burning the marks in does.
     /// </summary>
     private readonly record struct PageExpectation(
         int Rotation,
         IReadOnlyList<string> AnnotationNames,
-        int LeastObjects = 0);
+        float WidthPt,
+        float HeightPt,
+        int Objects,
+        bool Flattened);
 
     /// <summary>
     /// Reopens a written file and checks that every page carries the turn and
@@ -1101,10 +1285,18 @@ public sealed class PdfRenderQueue : IDisposable
                         if (!pending.Remove(name)) return false;
                     }
 
+                    // A tenth of a point: paper sizes are written as decimals
+                    // and a round trip through the file need not give back the
+                    // same last digit.
+                    if (Math.Abs(fpdfview.FPDF_GetPageWidthF(page) - expected[i].WidthPt) > 0.1f) return false;
+                    if (Math.Abs(fpdfview.FPDF_GetPageHeightF(page) - expected[i].HeightPt) > 0.1f) return false;
+
                     // After a flatten the marks are part of the drawing, so the
-                    // page must have grown rather than lost anything.
-                    if (expected[i].LeastObjects > 0
-                        && fpdf_edit.FPDFPageCountObjects(page) < expected[i].LeastObjects)
+                    // page must have grown rather than lost anything. Otherwise
+                    // it has to be the same drawing it was, which is what says
+                    // the sheets landed where they were sent.
+                    int objects = fpdf_edit.FPDFPageCountObjects(page);
+                    if (expected[i].Flattened ? objects < expected[i].Objects : objects != expected[i].Objects)
                     {
                         return false;
                     }

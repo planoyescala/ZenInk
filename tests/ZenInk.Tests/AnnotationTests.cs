@@ -564,7 +564,7 @@ public static class AnnotationTests
                 rotationDeg: 30f),
         };
 
-        await queue.SaveChangesCopyAsync(source, copy, [0], OnePage(0, marks));
+        await queue.SaveChangesCopyAsync(TestPlan.Turns(source, 0), copy, OnePage(0, marks));
 
         var reopened = await queue.OpenDocumentAsync(copy);
         var readBack = await queue.ReadAnnotationsAsync(reopened.DocumentId);
@@ -640,7 +640,7 @@ public static class AnnotationTests
                 [new Vector2(30, 40), new Vector2(200, 120)],
                 new AnnotationStyle(AnnotationColor.Red, 2f));
 
-            await queue.SaveChangesCopyAsync(source, copy, [0], OnePage(0, mark));
+            await queue.SaveChangesCopyAsync(TestPlan.Turns(source, 0), copy, OnePage(0, mark));
 
             var reopened = await queue.OpenDocumentAsync(copy);
             var readBack = await queue.ReadAnnotationsAsync(reopened.DocumentId);
@@ -684,7 +684,7 @@ public static class AnnotationTests
             [anchor, new Vector2(140, 160)],
             new AnnotationStyle(AnnotationColor.Red, 2f));
 
-        await queue.SaveChangesCopyAsync(source, copy, [1], OnePage(0, mark));
+        await queue.SaveChangesCopyAsync(TestPlan.Turns(source, 1), copy, OnePage(0, mark));
 
         var reopened = await queue.OpenDocumentAsync(copy);
         var readBack = await queue.ReadAnnotationsAsync(reopened.DocumentId);
@@ -730,7 +730,7 @@ public static class AnnotationTests
             [new Vector2(40, 60), new Vector2(140, 160)],
             new AnnotationStyle(AnnotationColor.Red, 2f));
 
-        await queue.SaveChangesCopyAsync(source, copy, [0], OnePage(0, ours));
+        await queue.SaveChangesCopyAsync(TestPlan.Turns(source, 0), copy, OnePage(0, ours));
 
         var reopened = await queue.OpenDocumentAsync(copy);
         var readBack = await queue.ReadAnnotationsAsync(reopened.DocumentId);
@@ -764,7 +764,7 @@ public static class AnnotationTests
             [new Vector2(40, 300), new Vector2(360, 320)],
             new AnnotationStyle(new AnnotationColor(230, 20, 20), 6f));
 
-        await queue.SaveChangesCopyAsync(source, copy, [0], OnePage(0, mark));
+        await queue.SaveChangesCopyAsync(TestPlan.Turns(source, 0), copy, OnePage(0, mark));
 
         var reopened = await queue.OpenDocumentAsync(copy);
         var render = await queue.RequestPagePreviewAsync(reopened.DocumentId, 0, TestPdf.PageHeight);
@@ -805,7 +805,7 @@ public static class AnnotationTests
             [new Vector2(10, 10), new Vector2(200, 140)],
             new AnnotationStyle(new AnnotationColor(220, 30, 30), 2f, new AnnotationColor(220, 30, 30), 0.35f));
 
-        await queue.SaveChangesCopyAsync(source, copy, [0], OnePage(0, filled));
+        await queue.SaveChangesCopyAsync(TestPlan.Turns(source, 0), copy, OnePage(0, filled));
 
         // Read straight from PDFium, not through the queue: the queue hides
         // ZenInk's own marks, and what is wanted here is the other reader's view.
@@ -859,7 +859,7 @@ public static class AnnotationTests
             new AnnotationStyle(new AnnotationColor(220, 30, 30), 2f, null, 0.35f, 22f),
             text: "Sección A-A'\nrevisar año 1½");
 
-        await queue.SaveChangesCopyAsync(source, copy, [0], OnePage(0, written));
+        await queue.SaveChangesCopyAsync(TestPlan.Turns(source, 0), copy, OnePage(0, written));
 
         var reopened = await queue.OpenDocumentAsync(copy);
         var readBack = await queue.ReadAnnotationsAsync(reopened.DocumentId);
@@ -928,7 +928,7 @@ public static class AnnotationTests
 
         var document = await queue.OpenDocumentAsync(path);
         var outcome = await queue.ApplyChangesInPlaceAsync(
-            document.DocumentId, path, [0], OnePage(0, marks), flatten: true);
+            document.DocumentId, path, TestPlan.Turns(path, 0), OnePage(0, marks), flatten: true);
 
         Check("the flatten reports success", outcome.Saved, outcome.Error);
 
@@ -981,7 +981,7 @@ public static class AnnotationTests
         File.Copy(TestPdf.WriteRectangle("zenink-annot-flat-src2", "0 450 100 150"), source, overwrite: true);
 
         byte[] before = File.ReadAllBytes(source);
-        await queue.SaveChangesCopyAsync(source, copy, [0], OnePage(0, marks), flatten: true);
+        await queue.SaveChangesCopyAsync(TestPlan.Turns(source, 0), copy, OnePage(0, marks), flatten: true);
 
         Check("flatten to a copy: the original is not touched at all",
             File.ReadAllBytes(source).SequenceEqual(before));

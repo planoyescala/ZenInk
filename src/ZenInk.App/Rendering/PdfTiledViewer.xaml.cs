@@ -21,6 +21,17 @@ namespace ZenInk_App.Rendering;
 /// <summary>Where a visible signature was asked to go: the sheet, and the box on it.</summary>
 public sealed record SignatureSpot(int PageIndex, RectPt SheetRect);
 
+/// <summary>Sheets to bring in from one file: which of its pages, and how to open it.</summary>
+public sealed record PageInsertion(string Path, string? Password, IReadOnlyList<int> Pages);
+
+/// <summary>
+/// One sheet as the pages panel sees it: where its picture comes from, how it
+/// stands, and how big it is. Blank paper has no document behind it and no
+/// preview to ask for.
+/// </summary>
+public readonly record struct SheetInfo(
+    int DocumentId, int PageIndex, int QuarterTurns, PdfPageSize Size, bool IsBlank);
+
 /// <summary>
 /// A signature that has been placed but not yet written.
 ///
@@ -251,14 +262,20 @@ public sealed partial class PdfTiledViewer : UserControl
     private int _documentId = -1;
     private bool _isActive = true;
 
-    /// <summary>Sheet sizes as the file reports them, before the reader's own turns.</summary>
-    private IReadOnlyList<PdfPageSize> _sourceSizes = [];
-
     /// <summary>Sheet sizes as laid out, with the axes swapped on a quarter turn.</summary>
     private IReadOnlyList<PdfPageSize> _pageSizes = [];
 
-    /// <summary>The reader's quarter-turn per sheet, on top of whatever /Rotate the file carries.</summary>
-    private int[] _rotations = [];
+    /// <summary>
+    /// The open document behind each file the plan reads from, by path. Sheets
+    /// brought in from elsewhere are drawn straight out of their own file, so
+    /// they are on screen before anything is written — which is what lets the
+    /// reader see what they are about to save.
+    ///
+    /// Keyed by path rather than by the plan's own source numbers because those
+    /// are renumbered when a source falls out of use, and undo can bring one
+    /// back.
+    /// </summary>
+    private readonly Dictionary<string, int> _openSources = new(StringComparer.OrdinalIgnoreCase);
 
     private ViewerLayoutMode _layoutMode = ViewerLayoutMode.Continuous;
     private int _columns = 1;
@@ -388,7 +405,22 @@ public sealed partial class PdfTiledViewer : UserControl
     /// </summary>
     public event EventHandler? TextWanted;
 
-    private readonly record struct TextLayerKey(int PageIndex, int Rotation);
+    /// <summary>
+    /// A text layer belongs to a page of a file, not to a place in the plan:
+    /// two copies of one sheet read the same words, and moving a sheet does not
+    /// change them.
+    /// </summary>
+    private readonly record struct TextLayerKey(int DocumentId, int PageIndex, int Rotation);
+
+    /// <summary>
+    /// Where a sheet of the plan is read from. A blank sheet has no document
+    /// behind it, which is what <see cref="IsBlank"/> means — there is nothing
+    /// to ask PDFium for, and the canvas draws the paper anyway.
+    /// </summary>
+    private readonly record struct SheetOrigin(int Source, int DocumentId, int PageIndex)
+    {
+        public bool IsBlank => DocumentId < 0;
+    }
 
     /// <summary>
     /// One occurrence of the search term. The glyph range is what makes it
@@ -426,10 +458,44 @@ public sealed partial class PdfTiledViewer : UserControl
 
     /// <summary>The reader's quarter-turn on a sheet, for anyone rendering it themselves.</summary>
     public int RotationOf(int pageIndex) =>
-        pageIndex >= 0 && pageIndex < _rotations.Length ? _rotations[pageIndex] & 3 : 0;
+        pageIndex >= 0 && pageIndex < Plan.Count ? Plan[pageIndex].QuarterTurns & 3 : 0;
 
-    /// <summary>Anything on screen that is not yet in the file: turns, marks, or both.</summary>
-    public bool HasUnsavedChanges => HasUnsavedRotations || _annotations.IsDirty;
+    /// <summary>How the sheets stand right now: the order, and where each one comes from.</summary>
+    public PagePlan Plan => _annotations.Plan;
+
+    /// <summary>Anything on screen that is not yet in the file: sheets moved, turns, marks.</summary>
+    public bool HasUnsavedChanges => HasUnsavedRotations || HasPageChanges || _annotations.IsDirty;
+
+    /// <summary>True while sheets have been moved, removed, copied or brought in but not written.</summary>
+    public bool HasPageChanges => Plan.IsRearranged;
+
+    /// <summary>
+    /// Which open document a sheet is drawn from, and which of its pages. A
+    /// sheet that came from another file is read from that file directly.
+    /// </summary>
+    private SheetOrigin OriginOf(int sheet)
+    {
+        if (sheet < 0 || sheet >= Plan.Count) return new SheetOrigin(0, -1, -1);
+
+        var slot = Plan[sheet];
+        if (slot.IsBlank) return new SheetOrigin(PageSlot.BlankSource, -1, -1);
+        if (slot.Source == 0) return new SheetOrigin(0, _documentId, slot.PageIndex);
+
+        string path = Plan.Sources[slot.Source].Path;
+        return _openSources.TryGetValue(path, out int documentId)
+            ? new SheetOrigin(slot.Source, documentId, slot.PageIndex)
+            : new SheetOrigin(slot.Source, -1, -1);
+    }
+
+    /// <summary>A sheet's size as its file reports it, before the reader's own turn.</summary>
+    private PdfPageSize SheetSize(int sheet, PdfPageSize fallback) =>
+        sheet >= 0 && sheet < Plan.Count ? Plan[sheet].Size : fallback;
+
+    private TextLayerKey TextKeyFor(int sheet)
+    {
+        var origin = OriginOf(sheet);
+        return new TextLayerKey(origin.DocumentId, origin.PageIndex, RotationOf(sheet));
+    }
 
     /// <summary>The marks on this document. The panel reads it; nothing outside changes it.</summary>
     public AnnotationStore Annotations => _annotations;
@@ -519,14 +585,25 @@ public sealed partial class PdfTiledViewer : UserControl
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Takes back the last mark or change to one, and shows the sheet it was on.</summary>
+    /// <summary>Takes back the last change — a mark, or the sheets moving — and shows where it was.</summary>
     public void UndoAnnotation() => StepHistory(_annotations.Undo());
 
     public void RedoAnnotation() => StepHistory(_annotations.Redo());
 
-    private void StepHistory(int pageIndex)
+    private void StepHistory(EditStep step)
     {
-        if (pageIndex < 0) return;
+        if (!step.Happened) return;
+
+        if (step.Rearranged)
+        {
+            // The sheets are somewhere else now, so everything measured against
+            // the old order has to be measured again.
+            AdoptPlan();
+            Canvas.Invalidate();
+            return;
+        }
+
+        int pageIndex = step.PageIndex;
 
         // The mark that was selected may be the one that just vanished.
         if (_selected is { } selected && !_annotations.TryFind(selected.Id, out _, out _))
@@ -557,17 +634,7 @@ public sealed partial class PdfTiledViewer : UserControl
     }
 
     /// <summary>True while a turn is on screen but not yet written to the file.</summary>
-    public bool HasUnsavedRotations
-    {
-        get
-        {
-            foreach (int rotation in _rotations)
-            {
-                if ((rotation & 3) != 0) return true;
-            }
-            return false;
-        }
-    }
+    public bool HasUnsavedRotations => Plan.HasTurns;
 
     /// <summary>
     /// In single-sheet mode the page is whichever one is laid out; in
@@ -800,11 +867,11 @@ public sealed partial class PdfTiledViewer : UserControl
         ClearSelection();
         ClearAnnotationSelection();
         _annotations.Clear();
+        CloseExtraSources();
         ResetSearch();
 
-        _sourceSizes = info.Pages;
-        _rotations = new int[info.Pages.Count];
-        _pageSizes = BuildEffectiveSizes();
+        _annotations.LoadPlan(PagePlan.Identity(info.Pages, path, password));
+        _pageSizes = Plan.EffectiveSizes();
         _currentPageIndex = 0;
         _layout = _layoutMode == ViewerLayoutMode.SinglePage
             ? DocumentLayout.SinglePage(_pageSizes, 0, _columns)
@@ -876,63 +943,241 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private Point ViewportCentre() => new(Canvas.ActualWidth / 2, Canvas.ActualHeight / 2);
 
-    // --- rotation -------------------------------------------------------
+    // --- sheets ---------------------------------------------------------
 
     /// <summary>Turns the sheet in view. Positive is clockwise, in quarter turns.</summary>
-    public void RotateCurrentPage(int quarterTurns) => Rotate([CurrentPageIndex], quarterTurns);
+    public void RotateCurrentPage(int quarterTurns) => RotatePages([CurrentPageIndex], quarterTurns);
 
     /// <summary>Turns every sheet in the document by the same amount.</summary>
-    public void RotateAllPages(int quarterTurns) => Rotate(Enumerable.Range(0, _rotations.Length), quarterTurns);
+    public void RotateAllPages(int quarterTurns) => RotatePages([.. Enumerable.Range(0, Plan.Count)], quarterTurns);
 
     /// <summary>
-    /// Applies a turn to a set of sheets. The tiles of the old orientation stay
-    /// cached under their own key, so turning a sheet back is instant; only the
-    /// text of the turned sheets is dropped, since its boxes are the one thing
-    /// a turn genuinely invalidates.
+    /// Turns a set of sheets. The tiles of the old orientation stay cached
+    /// under their own key, so turning a sheet back is instant; only the text
+    /// of the turned sheets is dropped, since its boxes are the one thing a
+    /// turn genuinely invalidates.
     /// </summary>
-    private void Rotate(IEnumerable<int> pageIndices, int quarterTurns)
-    {
-        if (_rotations.Length == 0) return;
+    public void RotatePages(IReadOnlyCollection<int> sheets, int quarterTurns) =>
+        Rearrange(Plan.Rotate(sheets, quarterTurns));
 
-        bool changed = false;
-        foreach (int index in pageIndices)
+    /// <summary>
+    /// Moves sheets so they sit together starting at
+    /// <paramref name="destination"/>, which is read against the order as it is
+    /// now — the gap the reader is pointing at.
+    /// </summary>
+    public void MovePages(IReadOnlyCollection<int> sheets, int destination) =>
+        Rearrange(Plan.Move(sheets, destination));
+
+    /// <summary>
+    /// Moves sheets so the first of them becomes sheet
+    /// <paramref name="landing"/> — a sheet number in, not a gap.
+    /// </summary>
+    public void MovePagesTo(IReadOnlyCollection<int> sheets, int landing) =>
+        Rearrange(Plan.MoveTo(sheets, landing));
+
+    /// <summary>
+    /// The sheets in exactly this order, named by where they are now. This is
+    /// what a drag in the pages panel leaves behind.
+    /// </summary>
+    public void ReorderPages(IReadOnlyList<int> order) => Rearrange(Plan.Reorder(order));
+
+    /// <summary>Takes sheets out. The last sheet of a document cannot go: the caller checks.</summary>
+    public void RemovePages(IReadOnlyCollection<int> sheets) => Rearrange(Plan.Remove(sheets));
+
+    /// <summary>
+    /// Every sheet as the pages panel needs it: which open document and page it
+    /// is drawn from, how it is turned, and how big it ends up. One list rather
+    /// than a question per sheet, because the panel rebuilds all of it at once.
+    /// </summary>
+    public IReadOnlyList<SheetInfo> Sheets
+    {
+        get
         {
-            if (index < 0 || index >= _rotations.Length) continue;
-            _rotations[index] = (_rotations[index] + quarterTurns) & 3;
-            changed = true;
+            var sheets = new SheetInfo[Plan.Count];
+            for (int i = 0; i < sheets.Length; i++)
+            {
+                var origin = OriginOf(i);
+                var slot = Plan[i];
+                sheets[i] = new SheetInfo(
+                    origin.DocumentId, origin.PageIndex, slot.QuarterTurns, slot.EffectiveSize, slot.IsBlank);
+            }
+            return sheets;
+        }
+    }
+
+    /// <summary>The document's own index of bookmarks, or an empty list.</summary>
+    public Task<IReadOnlyList<OutlineEntry>> ReadOutlineAsync() =>
+        _documentId < 0
+            ? Task.FromResult<IReadOnlyList<OutlineEntry>>([])
+            : _queue.ReadOutlineAsync(_documentId);
+
+    /// <summary>Puts a copy of each sheet straight behind the last of them, marks included.</summary>
+    public void DuplicatePages(IReadOnlyCollection<int> sheets) => Rearrange(Plan.Duplicate(sheets));
+
+    /// <summary>Puts blank paper in.</summary>
+    public void InsertBlankPages(int destination, PdfPageSize size, int count = 1) =>
+        Rearrange(Plan.InsertBlank(destination, size, count));
+
+    /// <summary>
+    /// Brings sheets in from another PDF. The file is opened and stays open, so
+    /// its sheets are on screen straight away rather than after a save — and so
+    /// their own marks come across editable.
+    /// </summary>
+    public Task InsertPagesAsync(int destination, string path, IReadOnlyList<int> pages, string? password = null) =>
+        InsertPagesAsync(destination, [new PageInsertion(path, password, pages)]);
+
+    /// <summary>
+    /// Brings sheets in from several PDFs at once, in the order given — which
+    /// is the ordinary way to build a set out of a folder of one-sheet
+    /// drawings.
+    ///
+    /// One rearrangement for the whole batch, not one per file: picking
+    /// fourteen drawings was one act, so one step back has to undo it.
+    /// </summary>
+    public async Task InsertPagesAsync(int destination, IReadOnlyList<PageInsertion> batch)
+    {
+        var batches = new List<PageBatch>(batch.Count);
+        var opened = new List<(int DocumentId, int Count)>(batch.Count);
+
+        foreach (var insertion in batch)
+        {
+            var info = await _queue.OpenDocumentAsync(insertion.Path, insertion.Password);
+
+            // Opened twice — a second batch from the same file — means letting
+            // the newcomer go: the sheets already on screen are drawn from the
+            // first.
+            if (!_openSources.TryAdd(insertion.Path, info.DocumentId))
+            {
+                _ = _queue.CloseDocumentAsync(info.DocumentId);
+            }
+
+            var brought = new List<(int, PdfPageSize)>(insertion.Pages.Count);
+            foreach (int page in insertion.Pages)
+            {
+                if (page >= 0 && page < info.Pages.Count) brought.Add((page, info.Pages[page]));
+            }
+            if (brought.Count == 0) continue;
+
+            batches.Add(new PageBatch(new PagePlanSource(insertion.Path, insertion.Password), brought));
+            opened.Add((_openSources[insertion.Path], brought.Count));
         }
 
-        if (!changed) return;
+        if (batches.Count == 0) return;
 
+        int at = Math.Clamp(destination, 0, Plan.Count);
+        Rearrange(Plan.InsertMany(at, batches));
+
+        // Marks the other files already carried, so a reviewed sheet arrives
+        // reviewed. Read after the sheets are placed, since where they landed
+        // is what says which slots to put them on.
+        int generation = _documentGeneration;
+        foreach (var (documentId, count) in opened)
+        {
+            await AdoptForeignMarksAsync(documentId, at, count, generation);
+            at += count;
+        }
+    }
+
+    private async Task AdoptForeignMarksAsync(int documentId, int firstSheet, int count, int generation)
+    {
+        try
+        {
+            var marks = await _queue.ReadAnnotationsAsync(documentId);
+            if (generation != _documentGeneration || marks.Count == 0) return;
+
+            for (int i = 0; i < count; i++)
+            {
+                int sheet = firstSheet + i;
+                if (sheet >= Plan.Count) break;
+                if (!marks.TryGetValue(Plan[sheet].PageIndex, out var forPage) || forPage.Count == 0) continue;
+
+                foreach (var mark in forPage)
+                {
+                    _annotations.Add(sheet, mark);
+                }
+            }
+
+            Canvas.Invalidate();
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            // A sheet whose marks cannot be read is still a sheet worth having.
+            System.Diagnostics.Debug.WriteLine($"ZenInk: no se pudieron leer las marcas de las hojas traídas: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Writes the chosen sheets to a file of their own, with their turns and
+    /// their marks. Nothing here touches the document in hand.
+    /// </summary>
+    public Task ExtractPagesAsync(IReadOnlyCollection<int> sheets, string targetPath)
+    {
+        var edit = Plan.Keep(sheets);
+        return _queue.SaveChangesCopyAsync(
+            edit.Plan.Compacted(),
+            targetPath,
+            RemapMarks(edit),
+            password: Plan.Sources[0].Password);
+    }
+
+    /// <summary>The marks as they would be keyed if the plan were rearranged this way.</summary>
+    private Dictionary<int, IReadOnlyList<Annotation>> RemapMarks(PageEdit edit)
+    {
+        var marks = new Dictionary<int, IReadOnlyList<Annotation>>();
+        for (int i = 0; i < edit.OriginOfNew.Length; i++)
+        {
+            int origin = edit.OriginOfNew[i];
+            if (origin < 0) continue;
+
+            var forPage = _annotations.ForPage(origin);
+            if (forPage.Count > 0) marks[i] = forPage;
+        }
+        return marks;
+    }
+
+    /// <summary>
+    /// Takes a rearrangement on, and puts back everything that was measured
+    /// against the old order: the layout, the text selection, the search.
+    /// </summary>
+    private void Rearrange(PageEdit edit)
+    {
+        if (edit.Plan.Count == 0 || ReferenceEquals(edit.Plan, Plan)) return;
+
+        _annotations.Rearrange(edit);
+        AdoptPlan();
+    }
+
+    private void AdoptPlan()
+    {
         StopZoomGlide();
-        _pageSizes = BuildEffectiveSizes();
+        _pageSizes = Plan.EffectiveSizes();
         ClearSelection();
+        ClearAnnotationSelection();
 
-        // Hit rectangles are in page-local space, so a turn moves them. The
-        // ranges would survive, but rescanning is simpler than repairing them
-        // and a turn is a deliberate, occasional act.
+        // Hit rectangles are in page-local space, so a turn moves them and a
+        // move renumbers them. The ranges would survive a turn, but rescanning
+        // is simpler than repairing them and rearranging is a deliberate,
+        // occasional act.
         if (_searchQuery.Length > 0)
         {
             RestartSearch();
         }
 
-        int page = CurrentPageIndex;
-        _currentPageIndex = page;
+        _currentPageIndex = Math.Clamp(_currentPageIndex, 0, Math.Max(0, Plan.Count - 1));
         RebuildLayout();
         PagesChanged?.Invoke(this, EventArgs.Empty);
+        ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private PdfPageSize[] BuildEffectiveSizes()
+    /// <summary>Lets go of the files sheets were brought from. The document's own is not one of them.</summary>
+    private void CloseExtraSources()
     {
-        var sizes = new PdfPageSize[_sourceSizes.Count];
-        for (int i = 0; i < sizes.Length; i++)
+        foreach (int documentId in _openSources.Values)
         {
-            var size = _sourceSizes[i];
-            sizes[i] = (_rotations[i] & 1) == 1
-                ? new PdfPageSize(size.HeightPt, size.WidthPt)
-                : size;
+            _ = _queue.CloseDocumentAsync(documentId);
         }
-        return sizes;
+        _openSources.Clear();
     }
 
     /// <summary>
@@ -945,7 +1190,7 @@ public sealed partial class PdfTiledViewer : UserControl
         if (SourcePath is not { } path || _documentId < 0) return "El documento no tiene un archivo asociado.";
 
         bool turned = HasUnsavedRotations;
-        var outcome = await _queue.ApplyChangesInPlaceAsync(_documentId, path, _rotations, _annotations.Snapshot());
+        var outcome = await _queue.ApplyChangesInPlaceAsync(_documentId, path, Plan, _annotations.Snapshot());
         AdoptReopenedDocument(outcome.Document);
 
         if (!outcome.Saved) return outcome.Error;
@@ -980,7 +1225,7 @@ public sealed partial class PdfTiledViewer : UserControl
         if (SourcePath is not { } path || _documentId < 0) return "El documento no tiene un archivo asociado.";
 
         var outcome = await _queue.ApplyChangesInPlaceAsync(
-            _documentId, path, _rotations, _annotations.Snapshot(), flatten: true);
+            _documentId, path, Plan, _annotations.Snapshot(), flatten: true);
 
         AdoptReopenedDocument(outcome.Document);
         if (!outcome.Saved) return outcome.Error;
@@ -1002,8 +1247,8 @@ public sealed partial class PdfTiledViewer : UserControl
     /// </summary>
     public Task SaveChangesCopyAsync(string targetPath, bool flatten = false)
     {
-        if (SourcePath is not { } path) throw new InvalidOperationException("El documento no tiene un archivo asociado.");
-        return _queue.SaveChangesCopyAsync(path, targetPath, _rotations, _annotations.Snapshot(), flatten);
+        if (SourcePath is null) throw new InvalidOperationException("El documento no tiene un archivo asociado.");
+        return _queue.SaveChangesCopyAsync(Plan, targetPath, _annotations.Snapshot(), flatten);
     }
 
     /// <summary>
@@ -1119,9 +1364,12 @@ public sealed partial class PdfTiledViewer : UserControl
         _textLru.Clear();
         _textInFlight.Clear();
 
-        _sourceSizes = info.Pages;
-        _rotations = new int[info.Pages.Count];
-        _pageSizes = BuildEffectiveSizes();
+        // The sheets now stand in the file the way they stand on screen, so the
+        // plan starts over from what came back: nothing moved, nothing turned.
+        // That is what lets the view stay put across a save.
+        _annotations.LoadPlan(PagePlan.Identity(info.Pages, SourcePath ?? string.Empty, Plan.Sources[0].Password));
+        CloseExtraSources();
+        _pageSizes = Plan.EffectiveSizes();
 
         if (_thinLines)
         {
@@ -1132,6 +1380,11 @@ public sealed partial class PdfTiledViewer : UserControl
         {
             RestartSearch();
         }
+
+        // A save that moved sheets gives back a different number of them, so
+        // the strip has to be measured again rather than only redrawn.
+        _currentPageIndex = Math.Clamp(_currentPageIndex, 0, Math.Max(0, Plan.Count - 1));
+        RebuildLayout();
 
         Canvas.Invalidate();
         PagesChanged?.Invoke(this, EventArgs.Empty);
@@ -1148,7 +1401,7 @@ public sealed partial class PdfTiledViewer : UserControl
         int pageIndex = CurrentPageIndex;
         EnsureTextLayer(pageIndex);
 
-        if (!_textLayers.TryGetValue(new TextLayerKey(pageIndex, RotationOf(pageIndex)), out var layer)
+        if (!_textLayers.TryGetValue(TextKeyFor(pageIndex), out var layer)
             || layer.Count == 0)
         {
             return;
@@ -1164,7 +1417,7 @@ public sealed partial class PdfTiledViewer : UserControl
     public string? GetSelectedText()
     {
         if (!HasSelection) return null;
-        if (!_textLayers.TryGetValue(new TextLayerKey(_selectionPage, RotationOf(_selectionPage)), out var layer))
+        if (!_textLayers.TryGetValue(TextKeyFor(_selectionPage), out var layer))
         {
             return null;
         }
@@ -1235,11 +1488,10 @@ public sealed partial class PdfTiledViewer : UserControl
             _ = _queue.CloseDocumentAsync(_documentId);
             _documentId = -1;
         }
+        CloseExtraSources();
 
         _layout = null;
-        _sourceSizes = [];
         _pageSizes = [];
-        _rotations = [];
         Canvas.RemoveFromVisualTree();
     }
 
@@ -2063,8 +2315,8 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private Vector2 ToSheetPoint(PageBox page, Vector2 local)
     {
-        var sheet = _sourceSizes.Count > page.Index
-            ? _sourceSizes[page.Index]
+        var sheet = Plan.Count > page.Index
+            ? Plan[page.Index].Size
             : new PdfPageSize(page.WidthPt, page.HeightPt);
 
         return SheetTurn.ToSheet(local, sheet.WidthPt, sheet.HeightPt, RotationOf(page.Index));
@@ -2269,13 +2521,13 @@ public sealed partial class PdfTiledViewer : UserControl
     private void FinishHighlight()
     {
         if (_selectionPage < 0 || _selectionAnchor < 0) return;
-        if (!_textLayers.TryGetValue(new TextLayerKey(_selectionPage, RotationOf(_selectionPage)), out var layer))
+        if (!_textLayers.TryGetValue(TextKeyFor(_selectionPage), out var layer))
         {
             return;
         }
 
-        var sheet = _sourceSizes.Count > _selectionPage
-            ? _sourceSizes[_selectionPage]
+        var sheet = Plan.Count > _selectionPage
+            ? Plan[_selectionPage].Size
             : new PdfPageSize(0, 0);
         int turn = RotationOf(_selectionPage);
 
@@ -2561,7 +2813,7 @@ public sealed partial class PdfTiledViewer : UserControl
     private void BeginSelection(Point position)
     {
         if (!TryHitPage(position, out var page, out float localX, out float localY)) return;
-        if (!_textLayers.TryGetValue(new TextLayerKey(page.Index, RotationOf(page.Index)), out var layer)) return;
+        if (!_textLayers.TryGetValue(TextKeyFor(page.Index), out var layer)) return;
 
         int index = layer.HitTest(localX, localY, SelectionSnapPt);
         if (index < 0)
@@ -2587,7 +2839,7 @@ public sealed partial class PdfTiledViewer : UserControl
 
         // Selection stays within the page it started on.
         if (page.Index != _selectionPage) return;
-        if (!_textLayers.TryGetValue(new TextLayerKey(_selectionPage, RotationOf(_selectionPage)), out var layer))
+        if (!_textLayers.TryGetValue(TextKeyFor(_selectionPage), out var layer))
         {
             return;
         }
@@ -2700,6 +2952,9 @@ public sealed partial class PdfTiledViewer : UserControl
         double bottom = Math.Min(page.HeightPt, view.Bottom - page.YPt);
         if (right <= left || bottom <= top) return;
 
+        var origin = OriginOf(page.Index);
+        if (origin.IsBlank) return;
+
         int rotation = RotationOf(page.Index);
         int colStart = (int)Math.Floor(left / tilePt);
         int colEnd = (int)Math.Floor((right - 1e-6) / tilePt);
@@ -2710,10 +2965,10 @@ public sealed partial class PdfTiledViewer : UserControl
         {
             for (int col = colStart; col <= colEnd; col++)
             {
-                var key = new TileKey(page.Index, level, col, row, rotation);
+                var key = new TileKey(origin.PageIndex, level, col, row, rotation, origin.DocumentId);
                 if (_cache.TryGet(key, out _)) continue;
 
-                RequestTile(key);
+                RequestTile(key, origin.DocumentId);
             }
         }
     }
@@ -2755,6 +3010,11 @@ public sealed partial class PdfTiledViewer : UserControl
         double bottom = Math.Min(page.HeightPt, view.Bottom - page.YPt);
         if (right <= left || bottom <= top) return;
 
+        // Blank paper has no file behind it: the sheet itself is already drawn,
+        // and there is nothing to ask PDFium for.
+        var origin = OriginOf(page.Index);
+        if (origin.IsBlank) return;
+
         int rotation = RotationOf(page.Index);
         int colStart = (int)Math.Floor(left / tilePt);
         int colEnd = (int)Math.Floor((right - 1e-6) / tilePt);
@@ -2772,13 +3032,13 @@ public sealed partial class PdfTiledViewer : UserControl
 
             for (int col = colStart; col <= colEnd; col++)
             {
-                var key = new TileKey(page.Index, level, col, row, rotation);
+                var key = new TileKey(origin.PageIndex, level, col, row, rotation, origin.DocumentId);
 
                 if (!_cache.TryGet(key, out var bitmap))
                 {
                     if (requestMissing)
                     {
-                        RequestTile(key);
+                        RequestTile(key, origin.DocumentId);
                     }
                     continue;
                 }
@@ -2806,7 +3066,7 @@ public sealed partial class PdfTiledViewer : UserControl
     private void DrawSelection(CanvasDrawingSession ds, PageBox page)
     {
         if (!HasSelection || page.Index != _selectionPage) return;
-        if (!_textLayers.TryGetValue(new TextLayerKey(_selectionPage, RotationOf(_selectionPage)), out var layer))
+        if (!_textLayers.TryGetValue(TextKeyFor(_selectionPage), out var layer))
         {
             return;
         }
@@ -2855,7 +3115,7 @@ public sealed partial class PdfTiledViewer : UserControl
     /// </summary>
     private SheetPlacement PlacementOf(PageBox page)
     {
-        var sheet = _sourceSizes.Count > page.Index ? _sourceSizes[page.Index] : new PdfPageSize(page.WidthPt, page.HeightPt);
+        var sheet = SheetSize(page.Index, new PdfPageSize(page.WidthPt, page.HeightPt));
 
         return new SheetPlacement(
             sheet.WidthPt,
@@ -3001,10 +3261,10 @@ public sealed partial class PdfTiledViewer : UserControl
         Math.Max(0, (run.Right - run.Left) * _scale),
         Math.Max(0, (run.Bottom - run.Top) * _scale));
 
-    private void RequestTile(TileKey key)
+    private void RequestTile(TileKey key, int documentId)
     {
-        if (_documentId < 0 || !_inFlight.Add(key)) return;
-        _ = LoadTileAsync(key, _documentId, _documentGeneration);
+        if (documentId < 0 || !_inFlight.Add(key)) return;
+        _ = LoadTileAsync(key, documentId, _documentGeneration);
     }
 
     private async Task LoadTileAsync(TileKey key, int documentId, int generation)
@@ -3039,9 +3299,9 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private void EnsureTextLayer(int pageIndex)
     {
-        var key = new TextLayerKey(pageIndex, RotationOf(pageIndex));
-        if (_documentId < 0 || _textLayers.ContainsKey(key) || !_textInFlight.Add(key)) return;
-        _ = LoadTextLayerAsync(key, _documentId, _documentGeneration);
+        var key = TextKeyFor(pageIndex);
+        if (key.DocumentId < 0 || _textLayers.ContainsKey(key) || !_textInFlight.Add(key)) return;
+        _ = LoadTextLayerAsync(key, key.DocumentId, _documentGeneration);
     }
 
     private async Task LoadTextLayerAsync(TextLayerKey key, int documentId, int generation)
@@ -3224,8 +3484,11 @@ public sealed partial class PdfTiledViewer : UserControl
         {
             if (generation != _searchGeneration || documentGeneration != _documentGeneration) return;
 
-            var key = new TextLayerKey(pageIndex, RotationOf(pageIndex));
+            var key = TextKeyFor(pageIndex);
             PageTextLayer layer;
+
+            // Blank paper carries no words; there is nothing to ask for.
+            if (key.DocumentId < 0) continue;
 
             if (_textLayers.TryGetValue(key, out var cached))
             {
@@ -3235,7 +3498,7 @@ public sealed partial class PdfTiledViewer : UserControl
             {
                 try
                 {
-                    layer = await _queue.RequestTextLayerAsync(_documentId, key.PageIndex, key.Rotation);
+                    layer = await _queue.RequestTextLayerAsync(key.DocumentId, key.PageIndex, key.Rotation);
                 }
                 catch (Exception ex)
                 {

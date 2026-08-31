@@ -51,12 +51,22 @@ public sealed partial class MainPage
             new("Página a página", "", "suelta individual", () => OnSingleModeClicked(this, empty)),
             new("Una página de ancho", "", "columna", () => OnOneColumnClicked(this, empty)),
             new("Dos páginas de ancho", "", "columnas doble libro", () => OnTwoColumnsClicked(this, empty)),
-            new("Miniaturas", "", "panel lateral páginas", () => OnThumbnailsClicked(this, empty)),
+            new("Panel de hojas", "", "miniaturas lateral páginas índice marcadores", () => OnThumbnailsClicked(this, empty)),
 
             new("Girar la página a la izquierda", "", "rotar", () => OnRotateLeftClicked(this, empty)),
             new("Girar la página a la derecha", "", "rotar", () => OnRotateRightClicked(this, empty)),
             new("Girar todas a la izquierda", "", "rotar todo", () => OnRotateAllLeftClicked(this, empty)),
             new("Girar todas a la derecha", "", "rotar todo", () => OnRotateAllRightClicked(this, empty)),
+
+            new("Subir la hoja", "Alt+↑", "mover reordenar antes arriba", () => Pages.Run(PageAction.MoveUp)),
+            new("Bajar la hoja", "Alt+↓", "mover reordenar después abajo", () => Pages.Run(PageAction.MoveDown)),
+            new("Mover la hoja a…", "", "llevar posición número reordenar colocar", () => Pages.Run(PageAction.MoveTo)),
+            new("Duplicar la hoja", "", "copiar página repetir", () => Pages.Run(PageAction.Duplicate)),
+            new("Quitar la hoja del documento", "", "borrar eliminar página suprimir", () => Pages.Run(PageAction.Delete)),
+            new("Insertar hojas de otro PDF…", "", "añadir traer combinar unir juntar merge", () => Pages.Run(PageAction.InsertFromFile)),
+            new("Insertar una hoja en blanco…", "", "añadir papel vacía nueva", () => Pages.Run(PageAction.InsertBlank)),
+            new("Extraer hojas a un PDF nuevo…", "", "sacar separar exportar páginas", () => Pages.Run(PageAction.Extract)),
+            new("Dividir el documento…", "", "partir separar trocear split", () => Pages.Run(PageAction.Split)),
 
             new("Seleccionar toda la página", "", "todo copiar", () => OnSelectAllClicked(this, empty)),
             new("Copiar la selección", "Ctrl+C", "portapapeles", () => OnCopySelectionClicked(this, empty)),

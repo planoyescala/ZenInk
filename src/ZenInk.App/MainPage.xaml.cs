@@ -417,7 +417,7 @@ public sealed partial class MainPage : Page
     private void ShowViewer(PdfTiledViewer? viewer)
     {
         ViewerPresenter.Content = viewer;
-        Thumbnails.Attach(viewer);
+        Pages.Attach(viewer);
         viewer?.SetActive(true);
     }
 
@@ -493,7 +493,7 @@ public sealed partial class MainPage : Page
             if (ReferenceEquals(ViewerPresenter.Content, viewer))
             {
                 ViewerPresenter.Content = null;
-                Thumbnails.Attach(null);
+                Pages.Attach(null);
             }
 
             viewer.ViewChanged -= OnViewerViewChanged;
@@ -701,6 +701,7 @@ public sealed partial class MainPage : Page
     private async Task SaveDocumentAsync()
     {
         if (ActiveViewer is not { } viewer || !viewer.HasUnsavedChanges) return;
+        if (!await ConfirmRearrangementAsync(viewer)) return;
 
         using (BusyScope("Guardando…"))
         {
@@ -712,6 +713,547 @@ public sealed partial class MainPage : Page
         }
 
         UpdateChrome();
+    }
+
+    // --- managing the sheets ---------------------------------------------
+
+    /// <summary>Paper the reader can add. Sizes in points, upright; turning them is a click away.</summary>
+    private static readonly (string Name, PdfPageSize Size)[] Papers =
+    [
+        ("A4 — 210 × 297 mm", new PdfPageSize(595f, 842f)),
+        ("A3 — 297 × 420 mm", new PdfPageSize(842f, 1191f)),
+        ("A2 — 420 × 594 mm", new PdfPageSize(1191f, 1684f)),
+        ("A1 — 594 × 841 mm", new PdfPageSize(1684f, 2384f)),
+        ("A0 — 841 × 1189 mm", new PdfPageSize(2384f, 3370f)),
+    ];
+
+    /// <summary>
+    /// What the pages panel cannot finish on its own. Turning, copying,
+    /// removing and reordering happen there and then; these four need a file,
+    /// a folder or an answer, and those belong to the window.
+    /// </summary>
+    private async void OnPageActionRequested(object? sender, PageRequest request)
+    {
+        if (ActiveViewer is not { } viewer || viewer.PageCount == 0) return;
+
+        switch (request.Action)
+        {
+            case PageAction.MoveTo:
+                await MoveToAsync(viewer, request.Sheets);
+                break;
+            case PageAction.InsertFromFile:
+                await InsertFromFileAsync(viewer, request.Destination);
+                break;
+            case PageAction.InsertBlank:
+                await InsertBlankAsync(viewer, request.Destination);
+                break;
+            case PageAction.Extract:
+                await ExtractAsync(viewer, request.Sheets);
+                break;
+            case PageAction.Split:
+                await SplitAsync(viewer);
+                break;
+        }
+
+        UpdateChrome();
+    }
+
+    /// <summary>
+    /// Sends the marked sheets to a sheet number the reader types.
+    ///
+    /// Stepping up one at a time is fine for a nudge and useless for a set of
+    /// two hundred, where the answer is already known — "this goes seventh" —
+    /// and the only question is how to say it.
+    /// </summary>
+    private async Task MoveToAsync(PdfTiledViewer viewer, IReadOnlyList<int> sheets)
+    {
+        if (sheets.Count == 0 || viewer.PageCount < 2) return;
+
+        // The highest number the block can start at, so the last of them still
+        // fits on the document.
+        int last = viewer.PageCount - sheets.Count + 1;
+
+        var position = new NumberBox
+        {
+            Value = sheets[0] + 1,
+            Minimum = 1,
+            Maximum = last,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
+            Width = 140,
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+
+        var body = new StackPanel { Spacing = 12, Width = 380 };
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = sheets.Count == 1
+                ? $"La hoja {sheets[0] + 1} de {viewer.PageCount} se llevará a donde digas."
+                : $"Las {sheets.Count} hojas marcadas se llevarán juntas, en su orden, "
+                  + $"empezando en la hoja que digas (1 a {last}).",
+        });
+        body.Children.Add(Labelled("Llevarla a la hoja", position));
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = sheets.Count == 1 ? "Mover la hoja" : "Mover las hojas",
+            Content = body,
+            PrimaryButtonText = "Mover",
+            CloseButtonText = "Cancelar",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+
+        AppTheme.Dress(dialog);
+        if (await Dialogs.ShowAsync(dialog) != ContentDialogResult.Primary) return;
+
+        // An empty box reads back as NaN, and rounding that would send the
+        // sheets to nowhere in particular.
+        if (double.IsNaN(position.Value)) return;
+
+        Pages.MoveTo((int)Math.Round(position.Value) - 1);
+    }
+
+    /// <summary>
+    /// Brings sheets in from another PDF. The file is opened to be asked how
+    /// many sheets it has before anything is chosen — offering "which sheets?"
+    /// without saying how many there are is a question nobody can answer.
+    /// </summary>
+    private async Task InsertFromFileAsync(PdfTiledViewer viewer, int destination)
+    {
+        var picker = new FileOpenPicker();
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(App.Current.MainWindow));
+        picker.FileTypeFilter.Add(".pdf");
+        picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+
+        var files = await picker.PickMultipleFilesAsync();
+        if (files is null || files.Count == 0) return;
+
+        // Each one opened and let go of again, only to be asked how many sheets
+        // it has: the viewer opens them for itself once they are chosen, and
+        // holding a handle to fourteen files for the length of a dialog buys
+        // nothing.
+        var read = new List<(StorageFile File, int PageCount, string? Password)>(files.Count);
+        int locked = 0;
+
+        using (BusyScope(files.Count == 1 ? "Leyendo el PDF…" : $"Leyendo {files.Count} PDF…"))
+        {
+            foreach (var file in files)
+            {
+                var probed = await ProbeAsync(file);
+                if (probed is { } ok) read.Add((file, ok.PageCount, ok.Password));
+                else locked++;
+            }
+        }
+
+        if (read.Count == 0)
+        {
+            if (locked > 0) await ShowMessageAsync("No se insertó nada", "No se pudo abrir ninguno de los PDF elegidos.");
+            return;
+        }
+
+        // One file is a question about which of its sheets; several is a
+        // question about what order they go in. Asking for a range of pages
+        // once per file would be absurd for a folder of one-sheet drawings,
+        // which is exactly the case this is for.
+        List<PageInsertion> batch;
+
+        if (read.Count == 1)
+        {
+            var (only, pageCount, password) = read[0];
+            var chosen = await AskForSheetsAsync(only.Name, pageCount);
+            if (chosen is null || chosen.Count == 0) return;
+
+            batch = [new PageInsertion(only.Path, password, chosen)];
+        }
+        else
+        {
+            var ordered = await AskForOrderAsync(read);
+            if (ordered is null) return;
+
+            batch = [.. ordered.Select(entry =>
+                new PageInsertion(entry.File.Path, entry.Password, [.. Enumerable.Range(0, entry.PageCount)]))];
+        }
+
+        int sheets = batch.Sum(insertion => insertion.Pages.Count);
+
+        using (BusyScope("Insertando hojas…"))
+        {
+            try
+            {
+                await viewer.InsertPagesAsync(destination, batch);
+                Hint(locked == 0
+                    ? $"{Sheets(sheets)} insertadas."
+                    : $"{Sheets(sheets)} insertadas; {locked} archivo(s) no se pudieron abrir.");
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("No se pudieron insertar las hojas", ex.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Asks a file how many sheets it has, unlocking it if it asks to be. Null
+    /// means it is not going to be inserted — the reader gave up on the
+    /// password, or the file will not open at all.
+    /// </summary>
+    private async Task<(int PageCount, string? Password)?> ProbeAsync(StorageFile file)
+    {
+        string? password = null;
+
+        while (true)
+        {
+            try
+            {
+                var probe = await PdfRenderQueue.Shared.OpenDocumentAsync(file.Path, password);
+                int pageCount = probe.Pages.Count;
+                await PdfRenderQueue.Shared.CloseDocumentAsync(probe.DocumentId);
+                return (pageCount, password);
+            }
+            catch (PdfPasswordRequiredException wants)
+            {
+                password = await AskForPasswordAsync(file.Name, wants.WasTried);
+                if (password is null) return null;
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync($"No se pudo leer «{file.Name}»", ex.Message);
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// What order a batch of files goes in. By name to start with, because a
+    /// set of drawings is named by code and that is the order it belongs in —
+    /// and by name means <c>HOJA-2</c> before <c>HOJA-10</c>, which plain text
+    /// order gets backwards.
+    /// </summary>
+    private async Task<List<(StorageFile File, int PageCount, string? Password)>?> AskForOrderAsync(
+        List<(StorageFile File, int PageCount, string? Password)> files)
+    {
+        var byName = files.OrderBy(entry => entry.File.Name, NaturalOrder.Comparer).ToList();
+        var asPicked = new List<(StorageFile File, int PageCount, string? Password)>(files);
+
+        var order = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, SelectedIndex = 0 };
+        order.Items.Add("Por nombre de archivo");
+        order.Items.Add("En el orden en que los elegí");
+
+        var list = new ListView
+        {
+            SelectionMode = ListViewSelectionMode.None,
+            MaxHeight = 240,
+            ItemsSource = byName.Select(Describe).ToList(),
+        };
+
+        order.SelectionChanged += (_, _) =>
+        {
+            // Never nothing: a box with no answer in it says nothing about what
+            // pressing Insert is going to do.
+            if (order.SelectedIndex < 0) order.SelectedIndex = 0;
+            list.ItemsSource = (order.SelectedIndex == 1 ? asPicked : byName).Select(Describe).ToList();
+        };
+
+        int sheets = files.Sum(entry => entry.PageCount);
+
+        var body = new StackPanel { Spacing = 12, Width = 420 };
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = $"{files.Count} archivos, {Sheets(sheets).ToLowerInvariant()} en total. "
+                   + "Se pueden reordenar después en el panel de hojas.",
+        });
+        body.Children.Add(Labelled("Orden", order));
+        body.Children.Add(list);
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Insertar hojas",
+            Content = body,
+            PrimaryButtonText = "Insertar",
+            CloseButtonText = "Cancelar",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+
+        AppTheme.Dress(dialog);
+        if (await Dialogs.ShowAsync(dialog) != ContentDialogResult.Primary) return null;
+
+        return order.SelectedIndex == 1 ? asPicked : byName;
+
+        static string Describe((StorageFile File, int PageCount, string? Password) entry) =>
+            entry.PageCount == 1 ? entry.File.Name : $"{entry.File.Name}  ·  {entry.PageCount} hojas";
+    }
+
+    /// <summary>Which sheets of another file to bring, as a range. Empty means all of them.</summary>
+    private async Task<IReadOnlyList<int>?> AskForSheetsAsync(string fileName, int pageCount)
+    {
+        var box = new TextBox { PlaceholderText = $"Todas (1-{pageCount})" };
+        var complaint = new TextBlock
+        {
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
+            Text = "No se entiende. Por ejemplo: 1, 3, 5-8",
+            Visibility = Visibility.Collapsed,
+        };
+
+        var body = new StackPanel { Spacing = 10, Width = 380 };
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = $"«{fileName}» tiene {(pageCount == 1 ? "una hoja" : $"{pageCount} hojas")}.",
+        });
+        body.Children.Add(Labelled("Qué hojas traer", box));
+        body.Children.Add(complaint);
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Insertar hojas",
+            Content = body,
+            PrimaryButtonText = "Insertar",
+            CloseButtonText = "Cancelar",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+
+        // Held open rather than closed on a bad range: throwing the dialog away
+        // would throw away what they typed along with it.
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            if (PageRange.Parse(box.Text, pageCount) is not null) return;
+
+            args.Cancel = true;
+            complaint.Visibility = Visibility.Visible;
+        };
+
+        AppTheme.Dress(dialog);
+
+        return await Dialogs.ShowAsync(dialog) == ContentDialogResult.Primary
+            ? PageRange.Parse(box.Text, pageCount)
+            : null;
+    }
+
+    private async Task InsertBlankAsync(PdfTiledViewer viewer, int destination)
+    {
+        var size = viewer.PageSizes.Count > 0
+            ? viewer.PageSizes[Math.Clamp(viewer.CurrentPageIndex, 0, viewer.PageSizes.Count - 1)]
+            : Papers[0].Size;
+
+        var paper = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, SelectedIndex = 0 };
+        paper.Items.Add($"Como la hoja en pantalla — {Math.Round(size.WidthPt / 72 * 25.4)} × {Math.Round(size.HeightPt / 72 * 25.4)} mm");
+        foreach (var (name, _) in Papers)
+        {
+            paper.Items.Add(name);
+        }
+
+        var landscape = new CheckBox { Content = "Apaisada" };
+        var count = new NumberBox
+        {
+            Value = 1,
+            Minimum = 1,
+            Maximum = 50,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
+            Width = 140,
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+
+        var body = new StackPanel { Spacing = 12, Width = 380 };
+        body.Children.Add(Labelled("Tamaño", paper));
+        body.Children.Add(landscape);
+        body.Children.Add(Labelled("Cuántas", count));
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Insertar hojas en blanco",
+            Content = body,
+            PrimaryButtonText = "Insertar",
+            CloseButtonText = "Cancelar",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+
+        AppTheme.Dress(dialog);
+        if (await Dialogs.ShowAsync(dialog) != ContentDialogResult.Primary) return;
+
+        var chosen = paper.SelectedIndex <= 0 ? size : Papers[paper.SelectedIndex - 1].Size;
+        if (landscape.IsChecked == true)
+        {
+            chosen = new PdfPageSize(Math.Max(chosen.WidthPt, chosen.HeightPt), Math.Min(chosen.WidthPt, chosen.HeightPt));
+        }
+
+        viewer.InsertBlankPages(destination, chosen, (int)Math.Round(count.Value));
+    }
+
+    private async Task ExtractAsync(PdfTiledViewer viewer, IReadOnlyList<int> sheets)
+    {
+        if (sheets.Count == 0 || viewer.SourcePath is not { } source) return;
+
+        string stem = Path.GetFileNameWithoutExtension(source);
+        var file = await PickPdfDestinationAsync(sheets.Count == 1
+            ? $"{stem} hoja {sheets[0] + 1}"
+            : $"{stem} {sheets.Count} hojas");
+        if (file is null) return;
+
+        // Writing over the document it is reading would pull the file out from
+        // under the open handle, and the result would be neither document.
+        if (IsSamePath(file.Path, source))
+        {
+            await ShowMessageAsync(
+                "Ese es el documento abierto",
+                "Las hojas extraídas necesitan un archivo propio. Elige otro nombre.");
+            return;
+        }
+
+        using (BusyScope("Extrayendo hojas…"))
+        {
+            try
+            {
+                await viewer.ExtractPagesAsync(sheets, file.Path);
+                Hint($"{Sheets(sheets.Count)} en «{file.Name}».");
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("No se pudieron extraer las hojas", ex.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Cuts the document into files of so many sheets each. The originals are
+    /// not touched: this writes new files beside each other in a folder the
+    /// reader picks, which is what makes it safe to try.
+    /// </summary>
+    private async Task SplitAsync(PdfTiledViewer viewer)
+    {
+        if (viewer.SourcePath is not { } source || viewer.PageCount < 2) return;
+
+        var every = new NumberBox
+        {
+            Value = 1,
+            Minimum = 1,
+            Maximum = viewer.PageCount - 1,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
+            Width = 140,
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+
+        var body = new StackPanel { Spacing = 12, Width = 380 };
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = $"El documento tiene {viewer.PageCount} hojas. Se escribirán archivos nuevos; "
+                   + "este no se toca.",
+        });
+        body.Children.Add(Labelled("Hojas por archivo", every));
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Dividir el documento",
+            Content = body,
+            PrimaryButtonText = "Elegir carpeta…",
+            CloseButtonText = "Cancelar",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+
+        AppTheme.Dress(dialog);
+        if (await Dialogs.ShowAsync(dialog) != ContentDialogResult.Primary) return;
+
+        int chunk = Math.Max(1, (int)Math.Round(every.Value));
+
+        var picker = new FolderPicker();
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(App.Current.MainWindow));
+        picker.FileTypeFilter.Add("*");
+        picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+
+        StorageFolder? folder = await picker.PickSingleFolderAsync();
+        if (folder is null) return;
+
+        string stem = Path.GetFileNameWithoutExtension(source);
+        int written = 0;
+
+        using (BusyScope("Dividiendo el documento…"))
+        {
+            try
+            {
+                for (int first = 0; first < viewer.PageCount; first += chunk)
+                {
+                    int last = Math.Min(first + chunk, viewer.PageCount);
+                    var sheets = Enumerable.Range(first, last - first).ToList();
+
+                    string name = chunk == 1
+                        ? $"{stem} {first + 1:D3}.pdf"
+                        : $"{stem} {first + 1:D3}-{last:D3}.pdf";
+
+                    await viewer.ExtractPagesAsync(sheets, Path.Combine(folder.Path, name));
+                    written++;
+                }
+
+                Hint($"{written} archivos en «{folder.Name}».");
+            }
+            catch (Exception ex)
+            {
+                await ShowMessageAsync("No se pudo dividir el documento", ex.Message);
+            }
+        }
+    }
+
+    private static string Sheets(int count) => count == 1 ? "Una hoja" : $"{count} hojas";
+
+    /// <summary>
+    /// Says what just happened, in the status bar, and then gets out of the
+    /// way. Writing files somewhere the reader is not looking deserves an
+    /// answer; it does not deserve a dialog to dismiss.
+    /// </summary>
+    private void Hint(string message)
+    {
+        _hintMessage = message;
+        UpdateChrome();
+
+        _ = Task.Delay(TimeSpan.FromSeconds(6)).ContinueWith(_ => DispatcherQueue.TryEnqueue(() =>
+        {
+            // Only if it is still ours: a tool picked up in the meantime has
+            // its own thing to say, and it outranks this.
+            if (!ReferenceEquals(_hintMessage, message)) return;
+
+            _hintMessage = null;
+            UpdateChrome();
+        }));
+    }
+
+    /// <summary>
+    /// A rearrangement is the one pending change that costs the file something
+    /// beyond what it says: the bytes a signature covers are no longer these
+    /// bytes, so every signature the drawing carried stops checking out. Said
+    /// before the write, because after it there is nothing to decide.
+    /// </summary>
+    private async Task<bool> ConfirmRearrangementAsync(PdfTiledViewer viewer)
+    {
+        if (!viewer.HasPageChanges) return true;
+
+        int signatures = viewer.ReadSignatures().Count;
+        if (signatures == 0) return true;
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Este documento está firmado",
+            Content = new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                Text = signatures == 1
+                    ? "Cambiar las hojas de sitio deja sin validez la firma que trae el documento: "
+                      + "una firma cubre el archivo tal y como estaba. Se puede volver a firmar después."
+                    : $"Cambiar las hojas de sitio deja sin validez las {signatures} firmas que trae el documento: "
+                      + "una firma cubre el archivo tal y como estaba. Se puede volver a firmar después.",
+            },
+            PrimaryButtonText = "Guardar igualmente",
+            CloseButtonText = "Cancelar",
+            DefaultButton = ContentDialogButton.Close,
+        };
+
+        AppTheme.Dress(dialog);
+        return await Dialogs.ShowAsync(dialog) == ContentDialogResult.Primary;
     }
 
     /// <summary>
@@ -1436,21 +1978,15 @@ public sealed partial class MainPage : Page
     }
 
     /// <summary>
-    /// Hands the drawing to Windows' print pane, with the sheet turns the
-    /// reader has on screen. Turns that have not been saved still print: what
-    /// is on paper should be what is on screen, and being made to save first
-    /// would be a strange price for a printout.
+    /// Hands the drawing to Windows' print pane, arranged the way it is on
+    /// screen. Sheets moved and sheets turned still print before they are
+    /// saved: what is on paper should be what is on screen, and being made to
+    /// save first would be a strange price for a printout.
     /// </summary>
     private async Task PrintAsync()
     {
-        if (ActiveViewer is not { } viewer || viewer.SourcePath is not { } path) return;
+        if (ActiveViewer is not { } viewer || viewer.SourcePath is null) return;
         if (viewer.PageCount == 0) return;
-
-        var rotations = new int[viewer.PageCount];
-        for (int i = 0; i < rotations.Length; i++)
-        {
-            rotations[i] = viewer.RotationOf(i);
-        }
 
         string title = (Tabs.SelectedItem as TabViewItem)?.Header as string ?? "Documento";
         PdfPrintSource? source = null;
@@ -1459,7 +1995,7 @@ public sealed partial class MainPage : Page
         {
             using (BusyScope("Preparando la impresión…"))
             {
-                var job = await PdfPrintJob.OpenAsync(path, rotations);
+                var job = await PdfPrintJob.OpenAsync(viewer.Plan);
                 // Marks print whether or not they have been saved, for the same
                 // reason unsaved turns do: the paper should be what is on screen.
                 job.Marks = viewer.Annotations.Snapshot();
@@ -1680,6 +2216,16 @@ public sealed partial class MainPage : Page
             return;
         }
 
+        // In the pages panel, Supr is about the sheets marked there — which is
+        // the only thing it could sensibly mean with the focus in that list.
+        if (Pages.HasFocus)
+        {
+            Pages.Run(PageAction.Delete);
+            UpdateChrome();
+            args.Handled = true;
+            return;
+        }
+
         if (ActiveViewer is not { SelectedAnnotation: not null } viewer) return;
 
         viewer.DeleteSelectedAnnotation();
@@ -1743,7 +2289,7 @@ public sealed partial class MainPage : Page
         UpdateViewMenu(viewer);
         UpdateSaveChrome(viewer, interactive);
 
-        Thumbnails.Visibility = hasDocument && ThumbnailsButton.IsChecked == true
+        Pages.Visibility = hasDocument && ThumbnailsButton.IsChecked == true
             ? Visibility.Visible
             : Visibility.Collapsed;
 

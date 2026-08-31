@@ -2,14 +2,27 @@ using System.Numerics;
 
 namespace ZenInk.Core;
 
+/// <summary>What a step back or forward changed, so the viewer knows how much to redraw.</summary>
+public readonly record struct EditStep(int PageIndex, bool Rearranged)
+{
+    public static readonly EditStep None = new(-1, false);
+
+    public bool Happened => PageIndex >= 0 || Rearranged;
+}
+
 /// <summary>
-/// Every mark on a document, by sheet, plus the history that lets them be taken
-/// back.
+/// Everything pending on a document — the marks that have been drawn and the
+/// order the sheets are in — plus the one history that takes any of it back.
 ///
-/// The store is the single truth about what has been drawn: the viewer paints
-/// from it, the print path reads it, and a save writes it into the file. It
-/// knows nothing about PDFium or about the canvas, which is what lets the whole
-/// of undo, hit-testing and the dirty flag be checked without opening a window.
+/// The store is the single truth about what has changed and has not reached the
+/// file: the viewer paints and lays out from it, the print path reads it, and a
+/// save walks it. It knows nothing about PDFium or about the canvas, which is
+/// what lets the whole of undo, hit-testing and the dirty flag be checked
+/// without opening a window.
+///
+/// Marks and sheets share one history on purpose. They are one document to the
+/// person editing it, and two undo stacks behind one Ctrl+Z is a coin toss
+/// about which one it lands on.
 /// </summary>
 public sealed class AnnotationStore
 {
@@ -27,15 +40,44 @@ public sealed class AnnotationStore
     /// <summary>
     /// One reversible step. Either side may be absent: no <see cref="Before"/>
     /// is a mark being made, no <see cref="After"/> is one being rubbed out,
-    /// and both present is one being changed.
+    /// and both present is one being changed. A step that carries
+    /// <see cref="Pages"/> instead is the sheets being rearranged.
     /// </summary>
-    private readonly record struct Edit(int Page, Annotation? Before, Annotation? After);
+    private readonly record struct Edit(int Page, Annotation? Before, Annotation? After, PageStep? Pages = null);
+
+    /// <summary>
+    /// The sheets moving, and the marks moving with them.
+    ///
+    /// Both sides of the marks are kept whole rather than as a remapping. It
+    /// costs a copy of a small dictionary and it buys exactness: a rearrangement
+    /// can drop a sheet, or make two of one, and there is no index arithmetic
+    /// that undoes those and still leaves the older steps underneath it
+    /// meaning what they meant.
+    /// </summary>
+    private sealed record PageStep(
+        PagePlan Before,
+        PagePlan After,
+        Dictionary<int, List<Annotation>> MarksBefore,
+        Dictionary<int, List<Annotation>> MarksAfter);
 
     /// <summary>Bumped on every change, so a viewer can tell whether it must redraw.</summary>
     public int Version { get; private set; }
 
-    /// <summary>True when the marks on screen are not the marks in the file.</summary>
+    /// <summary>True when what is on screen is not what is in the file.</summary>
     public bool IsDirty { get; private set; }
+
+    /// <summary>
+    /// How the sheets are arranged. Empty until a document is loaded, so a
+    /// store used for marks alone — as the checks do — needs to know nothing
+    /// about it.
+    /// </summary>
+    public PagePlan Plan { get; private set; } = PagePlan.Identity([], string.Empty);
+
+    /// <summary>True when the sheets have been moved, removed, duplicated or brought in.</summary>
+    public bool IsRearranged => Plan.IsRearranged;
+
+    /// <summary>True when a sheet carries a turn that is not in the file yet.</summary>
+    public bool HasTurns => Plan.HasTurns;
 
     public bool CanUndo => _undo.Count > 0;
 
@@ -80,11 +122,24 @@ public sealed class AnnotationStore
         Version++;
     }
 
+    /// <summary>
+    /// Takes the sheets a file arrived with, as the arrangement nothing has
+    /// been done to yet. Called on opening and again after every save, which is
+    /// what makes "the sheets have been moved" mean since the last write.
+    /// </summary>
+    public void LoadPlan(PagePlan plan)
+    {
+        Plan = plan;
+        _undo.Clear();
+        _redo.Clear();
+    }
+
     public void Clear()
     {
         _byPage.Clear();
         _undo.Clear();
         _redo.Clear();
+        Plan = PagePlan.Identity([], string.Empty);
         IsDirty = false;
         Version++;
     }
@@ -121,6 +176,45 @@ public sealed class AnnotationStore
     {
         if (ReferenceEquals(before, after)) return;
         Apply(new Edit(pageIndex, before, after), remember: false);
+    }
+
+    /// <summary>
+    /// Takes the sheets somewhere else, and takes their marks with them.
+    ///
+    /// A sheet that is copied gets a copy of its marks, with fresh ids: they
+    /// are two sheets from here on, and two marks that answered to the same id
+    /// would be one mark to undo, to hit-test and to write.
+    /// </summary>
+    public void Rearrange(PageEdit edit)
+    {
+        var after = new Dictionary<int, List<Annotation>>();
+        var seen = new HashSet<int>();
+
+        for (int i = 0; i < edit.OriginOfNew.Length; i++)
+        {
+            int origin = edit.OriginOfNew[i];
+            if (origin < 0 || !_byPage.TryGetValue(origin, out var marks)) continue;
+
+            after[i] = seen.Add(origin) ? [.. marks] : [.. marks.Select(Copy)];
+        }
+
+        Apply(
+            new Edit(-1, null, null, new PageStep(Plan, edit.Plan.Compacted(), CopyOfMarks(), after)),
+            remember: true);
+    }
+
+    private static Annotation Copy(Annotation mark) => new(
+        mark.Kind, mark.Points, mark.Style, mark.Text, mark.Author,
+        id: Guid.NewGuid(), created: mark.Created, rotationDeg: mark.RotationDeg);
+
+    private Dictionary<int, List<Annotation>> CopyOfMarks()
+    {
+        var copy = new Dictionary<int, List<Annotation>>(_byPage.Count);
+        foreach (var (page, list) in _byPage)
+        {
+            copy[page] = [.. list];
+        }
+        return copy;
     }
 
     /// <summary>The topmost mark under a point, or null. Later marks win, as they are drawn on top.</summary>
@@ -165,31 +259,34 @@ public sealed class AnnotationStore
         return snapshot;
     }
 
-    /// <summary>Takes back the last change and returns the sheet it happened on, or -1.</summary>
-    public int Undo()
+    /// <summary>Takes back the last change and says what it touched.</summary>
+    public EditStep Undo()
     {
-        if (_undo.Count == 0) return -1;
+        if (_undo.Count == 0) return EditStep.None;
 
         var edit = _undo[^1];
         _undo.RemoveAt(_undo.Count - 1);
 
-        var inverse = new Edit(edit.Page, edit.After, edit.Before);
+        var inverse = edit.Pages is { } pages
+            ? new Edit(edit.Page, null, null, new PageStep(pages.After, pages.Before, pages.MarksAfter, pages.MarksBefore))
+            : new Edit(edit.Page, edit.After, edit.Before);
+
         Apply(inverse, remember: false);
         _redo.Add(edit);
-        return edit.Page;
+        return new EditStep(edit.Page, edit.Pages is not null);
     }
 
-    /// <summary>Puts back the last undone change and returns its sheet, or -1.</summary>
-    public int Redo()
+    /// <summary>Puts back the last undone change and says what it touched.</summary>
+    public EditStep Redo()
     {
-        if (_redo.Count == 0) return -1;
+        if (_redo.Count == 0) return EditStep.None;
 
         var edit = _redo[^1];
         _redo.RemoveAt(_redo.Count - 1);
 
         Apply(edit, remember: false);
         _undo.Add(edit);
-        return edit.Page;
+        return new EditStep(edit.Page, edit.Pages is not null);
     }
 
     /// <summary>
@@ -199,6 +296,19 @@ public sealed class AnnotationStore
     /// </summary>
     private void Apply(Edit edit, bool remember)
     {
+        if (edit.Pages is { } pages)
+        {
+            Plan = pages.After;
+            _byPage.Clear();
+            foreach (var (page, marks) in pages.MarksAfter)
+            {
+                if (marks.Count > 0) _byPage[page] = [.. marks];
+            }
+
+            Remember(edit, remember);
+            return;
+        }
+
         var list = GetOrCreate(edit.Page);
 
         if (edit.Before is { } before)
@@ -230,6 +340,11 @@ public sealed class AnnotationStore
             _byPage.Remove(edit.Page);
         }
 
+        Remember(edit, remember);
+    }
+
+    private void Remember(Edit edit, bool remember)
+    {
         if (remember)
         {
             _undo.Add(edit);

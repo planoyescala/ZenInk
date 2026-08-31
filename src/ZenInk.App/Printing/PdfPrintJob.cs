@@ -27,16 +27,19 @@ public sealed class PdfPrintJob : IAsyncDisposable
     public const double PointsToDips = 96.0 / 72.0;
 
     private readonly PdfRenderQueue _queue = PdfRenderQueue.Shared;
-    private readonly int[] _rotations;
+    private readonly PagePlan _plan;
 
-    private int _documentId = -1;
+    /// <summary>The document opened for each of the plan's sources, by source number.</summary>
+    private readonly List<int> _documents = [];
+
     private IReadOnlyList<PdfPageSize> _sheets = [];
     private IReadOnlyList<PrintPiece> _pieces = [];
+    private bool _open;
 
-    private PdfPrintJob(string path, int[] rotations)
+    private PdfPrintJob(PagePlan plan)
     {
-        SourcePath = path;
-        _rotations = rotations;
+        _plan = plan;
+        SourcePath = plan.Sources[0].Path;
     }
 
     public string SourcePath { get; }
@@ -71,38 +74,49 @@ public sealed class PdfPrintJob : IAsyncDisposable
         new Dictionary<int, IReadOnlyList<Annotation>>();
 
     /// <summary>
-    /// Opens a private view of the document for printing. The sheet sizes come
-    /// back from the file, then the reader's own turns are applied on top.
+    /// Opens a private view of the document for printing — of the arrangement
+    /// on screen, which is not always the one in the file.
+    ///
+    /// Every file the plan reads from is opened, its own handle each, for the
+    /// same reason the marks are drawn from the viewer's model: what comes out
+    /// of the plotter has to be what the reader is looking at, sheets moved
+    /// about and sheets brought in from elsewhere included.
     /// </summary>
-    public static async Task<PdfPrintJob> OpenAsync(string path, IReadOnlyList<int> rotations)
+    public static async Task<PdfPrintJob> OpenAsync(PagePlan plan)
     {
-        var job = new PdfPrintJob(path, rotations.ToArray());
-        var info = await PdfRenderQueue.Shared.OpenDocumentAsync(path);
+        var job = new PdfPrintJob(plan);
 
-        job._documentId = info.DocumentId;
-        job._sheets = ApplyTurns(info.Pages, job._rotations);
-        job.Pages = Enumerable.Range(0, info.Pages.Count).ToArray();
+        foreach (var source in plan.Sources)
+        {
+            var info = await PdfRenderQueue.Shared.OpenDocumentAsync(source.Path, source.Password);
+            job._documents.Add(info.DocumentId);
+        }
+
+        job._open = true;
+        job._sheets = plan.EffectiveSizes();
+        job.Pages = Enumerable.Range(0, plan.Count).ToArray();
         job.Rebuild();
         return job;
-    }
-
-    /// <summary>Sheet sizes as the reader sees them: turned sheets swap their axes.</summary>
-    private static PdfPageSize[] ApplyTurns(IReadOnlyList<PdfPageSize> sizes, int[] rotations)
-    {
-        var turned = new PdfPageSize[sizes.Count];
-        for (int i = 0; i < turned.Length; i++)
-        {
-            var size = sizes[i];
-            int rotation = i < rotations.Length ? rotations[i] & 3 : 0;
-            turned[i] = (rotation & 1) == 1 ? new PdfPageSize(size.HeightPt, size.WidthPt) : size;
-        }
-        return turned;
     }
 
     public IReadOnlyList<PdfPageSize> Sheets => _sheets;
 
     public int RotationOf(int pageIndex) =>
-        pageIndex >= 0 && pageIndex < _rotations.Length ? _rotations[pageIndex] & 3 : 0;
+        pageIndex >= 0 && pageIndex < _plan.Count ? _plan[pageIndex].QuarterTurns & 3 : 0;
+
+    /// <summary>
+    /// Which open document a sheet is drawn from and which of its pages, or a
+    /// document of −1 for blank paper — which prints as the blank it is.
+    /// </summary>
+    private (int DocumentId, int PageIndex) OriginOf(int sheet)
+    {
+        if (sheet < 0 || sheet >= _plan.Count) return (-1, -1);
+
+        var slot = _plan[sheet];
+        return slot.IsBlank || slot.Source >= _documents.Count
+            ? (-1, -1)
+            : (_documents[slot.Source], slot.PageIndex);
+    }
 
     public void Configure(PrintSettings settings, PdfPageSize paperSize, IReadOnlyList<int>? pages = null)
     {
@@ -139,9 +153,17 @@ public sealed class PdfPrintJob : IAsyncDisposable
     {
         // Every early exit says why. A sheet that comes out blank is the one
         // failure that looks like success, so it must never be silent.
-        if (_documentId < 0)
+        if (!_open)
         {
             Problem = "El documento se cerró antes de dibujar la hoja.";
+            return;
+        }
+
+        var (documentId, pageIndex) = OriginOf(piece.PageIndex);
+        if (documentId < 0)
+        {
+            // Blank paper: nothing to render, and the marks on it still go on.
+            DrawMarks(ds, piece);
             return;
         }
 
@@ -197,8 +219,8 @@ public sealed class PdfPrintJob : IAsyncDisposable
                 // would go nowhere. The wait cannot deadlock: the render queue
                 // is its own thread and completes off this one.
                 var band = _queue.RequestPrintBandAsync(
-                    _documentId,
-                    piece.PageIndex,
+                    documentId,
+                    pageIndex,
                     RotationOf(piece.PageIndex),
                     scale,
                     startX,
@@ -288,10 +310,13 @@ public sealed class PdfPrintJob : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_documentId < 0) return;
+        if (!_open) return;
 
-        int documentId = _documentId;
-        _documentId = -1;
-        await _queue.CloseDocumentAsync(documentId);
+        _open = false;
+        foreach (int documentId in _documents)
+        {
+            await _queue.CloseDocumentAsync(documentId);
+        }
+        _documents.Clear();
     }
 }

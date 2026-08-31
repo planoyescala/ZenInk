@@ -31,9 +31,13 @@ public static class Marks
             new(AnnotationKind.Note, [new Vector2(700, 700)], style, "Revisar cota"),
         };
 
+        // The sheets as they came: this only adds marks to the first one.
+        var opened = await PdfRenderQueue.Shared.OpenDocumentAsync(source);
+        var plan = PagePlan.Identity(opened.Pages, source);
+        await PdfRenderQueue.Shared.CloseDocumentAsync(opened.DocumentId);
+
         await PdfRenderQueue.Shared.SaveChangesCopyAsync(
-            source, target,
-            quarterTurns: [],
+            plan, target,
             annotations: new Dictionary<int, IReadOnlyList<Annotation>> { [0] = marks });
 
         Console.WriteLine($"{target}  ({marks.Count} marcas)");

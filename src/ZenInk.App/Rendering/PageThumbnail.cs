@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using Microsoft.UI;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
@@ -12,29 +11,44 @@ using ZenInk.Core;
 namespace ZenInk_App.Rendering;
 
 /// <summary>
-/// One sheet in the thumbnail strip. The frame keeps the sheet's aspect ratio
-/// from the moment the document opens, so the strip has its final shape before
-/// any rendering happens and nothing jumps as previews arrive.
+/// One sheet in the pages panel. The frame keeps the sheet's proportions from
+/// the moment the document opens, so the panel has its final shape before any
+/// rendering happens and nothing jumps as previews arrive.
 /// </summary>
 public sealed class PageThumbnail : INotifyPropertyChanged
 {
     private BitmapSource? _image;
     private bool _isCurrent;
 
-    public PageThumbnail(int pageIndex, PdfPageSize size, double frameWidth)
+    public PageThumbnail(int pageIndex, SheetInfo sheet, double frameWidth)
     {
         PageIndex = pageIndex;
-        double ratio = size.WidthPt <= 0 ? 1.0 : size.HeightPt / size.WidthPt;
-        FrameHeight = Math.Clamp(frameWidth * ratio, 40, 260);
+        Document = sheet.DocumentId;
+        Preview = sheet.PageIndex;
+        IsBlank = sheet.IsBlank;
+
+        double ratio = sheet.Size.WidthPt <= 0 ? 1.0 : sheet.Size.HeightPt / sheet.Size.WidthPt;
+        FrameHeight = Math.Clamp(frameWidth * ratio, 40, 240);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    /// <summary>Where this sheet sits in the document right now.</summary>
     public int PageIndex { get; }
+
+    /// <summary>The open document its picture comes from, and the page of it.</summary>
+    public int Document { get; }
+
+    public int Preview { get; }
+
+    public bool IsBlank { get; }
 
     public string Number => (PageIndex + 1).ToString();
 
     public double FrameHeight { get; }
+
+    /// <summary>Blank paper says so, because an empty white frame reads as one still loading.</summary>
+    public Visibility BlankNote => IsBlank ? Visibility.Visible : Visibility.Collapsed;
 
     public BitmapSource? Image
     {
@@ -78,4 +92,29 @@ public sealed class PageThumbnail : INotifyPropertyChanged
     }
 
     private void Notify(string? name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+/// <summary>
+/// One entry of the document's own index, in the shape a <c>TreeView</c> binds
+/// to. The engine's <see cref="OutlineEntry"/> is a plain record; this is the
+/// same thing with children the control can walk.
+/// </summary>
+public sealed class OutlineNode
+{
+    private OutlineNode(OutlineEntry entry)
+    {
+        Title = string.IsNullOrWhiteSpace(entry.Title) ? "(sin título)" : entry.Title;
+        PageIndex = entry.PageIndex;
+        Children = Tree(entry.Children);
+    }
+
+    public string Title { get; }
+
+    /// <summary>The sheet it goes to, or −1 for an entry that is only a heading.</summary>
+    public int PageIndex { get; }
+
+    public IReadOnlyList<OutlineNode> Children { get; }
+
+    public static IReadOnlyList<OutlineNode> Tree(IReadOnlyList<OutlineEntry> entries) =>
+        [.. entries.Select(entry => new OutlineNode(entry))];
 }
