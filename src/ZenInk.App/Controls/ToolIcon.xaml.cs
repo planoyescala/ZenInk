@@ -25,6 +25,29 @@ public sealed partial class ToolIcon : UserControl
     public static readonly DependencyProperty ThicknessProperty = DependencyProperty.Register(
         nameof(Thickness), typeof(double), typeof(ToolIcon), new PropertyMetadata(1.4, OnVisualChanged));
 
+    /// <summary>The piece drawn in <see cref="Accent"/> instead of the button's colour.</summary>
+    public static readonly DependencyProperty AccentDataProperty = DependencyProperty.Register(
+        nameof(AccentData), typeof(Geometry), typeof(ToolIcon), new PropertyMetadata(null, OnVisualChanged));
+
+    /// <summary>A shape filled with <see cref="Accent"/>, under the stroke.</summary>
+    public static readonly DependencyProperty AccentFillProperty = DependencyProperty.Register(
+        nameof(AccentFill), typeof(Geometry), typeof(ToolIcon), new PropertyMetadata(null, OnVisualChanged));
+
+    public static readonly DependencyProperty AccentProperty = DependencyProperty.Register(
+        nameof(Accent), typeof(Brush), typeof(ToolIcon), new PropertyMetadata(null, OnVisualChanged));
+
+    /// <summary>How solid the accent fill is. Ink wants more of it than a highlighter.</summary>
+    public static readonly DependencyProperty AccentFillOpacityProperty = DependencyProperty.Register(
+        nameof(AccentFillOpacity), typeof(double), typeof(ToolIcon), new PropertyMetadata(1.0, OnVisualChanged));
+
+    /// <summary>
+    /// What a disabled control is dimmed to. The stroke gets there on its own
+    /// because it follows the button's Foreground; a brush of our own does not,
+    /// and an icon that keeps its colour while its button is off reads as a
+    /// button that still works.
+    /// </summary>
+    private const double DisabledOpacity = 0.36;
+
     private ButtonBase? _host;
 
     public ToolIcon()
@@ -94,6 +117,30 @@ public sealed partial class ToolIcon : UserControl
         set => SetValue(ThicknessProperty, value);
     }
 
+    public Geometry? AccentData
+    {
+        get => (Geometry?)GetValue(AccentDataProperty);
+        set => SetValue(AccentDataProperty, value);
+    }
+
+    public Geometry? AccentFill
+    {
+        get => (Geometry?)GetValue(AccentFillProperty);
+        set => SetValue(AccentFillProperty, value);
+    }
+
+    public Brush? Accent
+    {
+        get => (Brush?)GetValue(AccentProperty);
+        set => SetValue(AccentProperty, value);
+    }
+
+    public double AccentFillOpacity
+    {
+        get => (double)GetValue(AccentFillOpacityProperty);
+        set => SetValue(AccentFillOpacityProperty, value);
+    }
+
     private static void OnVisualChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
         ((ToolIcon)d).Apply();
 
@@ -115,5 +162,27 @@ public sealed partial class ToolIcon : UserControl
             IconPath.Stroke = Foreground;
             IconPath.StrokeThickness = Thickness;
         }
+
+        ApplyAccent();
+    }
+
+    /// <summary>
+    /// The tinted layers. They carry a brush of their own, so unlike the main
+    /// stroke they have to be dimmed by hand when the button is off.
+    /// </summary>
+    private void ApplyAccent()
+    {
+        if (AccentPath is null || AccentFillPath is null) return;
+
+        double dim = _host is { IsEnabled: false } ? DisabledOpacity : 1;
+
+        AccentPath.Data = AccentData;
+        AccentPath.Stroke = Accent;
+        AccentPath.StrokeThickness = Thickness;
+        AccentPath.Opacity = dim;
+
+        AccentFillPath.Data = AccentFill;
+        AccentFillPath.Fill = Accent;
+        AccentFillPath.Opacity = dim * AccentFillOpacity;
     }
 }

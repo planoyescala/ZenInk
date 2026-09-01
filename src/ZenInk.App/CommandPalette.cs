@@ -76,8 +76,9 @@ public sealed partial class MainPage
             new("Tema oscuro", "", "apariencia negro", () => OnThemeDarkClicked(this, empty)),
         };
 
-        // The rail, by name. These are the ones worth reaching for by typing:
-        // twelve icons in a column is exactly where a name beats a picture.
+        // The marking tools, by name. Since they moved into the ribbon they
+        // carry labels of their own, but typing still beats hunting for the
+        // tab a rarely-used one lives on.
         commands.AddRange(new (string Name, string Also, ViewerTool Tool)[]
         {
             ("Herramienta: mano", "mover desplazar arrastrar", ViewerTool.Pan),
@@ -95,6 +96,7 @@ public sealed partial class MainPage
             ("Herramienta: texto", "escribir rótulo nota", ViewerTool.FreeText),
             ("Herramienta: comentario", "nota post-it globo", ViewerTool.Note),
             ("Herramienta: lápiz", "mano alzada dibujar", ViewerTool.Ink),
+            ("Capturar una zona al portapapeles", "recorte captura copiar imagen pantalla trozo", ViewerTool.CaptureRegion),
         }.Select(entry => new AppCommand(entry.Name, "", entry.Also, () => SetTool(entry.Tool))));
 
         return commands;

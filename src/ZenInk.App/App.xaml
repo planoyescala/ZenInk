@@ -10,7 +10,48 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <!-- Other merged dictionaries here -->
             </ResourceDictionary.MergedDictionaries>
-            <!-- Other app resources here -->
+
+            <!--
+                Los tintes de los iconos.
+
+                Solo los llevan las herramientas cuyo color significa algo en el
+                oficio — la nube de revisión es roja y el resaltador amarillo en
+                cualquier plano — y la maquinaria (abrir, imprimir, girar) se
+                queda gris a propósito: si la barra gasta los mismos colores que
+                las marcas, la hoja pierde el código que tenía.
+
+                Cada uno va por pares porque un color elegido sobre papel blanco
+                se apaga sobre el gris de la barra oscura hasta parecer
+                deshabilitado. En oscuro suben de luminosidad y bajan de
+                saturación; no son el mismo color aclarado.
+            -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="IconRevisionBrush" Color="#C0392B" />
+                    <SolidColorBrush x:Key="IconHighlightBrush" Color="#D9A916" />
+                    <SolidColorBrush x:Key="IconInkBrush" Color="#CC5F34" />
+                    <SolidColorBrush x:Key="IconSignatureBrush" Color="#2F6FB5" />
+                    <SolidColorBrush x:Key="IconSaveBrush" Color="#3E8E52" />
+                    <SolidColorBrush x:Key="IconCaptureBrush" Color="#2F6FB5" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="IconRevisionBrush" Color="#F0705C" />
+                    <SolidColorBrush x:Key="IconHighlightBrush" Color="#F0C64A" />
+                    <SolidColorBrush x:Key="IconInkBrush" Color="#F08A5C" />
+                    <SolidColorBrush x:Key="IconSignatureBrush" Color="#6FB2F0" />
+                    <SolidColorBrush x:Key="IconSaveBrush" Color="#69C182" />
+                    <SolidColorBrush x:Key="IconCaptureBrush" Color="#6FB2F0" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <!--  En alto contraste manda el sistema: nada de tintes propios.  -->
+                    <SolidColorBrush x:Key="IconRevisionBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+                    <SolidColorBrush x:Key="IconHighlightBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+                    <SolidColorBrush x:Key="IconInkBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+                    <SolidColorBrush x:Key="IconSignatureBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+                    <SolidColorBrush x:Key="IconSaveBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+                    <SolidColorBrush x:Key="IconCaptureBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

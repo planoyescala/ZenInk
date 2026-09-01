@@ -37,25 +37,6 @@
             <Setter Property="Thickness" Value="1.75" />
         </Style>
 
-        <Style x:Key="RailIconStyle" TargetType="controls:ToolIcon">
-            <Setter Property="Width" Value="21" />
-            <Setter Property="Height" Value="21" />
-            <Setter Property="Thickness" Value="1.5" />
-        </Style>
-
-        <!--
-            Raíl: botón cuadrado, icono solo. A 36 px las quince herramientas
-            entran en una ventana normal sin que la última quede bajo el borde;
-            el icono sigue siendo de 21.
-        -->
-        <Style x:Key="RailToolStyle" TargetType="ToggleButton">
-            <Setter Property="Width" Value="36" />
-            <Setter Property="Height" Value="36" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
 
         <Style x:Key="SlimButtonStyle" TargetType="Button">
             <Setter Property="Height" Value="30" />
@@ -81,6 +62,16 @@
             <Setter Property="Height" Value="30" />
             <Setter Property="Padding" Value="10,0" />
             <Setter Property="CornerRadius" Value="4" />
+        </Style>
+
+        <!--  Los cuatro modos fijos: nunca llevan rótulo, así que nunca cambian de ancho.  -->
+        <Style x:Key="SlimIconToggleStyle" TargetType="ToggleButton">
+            <Setter Property="Width" Value="34" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
 
         <Style x:Key="SlimDropDownStyle" TargetType="DropDownButton">
@@ -144,6 +135,30 @@
             Key="Z"
             Invoked="OnRedoAccelerator"
             Modifiers="Control,Shift" />
+
+        <!--
+            Una letra por herramienta, sin modificador, como en cualquier CAD.
+            Es lo que paga el único coste de la cinta: con la flecha a un
+            golpe de tecla desde donde estés, que viva en la pestaña «Marcar»
+            deja de importar. Van aquí y no en los botones porque el botón de
+            una pestaña oculta no está en el árbol para atender la tecla.
+        -->
+        <KeyboardAccelerator Key="M" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="V" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="L" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="F" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="P" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="R" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="E" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="G" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="N" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="S" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="T" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="C" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="A" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="Z" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="X" Invoked="OnToolAccelerator" />
+        <KeyboardAccelerator Key="K" Invoked="OnToolAccelerator" />
     </Page.KeyboardAccelerators>
 
     <!--
@@ -156,7 +171,7 @@
         Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
         DragOver="OnDragOver"
         Drop="OnDrop"
-        RowDefinitions="Auto,Auto,*">
+        RowDefinitions="Auto,Auto,Auto,*">
 
         <!--
             Pestañas, sobre la línea de la barra de título, con el
@@ -196,120 +211,52 @@
             </TabView.TabStripFooter>
         </TabView>
 
-        <!--  Barra slim: solo documento y vista. Las herramientas viven en el raíl.  -->
+        <!--
+            La cinta va en dos filas y no en una. La de arriba es fija: qué
+            documento hay, deshacer, en qué hoja vas y a qué zoom. Eso es lo
+            que no puede depender de en qué pestaña estés — si «página
+            siguiente» viviera en «Hojas», pasar de hoja mientras marcas
+            costaría un viaje de ida y vuelta. La de abajo es la que cambia.
+        -->
         <Grid
             Grid.Row="1"
-            Height="44"
-            Padding="12,0"
+            Height="36"
+            Padding="8,0,12,0"
             Background="{ThemeResource LayerFillColorDefaultBrush}"
-            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-            BorderThickness="0,0,0,1"
             ColumnDefinitions="Auto,*,Auto">
 
-            <StackPanel
+            <SelectorBar
+                x:Name="RibbonTabs"
                 Grid.Column="0"
+                VerticalAlignment="Center"
+                SelectionChanged="OnRibbonTabChanged">
+                <SelectorBarItem
+                    x:Name="TabInicio"
+                    IsSelected="True"
+                    Text="Inicio" />
+                <SelectorBarItem x:Name="TabAnotar" Text="Anotar" />
+                <SelectorBarItem x:Name="TabOrganizador" Text="Organizador" />
+            </SelectorBar>
+
+            <TextBlock
+                x:Name="DocumentNameText"
+                Grid.Column="1"
+                Margin="20,0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Opacity="0.55"
+                TextTrimming="CharacterEllipsis" />
+
+            <StackPanel
+                Grid.Column="2"
+                VerticalAlignment="Center"
                 Orientation="Horizontal"
                 Spacing="2">
 
                 <!--
-                    El desplegable lleva los planos abiertos hace poco. Solo
-                    guarda la ruta: nada se lee de los archivos para dibujar
-                    esta lista, que es lo que la deja gratis al arrancar aunque
-                    los planos estén en un servidor.
-                -->
-                <SplitButton
-                    x:Name="OpenButton"
-                    Click="OnOpenClicked"
-                    Style="{StaticResource SlimSplitButtonStyle}"
-                    ToolTipService.ToolTip="Abrir un documento">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.5 5.5A1.5 1.5 0 0 1 4 4h3.4l1.6 2H16a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5Z" />
-                        <TextBlock Text="Abrir" />
-                    </StackPanel>
-                    <SplitButton.Flyout>
-                        <MenuFlyout
-                            x:Name="RecentFlyout"
-                            Opening="OnRecentFlyoutOpening"
-                            Placement="BottomEdgeAlignedLeft" />
-                    </SplitButton.Flyout>
-                </SplitButton>
-
-                <!--
-                    Saving sits beside opening because that is what it is: the
-                    other half of the document's own life, not an afterthought
-                    of whichever tool happened to change something. Today only
-                    the sheet turns reach it; comments will arrive here too, and
-                    the control does not have to move when they do.
-                -->
-                <SplitButton
-                    x:Name="SaveButton"
-                    Click="OnSaveClicked"
-                    IsEnabled="False"
-                    Style="{StaticResource SlimSplitButtonStyle}"
-                    ToolTipService.ToolTip="Guardar los cambios en el PDF (Ctrl+S)">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 3.4v8.4 M6.4 8.4 L10 12 L13.6 8.4 M3.6 13.2v2.2a1.2 1.2 0 0 0 1.2 1.2h10.4a1.2 1.2 0 0 0 1.2-1.2v-2.2" />
-                        <TextBlock Text="Guardar" />
-                    </StackPanel>
-                    <SplitButton.Flyout>
-                        <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                            <MenuFlyoutItem
-                                x:Name="SaveItem"
-                                Click="OnSaveItemClicked"
-                                KeyboardAcceleratorTextOverride="Ctrl+S"
-                                Text="Guardar en el PDF" />
-                            <MenuFlyoutItem
-                                x:Name="SaveCopyItem"
-                                Click="OnSaveCopyClicked"
-                                Text="Guardar como…" />
-
-                            <MenuFlyoutSeparator />
-
-                            <!--
-                                Descartar vive aquí, no en «Girar»: tira todo lo
-                                que no se ha escrito, marcas incluidas, y eso es
-                                asunto del documento y no de una herramienta.
-                            -->
-                            <MenuFlyoutItem
-                                x:Name="DiscardChangesItem"
-                                Click="OnDiscardChangesClicked"
-                                Text="Descartar los cambios sin guardar" />
-                        </MenuFlyout>
-                    </SplitButton.Flyout>
-                </SplitButton>
-
-                <!--
-                    Aplanar y firmar son formas de guardar, no herramientas de
-                    dibujo: escriben el archivo y cambian lo que el archivo es.
-                    Por eso están junto a «Guardar» y no en el raíl de la
-                    izquierda, que es para dibujar sobre la hoja.
-
-                    Los dos icons: dos capas cayendo sobre la hoja, y una rúbrica
-                    sobre su renglón.
-                -->
-                <Button
-                    x:Name="FlattenButton"
-                    Click="OnFlattenClicked"
-                    IsEnabled="False"
-                    Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Aplanar las marcas en el documento (no se puede deshacer)">
-                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.6 4.6 L10 8 L16.4 4.6 M3.6 9 L10 12.4 L16.4 9 M3.6 16.4 H16.4" />
-                </Button>
-                <Button
-                    x:Name="SignButton"
-                    Click="OnSignClicked"
-                    IsEnabled="False"
-                    Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Firmar el documento con un certificado">
-                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4.2 13.8 C 3.6 8.6, 6.2 4.2, 8.2 4.8 C 10 5.4, 9 9, 7.4 11.4 C 6.2 13.2, 7 14.2, 8.8 13.4 C 10.8 12.5, 12.6 10.6, 14.4 11 C 15.3 11.2, 15.6 12.2, 16.6 11.4 M3.4 16.6 H16.6" />
-                </Button>
-
-                <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
-
-                <!--
-                    Undo sits with the document's own actions, not in the marks
-                    panel: it is the reader's way back from anything, and it
-                    should not disappear when they switch tools.
+                    Undo sits with the document's own actions, not with a tool:
+                    it is the reader's way back from anything, and it must not
+                    disappear when they change tab.
                 -->
                 <Button
                     x:Name="UndoButton"
@@ -327,108 +274,6 @@
                     ToolTipService.ToolTip="Rehacer (Ctrl+Y)">
                     <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M13.5 6.2 L17 9.7 L13.5 13.2 M17 9.7H8.8a4.6 4.6 0 0 0 0 9.2" />
                 </Button>
-
-                <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
-
-                <!--
-                    One menu for the three questions that together answer "how
-                    do I want to see this": how the sheets flow, how many sit
-                    side by side, and what the zoom follows. They used to be
-                    separate toggles, which said nothing about how they combine.
-                -->
-                <DropDownButton
-                    x:Name="ViewModeButton"
-                    IsEnabled="False"
-                    Style="{StaticResource SlimDropDownStyle}"
-                    ToolTipService.ToolTip="Cómo se ve el documento">
-                    <StackPanel Orientation="Horizontal" Spacing="7">
-                        <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.8 3.6h14.4v12.8H2.8Z M10 3.6v12.8" />
-                        <TextBlock x:Name="ViewModeText" Text="Vista" />
-                    </StackPanel>
-                    <DropDownButton.Flyout>
-                        <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                            <RadioMenuFlyoutItem
-                                x:Name="FitWidthItem"
-                                Click="OnFitWidthClicked"
-                                GroupName="ZenInkFit"
-                                KeyboardAcceleratorTextOverride="Ctrl+1"
-                                Text="Ancho completo" />
-                            <RadioMenuFlyoutItem
-                                x:Name="FitPageItem"
-                                Click="OnFitPageClicked"
-                                GroupName="ZenInkFit"
-                                KeyboardAcceleratorTextOverride="Ctrl+2"
-                                Text="Página completa" />
-                            <RadioMenuFlyoutItem
-                                x:Name="FitActualItem"
-                                Click="OnActualSizeClicked"
-                                GroupName="ZenInkFit"
-                                KeyboardAcceleratorTextOverride="Ctrl+0"
-                                Text="Tamaño real (100 %)" />
-                            <RadioMenuFlyoutItem
-                                x:Name="FitFreeItem"
-                                Click="OnFitFreeClicked"
-                                GroupName="ZenInkFit"
-                                Text="Zoom libre" />
-
-                            <MenuFlyoutSeparator />
-
-                            <RadioMenuFlyoutItem
-                                x:Name="OneColumnItem"
-                                Click="OnOneColumnClicked"
-                                GroupName="ZenInkColumns"
-                                Text="A una página" />
-                            <RadioMenuFlyoutItem
-                                x:Name="TwoColumnsItem"
-                                Click="OnTwoColumnsClicked"
-                                GroupName="ZenInkColumns"
-                                Text="A dos páginas" />
-
-                            <MenuFlyoutSeparator />
-
-                            <RadioMenuFlyoutItem
-                                x:Name="ContinuousItem"
-                                Click="OnContinuousModeClicked"
-                                GroupName="ZenInkFlow"
-                                Text="Continuo — todas las páginas en una tira" />
-                            <RadioMenuFlyoutItem
-                                x:Name="SingleItem"
-                                Click="OnSingleModeClicked"
-                                GroupName="ZenInkFlow"
-                                Text="Página a página — la rueda hace zoom" />
-                        </MenuFlyout>
-                    </DropDownButton.Flyout>
-                </DropDownButton>
-
-                <DropDownButton
-                    x:Name="RotateButton"
-                    IsEnabled="False"
-                    Style="{StaticResource SlimDropDownStyle}"
-                    ToolTipService.ToolTip="Girar páginas">
-                    <StackPanel Orientation="Horizontal" Spacing="7">
-                        <!--
-                            Three quarters of a circle, drawn clockwise from
-                            the top, with the head on the end it actually
-                            arrives at. Pointing the head the other way — or
-                            giving it barbs as long as the radius — closes the
-                            gap and the whole thing reads as a filled blob at
-                            18px.
-                        -->
-                        <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 3.8 A6.2 6.2 0 1 1 3.8 10 M1.9 12.2 L3.8 10 L5.7 12.2" />
-                        <TextBlock Text="Girar" />
-                    </StackPanel>
-                    <DropDownButton.Flyout>
-                        <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                            <MenuFlyoutItem Click="OnRotateLeftClicked" Text="Girar la página a la izquierda" />
-                            <MenuFlyoutItem Click="OnRotateRightClicked" Text="Girar la página a la derecha" />
-
-                            <MenuFlyoutSeparator />
-
-                            <MenuFlyoutItem Click="OnRotateAllLeftClicked" Text="Girar todas las páginas a la izquierda" />
-                            <MenuFlyoutItem Click="OnRotateAllRightClicked" Text="Girar todas las páginas a la derecha" />
-                        </MenuFlyout>
-                    </DropDownButton.Flyout>
-                </DropDownButton>
 
                 <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
 
@@ -456,72 +301,6 @@
 
                 <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
 
-                <ToggleButton
-                    x:Name="LineWeightButton"
-                    Click="OnLineWeightClicked"
-                    IsChecked="True"
-                    IsEnabled="False"
-                    Style="{StaticResource SlimToggleStyle}"
-                    ToolTipService.ToolTip="Grosores de línea — desactivar dibuja todas las líneas finas">
-                    <StackPanel Orientation="Horizontal" Spacing="7">
-                        <controls:ToolIcon
-                            Style="{StaticResource BarIconStyle}"
-                            Data="M3 4.5h14v1.1H3Z M3 8.9h14v2.2H3Z M3 14.1h14v3.4H3Z"
-                            Filled="True" />
-                        <TextBlock Text="Grosores" />
-                    </StackPanel>
-                </ToggleButton>
-            </StackPanel>
-
-            <TextBlock
-                x:Name="DocumentNameText"
-                Grid.Column="1"
-                Margin="16,0"
-                VerticalAlignment="Center"
-                Opacity="0.55"
-                TextTrimming="CharacterEllipsis" />
-
-            <StackPanel
-                Grid.Column="2"
-                Orientation="Horizontal"
-                Spacing="2">
-                <Button
-                    x:Name="PrintButton"
-                    Click="OnPrintClicked"
-                    IsEnabled="False"
-                    Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Imprimir (Ctrl+P)">
-                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M6 7.4V3.2h8v4.2 M6 13.4H4.4a1.4 1.4 0 0 1-1.4-1.4V8.8a1.4 1.4 0 0 1 1.4-1.4h11.2a1.4 1.4 0 0 1 1.4 1.4V12a1.4 1.4 0 0 1-1.4 1.4H14 M6 11.6h8v5.2H6Z" />
-                </Button>
-
-                <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
-
-                <!--
-                    El buscador de comandos necesita botón: un atajo que nadie
-                    ve es un atajo que nadie usa. El icono es un cursor de
-                    consola —el chevrón y su raya— porque es lo que significa
-                    «escribe lo que quieras hacer», y no se confunde con la lupa
-                    de al lado, que busca dentro del documento.
-                -->
-                <Button
-                    x:Name="CommandButton"
-                    Click="OnCommandButtonClicked"
-                    Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Buscar una herramienta o una acción (Ctrl+K)">
-                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.8 4.6h14.4a1 1 0 0 1 1 1v8.8a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1V5.6a1 1 0 0 1 1-1Z M5.6 8.2 L8 10.4 L5.6 12.6 M10 12.6h4.4" />
-                </Button>
-
-                <Button
-                    x:Name="FindButton"
-                    Click="OnFindClicked"
-                    IsEnabled="False"
-                    Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Buscar en el documento (Ctrl+F)">
-                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M9 15.4a6.4 6.4 0 1 0 0-12.8 6.4 6.4 0 0 0 0 12.8Z M13.6 13.6 17.2 17.2" />
-                </Button>
-
-                <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
-
                 <Button
                     x:Name="ZoomOutButton"
                     Click="OnZoomOutClicked"
@@ -544,270 +323,707 @@
                     ToolTipService.ToolTip="Acercar">
                     <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M10 4.8 L10 15.2 M4.8 10 L15.2 10" />
                 </Button>
-
-                <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
-
-                <Button
-                    x:Name="SettingsButton"
-                    Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Preferencias">
-                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 12.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z M15.9 12.6a1.4 1.4 0 0 0 .3 1.6l.1.1a1.7 1.7 0 1 1-2.4 2.4l-.1-.1a1.4 1.4 0 0 0-1.6-.3 1.4 1.4 0 0 0-.9 1.3v.2a1.7 1.7 0 1 1-3.4 0v-.1a1.4 1.4 0 0 0-.9-1.3 1.4 1.4 0 0 0-1.6.3l-.1.1a1.7 1.7 0 1 1-2.4-2.4l.1-.1a1.4 1.4 0 0 0 .3-1.6 1.4 1.4 0 0 0-1.3-.9h-.2a1.7 1.7 0 1 1 0-3.4h.1a1.4 1.4 0 0 0 1.3-.9 1.4 1.4 0 0 0-.3-1.6l-.1-.1a1.7 1.7 0 1 1 2.4-2.4l.1.1a1.4 1.4 0 0 0 1.6.3h.1a1.4 1.4 0 0 0 .9-1.3v-.2a1.7 1.7 0 1 1 3.4 0v.1a1.4 1.4 0 0 0 .9 1.3 1.4 1.4 0 0 0 1.6-.3l.1-.1a1.7 1.7 0 1 1 2.4 2.4l-.1.1a1.4 1.4 0 0 0-.3 1.6v.1a1.4 1.4 0 0 0 1.3.9h.2a1.7 1.7 0 1 1 0 3.4h-.1a1.4 1.4 0 0 0-1.3.9Z" />
-                    <Button.Flyout>
-                        <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <MenuFlyoutSubItem Text="Tema">
-                                <RadioMenuFlyoutItem
-                                    x:Name="ThemeSystemItem"
-                                    Click="OnThemeSystemClicked"
-                                    GroupName="AppTheme"
-                                    Text="Según el sistema" />
-                                <RadioMenuFlyoutItem
-                                    x:Name="ThemeLightItem"
-                                    Click="OnThemeLightClicked"
-                                    GroupName="AppTheme"
-                                    Text="Claro" />
-                                <RadioMenuFlyoutItem
-                                    x:Name="ThemeDarkItem"
-                                    Click="OnThemeDarkClicked"
-                                    GroupName="AppTheme"
-                                    Text="Oscuro" />
-                            </MenuFlyoutSubItem>
-                            <MenuFlyoutSeparator />
-                            <!--
-                                Windows no deja que un programa se ponga como
-                                predeterminado: esto lleva a la página donde se
-                                elige. Está aquí para quien dijo que no volviera
-                                a preguntar y luego cambió de idea.
-                            -->
-                            <MenuFlyoutItem
-                                x:Name="DefaultPdfItem"
-                                Click="OnDefaultPdfClicked"
-                                Text="Abrir los PDF con ZenInk…" />
-                        </MenuFlyout>
-                    </Button.Flyout>
-                </Button>
             </StackPanel>
         </Grid>
 
-        <!--  Cuerpo: raíl · miniaturas · lienzo · propiedades  -->
-        <Grid Grid.Row="2" ColumnDefinitions="56,Auto,*,Auto">
+        <!--
+            Fila de comandos. A la izquierda, fuera de las pestañas, los cuatro
+            modos de navegación: son a lo que se vuelve entre marca y marca, y
+            meterlos en una pestaña obligaría a viajar hasta ella para soltar la
+            herramienta. Van sin rótulo a propósito —la mano, la I del texto, la
+            flecha y la lupa se reconocen solas— y así no se llevan el ancho que
+            necesitan los nombres de los demás.
 
-            <!--  Raíl de herramientas  -->
-            <Grid
+            A la derecha, la pestaña activa. Las tres viven a la vez en el árbol
+            y solo se ve una: cambiar de pestaña no puede reconstruir botones
+            cuyo estado —qué herramienta está pulsada— lo lleva el propio
+            control.
+        -->
+        <Grid
+            Grid.Row="2"
+            Height="44"
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            ColumnDefinitions="Auto,*">
+
+            <StackPanel
                 Grid.Column="0"
-                Background="{ThemeResource LayerFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                BorderThickness="0,0,1,0"
-                RowDefinitions="*,Auto">
-                <!--
-                    The rail scrolls: with the marking tools on it there are
-                    eleven buttons, and a window short enough to cut one off is
-                    an ordinary window, not an edge case.
-                -->
-                <ScrollViewer
-                    Grid.Row="0"
-                    HorizontalScrollMode="Disabled"
-                    VerticalScrollBarVisibility="Hidden">
-                <!--  Poco aire entre botones: con doce herramientas, cada punto cuenta.  -->
-                <StackPanel
-                    Padding="0,6"
-                    HorizontalAlignment="Center"
-                    Spacing="2">
-                    <ToggleButton
-                        x:Name="PanToolButton"
-                        Click="OnPanToolClicked"
-                        IsChecked="True"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Mano — arrastrar para desplazar">
+                Padding="12,0,0,0"
+                VerticalAlignment="Center"
+                Orientation="Horizontal"
+                Spacing="2">
+                <ToggleButton
+                    x:Name="PanToolButton"
+                    Click="OnPanToolClicked"
+                    IsChecked="True"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimIconToggleStyle}"
+                    ToolTipService.ToolTip="Mano — arrastrar para desplazar (M)">
+                    <!--
+                        Una mano abierta y nada más. Los cuatro dedos se dibujan
+                        encadenados —el lado derecho de uno es el izquierdo del
+                        siguiente— porque a 18 px lo que los separa no son huecos
+                        sino que el contorno baje entre bulto y bulto. Los altos
+                        van escalonados como una mano de verdad: corazón el más
+                        largo, meñique el más corto.
+                    -->
+                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M7.2 10.6V5.0a1.15 1.15 0 0 1 2.3 0v3.4 M9.5 8.4V3.6a1.15 1.15 0 0 1 2.3 0v4.8 M11.8 8.4V4.0a1.15 1.15 0 0 1 2.3 0v4.4 M14.1 8.4V5.2a1.15 1.15 0 0 1 2.3 0v3.2a5 5 0 0 1-1.5 3.6 3 3 0 0 0-.9 2.2V16.8 M7.2 10.6 L5.9 8.9a1.35 1.35 0 0 0-2.2 1.6l2 3a5.4 5.4 0 0 0 .9 3V16.8" />
+                </ToggleButton>
+                <ToggleButton
+                    x:Name="SelectMarkToolButton"
+                    Click="OnSelectMarkToolClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimIconToggleStyle}"
+                    ToolTipService.ToolTip="Seleccionar marcas — arrastrar para moverlas, Supr para borrar (V)">
+                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M5.6 3.2 L5.6 15.4 L8.6 12.6 L10.6 16.8 L12.8 15.8 L10.8 11.8 L15 11.6 Z" />
+                </ToggleButton>
+                <ToggleButton
+                    x:Name="TextToolButton"
+                    Click="OnTextToolClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimIconToggleStyle}"
+                    ToolTipService.ToolTip="Seleccionar texto (X)">
+                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M8 3.5h4 M8 16.5h4 M10 3.5v13" />
+                </ToggleButton>
+                <ToggleButton
+                    x:Name="ZoomToolButton"
+                    Click="OnZoomToolClicked"
+                    IsEnabled="False"
+                    Style="{StaticResource SlimIconToggleStyle}"
+                    ToolTipService.ToolTip="Zoom por ventana — arrastra un rectángulo sobre la zona (Z)">
+                    <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M8.6 14.6a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z M13 13 17.2 17.2 M6.2 8.6h4.8 M8.6 6.2v4.8" />
+                </ToggleButton>
+
+                <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+            </StackPanel>
+
+            <!--
+                Cuando no cabe, los rótulos se van y quedan los iconos, que es
+                lo que hace Office con la ventana estrecha. El desplazamiento
+                lateral está debajo por si aun así no llega, pero no debería
+                verse: una cinta con barra de desplazamiento es una cinta que ha
+                fallado.
+            -->
+            <ScrollViewer
+                x:Name="RibbonRow"
+                Grid.Column="1"
+                HorizontalScrollBarVisibility="Auto"
+                HorizontalScrollMode="Auto"
+                SizeChanged="OnRibbonRowSizeChanged"
+                VerticalScrollMode="Disabled">
+                <Grid Padding="0,0,12,0">
+
+                    <!--  Inicio: el documento, y cómo se mira.  -->
+                    <StackPanel
+                        x:Name="RibbonInicio"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="2">
+
                         <!--
-                            Mano con el índice levantado y una flecha de doble
-                            punta al lado: el gesto de arrastrar, no una mano
-                            quieta. La mano se apoya a la derecha para que la
-                            flecha respire; pegadas, a 21 px se leen como una
-                            sola mancha. Los tres dedos plegados son bultos con
-                            el contorno bajando entre uno y otro, que es lo que
-                            los distingue a este tamaño.
+                            El desplegable lleva los planos abiertos hace poco. Solo
+                            guarda la ruta: nada se lee de los archivos para dibujar
+                            esta lista, que es lo que la deja gratis al arrancar aunque
+                            los planos estén en un servidor.
                         -->
-                        <controls:ToolIcon
-                            Style="{StaticResource RailIconStyle}"
-                            Data="M2.9 1.9V8.5 M1.5 3.3 L2.9 1.9 L4.3 3.3 M1.5 7.1 L2.9 8.5 L4.3 7.1 M8.7 11.4V4.6a1.15 1.15 0 0 1 2.3 0v5.3 M11 9.9V8.4a1.15 1.15 0 0 1 2.3 0v1.5 M13.3 9.9V8.8a1.15 1.15 0 0 1 2.3 0v1.1 M15.6 9.9V9.5a1.15 1.15 0 0 1 2.3 0v3.1a5 5 0 0 1-1.5 3.6 3 3 0 0 0-.9 2.2V18.4 M8.7 11.4 L7.4 9.7a1.35 1.35 0 0 0-2.2 1.6l2 3a5.4 5.4 0 0 0 .9 3V18.4" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="ZoomToolButton"
-                        Click="OnZoomToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Zoom por ventana — arrastra un rectángulo sobre la zona">
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M8.6 14.6a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z M13 13 17.2 17.2 M6.2 8.6h4.8 M8.6 6.2v4.8" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="TextToolButton"
-                        Click="OnTextToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Seleccionar texto">
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M8 3.5h4 M8 16.5h4 M10 3.5v13" />
-                    </ToggleButton>
+                        <SplitButton
+                            x:Name="OpenButton"
+                            Click="OnOpenClicked"
+                            Style="{StaticResource SlimSplitButtonStyle}"
+                            ToolTipService.ToolTip="Abrir un documento">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.5 5.5A1.5 1.5 0 0 1 4 4h3.4l1.6 2H16a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5Z" />
+                                <TextBlock Text="Abrir" />
+                            </StackPanel>
+                            <SplitButton.Flyout>
+                                <MenuFlyout
+                                    x:Name="RecentFlyout"
+                                    Opening="OnRecentFlyoutOpening"
+                                    Placement="BottomEdgeAlignedLeft" />
+                            </SplitButton.Flyout>
+                        </SplitButton>
 
-                    <Rectangle
-                        Width="24"
-                        Height="1"
-                        Margin="0,5"
-                        HorizontalAlignment="Center"
-                        Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                        <SplitButton
+                            x:Name="SaveButton"
+                            Click="OnSaveClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimSplitButtonStyle}"
+                            ToolTipService.ToolTip="Guardar los cambios en el PDF (Ctrl+S)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <!--  La flecha es la acción; la bandeja es el sitio donde cae.  -->
+                                <controls:ToolIcon
+                                    Style="{StaticResource BarIconStyle}"
+                                    Accent="{ThemeResource IconSaveBrush}"
+                                    AccentData="M10 3.4v8.4 M6.4 8.4 L10 12 L13.6 8.4"
+                                    Data="M3.6 13.2v2.2a1.2 1.2 0 0 0 1.2 1.2h10.4a1.2 1.2 0 0 0 1.2-1.2v-2.2" />
+                                <TextBlock Text="Guardar" />
+                            </StackPanel>
+                            <SplitButton.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                    <MenuFlyoutItem
+                                        x:Name="SaveItem"
+                                        Click="OnSaveItemClicked"
+                                        KeyboardAcceleratorTextOverride="Ctrl+S"
+                                        Text="Guardar en el PDF" />
+                                    <MenuFlyoutItem
+                                        x:Name="SaveCopyItem"
+                                        Click="OnSaveCopyClicked"
+                                        Text="Guardar como…" />
 
-                    <!--  Anotación: una herramienta por tipo de marca, y la flecha para cogerlas.  -->
-                    <ToggleButton
-                        x:Name="SelectMarkToolButton"
-                        Click="OnSelectMarkToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Seleccionar marcas — arrastrar para moverlas, Supr para borrar">
-                        <controls:ToolIcon
-                            Style="{StaticResource RailIconStyle}"
-                            Data="M5.6 3.2 L5.6 15.4 L8.6 12.6 L10.6 16.8 L12.8 15.8 L10.8 11.8 L15 11.6 Z"
-                            Filled="True" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="LineToolButton"
-                        Click="OnLineToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Línea">
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M4 16 L16 4" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="ArrowToolButton"
-                        Click="OnArrowToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Flecha">
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M4 16 L15.4 4.6 M10.2 4.6 H15.4 V9.8" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="PolylineToolButton"
-                        Click="OnPolylineToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Polilínea — clic en cada vértice, Intro o doble clic para terminar">
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M3.4 15.2 L7.6 6.6 L11.2 12.4 L16.6 4.8" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="RectangleToolButton"
-                        Click="OnRectangleToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Rectángulo">
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M3.6 5.4h12.8v9.2H3.6Z" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="EllipseToolButton"
-                        Click="OnEllipseToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Elipse">
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M10 15.4c3.6 0 6.4-2.4 6.4-5.4S13.6 4.6 10 4.6 3.6 7 3.6 10s2.8 5.4 6.4 5.4Z" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="PolygonToolButton"
-                        Click="OnPolygonToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Polígono — clic en cada vértice, Intro o doble clic para cerrarlo">
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M10 3.2 L16.8 8.2 L14.2 16.4 H5.8 L3.2 8.2 Z" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="CloudToolButton"
-                        Click="OnCloudToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Nube de revisión — arrastra un recuadro, o clic en cada vértice">
-                        <!--  Cuatro lóbulos y una base: a 21 px es lo que se lee como nube.  -->
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M5.6 15.2a2.7 2.7 0 0 1-.4-5.3 3.3 3.3 0 0 1 5.6-2.6 2.9 2.9 0 0 1 4.5 2.7 2.6 2.6 0 0 1-.5 5.2Z" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="HighlightToolButton"
-                        Click="OnHighlightToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Resaltar texto — arrastra sobre el texto">
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M5.6 12.2 12.4 5.4l2.6 2.6-6.8 6.8H5.6Z M3.8 17.2h12.4" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="TextToolMarkButton"
-                        Click="OnFreeTextToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Texto — clic en la página y se escribe al lado">
-                        <!--  Una A sobre una línea de base: el texto que se queda en el plano.  -->
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M4.6 13.4 9 3.6h2L15.4 13.4 M6.6 10.2h6.8 M3.6 16.6h12.8" />
-                    </ToggleButton>
-                    <ToggleButton
-                        x:Name="NoteToolButton"
-                        Click="OnNoteToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Comentario — clic en la página y se escribe al lado">
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M3.8 5h12.4v8.2H9.4L6.2 16.4V13.2H3.8Z" />
-                    </ToggleButton>
+                                    <MenuFlyoutSeparator />
+
+                                    <!--
+                                        Descartar vive aquí, no en «Girar»: tira todo lo
+                                        que no se ha escrito, marcas incluidas, y eso es
+                                        asunto del documento y no de una herramienta.
+                                    -->
+                                    <MenuFlyoutItem
+                                        x:Name="DiscardChangesItem"
+                                        Click="OnDiscardChangesClicked"
+                                        Text="Descartar los cambios sin guardar" />
+                                </MenuFlyout>
+                            </SplitButton.Flyout>
+                        </SplitButton>
+
+                        <!--
+                            Aplanar y firmar son formas de guardar, no herramientas de
+                            dibujo: escriben el archivo y cambian lo que el archivo es.
+                            Por eso están junto a «Guardar» y no en «Anotar», aunque el
+                            sello de la firma se coloque arrastrándolo como una marca.
+                        -->
+                        <Button
+                            x:Name="FlattenButton"
+                            Click="OnFlattenClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimButtonStyle}"
+                            ToolTipService.ToolTip="Aplanar las marcas en el documento (no se puede deshacer)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.6 4.6 L10 8 L16.4 4.6 M3.6 9 L10 12.4 L16.4 9 M3.6 16.4 H16.4" />
+                                <TextBlock Text="Aplanar" />
+                            </StackPanel>
+                        </Button>
+                        <Button
+                            x:Name="SignButton"
+                            Click="OnSignClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimButtonStyle}"
+                            ToolTipService.ToolTip="Firmar el documento con un certificado">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <!--  La rúbrica es tinta y el renglón es papel: solo la primera lleva color.  -->
+                                <controls:ToolIcon
+                                    Style="{StaticResource BarIconStyle}"
+                                    Accent="{ThemeResource IconSignatureBrush}"
+                                    AccentData="M4.2 13.8 C 3.6 8.6, 6.2 4.2, 8.2 4.8 C 10 5.4, 9 9, 7.4 11.4 C 6.2 13.2, 7 14.2, 8.8 13.4 C 10.8 12.5, 12.6 10.6, 14.4 11 C 15.3 11.2, 15.6 12.2, 16.6 11.4"
+                                    Data="M3.4 16.6 H16.6" />
+                                <TextBlock Text="Firmar" />
+                            </StackPanel>
+                        </Button>
+
+                        <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                        <Button
+                            x:Name="PrintButton"
+                            Click="OnPrintClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimButtonStyle}"
+                            ToolTipService.ToolTip="Imprimir (Ctrl+P)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M6 7.4V3.2h8v4.2 M6 13.4H4.4a1.4 1.4 0 0 1-1.4-1.4V8.8a1.4 1.4 0 0 1 1.4-1.4h11.2a1.4 1.4 0 0 1 1.4 1.4V12a1.4 1.4 0 0 1-1.4 1.4H14 M6 11.6h8v5.2H6Z" />
+                                <TextBlock Text="Imprimir" />
+                            </StackPanel>
+                        </Button>
+
+                        <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                        <!--
+                            One menu for the three questions that together answer "how
+                            do I want to see this": how the sheets flow, how many sit
+                            side by side, and what the zoom follows.
+                        -->
+                        <DropDownButton
+                            x:Name="ViewModeButton"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimDropDownStyle}"
+                            ToolTipService.ToolTip="Cómo se ve el documento">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.8 3.6h14.4v12.8H2.8Z M10 3.6v12.8" />
+                                <TextBlock x:Name="ViewModeText" Text="Vista" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                    <RadioMenuFlyoutItem
+                                        x:Name="FitWidthItem"
+                                        Click="OnFitWidthClicked"
+                                        GroupName="ZenInkFit"
+                                        KeyboardAcceleratorTextOverride="Ctrl+1"
+                                        Text="Ancho completo" />
+                                    <RadioMenuFlyoutItem
+                                        x:Name="FitPageItem"
+                                        Click="OnFitPageClicked"
+                                        GroupName="ZenInkFit"
+                                        KeyboardAcceleratorTextOverride="Ctrl+2"
+                                        Text="Página completa" />
+                                    <RadioMenuFlyoutItem
+                                        x:Name="FitActualItem"
+                                        Click="OnActualSizeClicked"
+                                        GroupName="ZenInkFit"
+                                        KeyboardAcceleratorTextOverride="Ctrl+0"
+                                        Text="Tamaño real (100 %)" />
+                                    <RadioMenuFlyoutItem
+                                        x:Name="FitFreeItem"
+                                        Click="OnFitFreeClicked"
+                                        GroupName="ZenInkFit"
+                                        Text="Zoom libre" />
+
+                                    <MenuFlyoutSeparator />
+
+                                    <RadioMenuFlyoutItem
+                                        x:Name="OneColumnItem"
+                                        Click="OnOneColumnClicked"
+                                        GroupName="ZenInkColumns"
+                                        Text="A una página" />
+                                    <RadioMenuFlyoutItem
+                                        x:Name="TwoColumnsItem"
+                                        Click="OnTwoColumnsClicked"
+                                        GroupName="ZenInkColumns"
+                                        Text="A dos páginas" />
+
+                                    <MenuFlyoutSeparator />
+
+                                    <RadioMenuFlyoutItem
+                                        x:Name="ContinuousItem"
+                                        Click="OnContinuousModeClicked"
+                                        GroupName="ZenInkFlow"
+                                        Text="Continuo — todas las páginas en una tira" />
+                                    <RadioMenuFlyoutItem
+                                        x:Name="SingleItem"
+                                        Click="OnSingleModeClicked"
+                                        GroupName="ZenInkFlow"
+                                        Text="Página a página — la rueda hace zoom" />
+                                </MenuFlyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+
+                        <ToggleButton
+                            x:Name="LineWeightButton"
+                            Click="OnLineWeightClicked"
+                            IsChecked="True"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Grosores de línea — desactivar dibuja todas las líneas finas">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <controls:ToolIcon
+                                    Style="{StaticResource BarIconStyle}"
+                                    Data="M3 4.5h14v1.1H3Z M3 8.9h14v2.2H3Z M3 14.1h14v3.4H3Z"
+                                    Filled="True" />
+                                <TextBlock Text="Grosores" />
+                            </StackPanel>
+                        </ToggleButton>
+
+                        <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                        <Button
+                            x:Name="FindButton"
+                            Click="OnFindClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimButtonStyle}"
+                            ToolTipService.ToolTip="Buscar en el documento (Ctrl+F)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M9 15.4a6.4 6.4 0 1 0 0-12.8 6.4 6.4 0 0 0 0 12.8Z M13.6 13.6 17.2 17.2" />
+                                <TextBlock Text="Buscar" />
+                            </StackPanel>
+                        </Button>
+
+                        <!--
+                            El buscador de comandos necesita botón: un atajo que nadie
+                            ve es un atajo que nadie usa. El icono es un cursor de
+                            consola —el chevrón y su raya— porque es lo que significa
+                            «escribe lo que quieras hacer», y no se confunde con la lupa
+                            de al lado, que busca dentro del documento.
+                        -->
+                        <Button
+                            x:Name="CommandButton"
+                            Click="OnCommandButtonClicked"
+                            Style="{StaticResource SlimButtonStyle}"
+                            ToolTipService.ToolTip="Buscar una herramienta o una acción (Ctrl+K)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.8 4.6h14.4a1 1 0 0 1 1 1v8.8a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1V5.6a1 1 0 0 1 1-1Z M5.6 8.2 L8 10.4 L5.6 12.6 M10 12.6h4.4" />
+                                <TextBlock Text="Comandos" />
+                            </StackPanel>
+                        </Button>
+
+                        <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                        <Button
+                            x:Name="SettingsButton"
+                            Style="{StaticResource SlimIconButtonStyle}"
+                            ToolTipService.ToolTip="Preferencias">
+                            <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 12.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z M15.9 12.6a1.4 1.4 0 0 0 .3 1.6l.1.1a1.7 1.7 0 1 1-2.4 2.4l-.1-.1a1.4 1.4 0 0 0-1.6-.3 1.4 1.4 0 0 0-.9 1.3v.2a1.7 1.7 0 1 1-3.4 0v-.1a1.4 1.4 0 0 0-.9-1.3 1.4 1.4 0 0 0-1.6.3l-.1.1a1.7 1.7 0 1 1-2.4-2.4l.1-.1a1.4 1.4 0 0 0 .3-1.6 1.4 1.4 0 0 0-1.3-.9h-.2a1.7 1.7 0 1 1 0-3.4h.1a1.4 1.4 0 0 0 1.3-.9 1.4 1.4 0 0 0-.3-1.6l-.1-.1a1.7 1.7 0 1 1 2.4-2.4l.1.1a1.4 1.4 0 0 0 1.6.3h.1a1.4 1.4 0 0 0 .9-1.3v-.2a1.7 1.7 0 1 1 3.4 0v.1a1.4 1.4 0 0 0 .9 1.3 1.4 1.4 0 0 0 1.6-.3l.1-.1a1.7 1.7 0 1 1 2.4 2.4l-.1.1a1.4 1.4 0 0 0-.3 1.6v.1a1.4 1.4 0 0 0 1.3.9h.2a1.7 1.7 0 1 1 0 3.4h-.1a1.4 1.4 0 0 0-1.3.9Z" />
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                    <MenuFlyoutSubItem Text="Tema">
+                                        <RadioMenuFlyoutItem
+                                            x:Name="ThemeSystemItem"
+                                            Click="OnThemeSystemClicked"
+                                            GroupName="AppTheme"
+                                            Text="Según el sistema" />
+                                        <RadioMenuFlyoutItem
+                                            x:Name="ThemeLightItem"
+                                            Click="OnThemeLightClicked"
+                                            GroupName="AppTheme"
+                                            Text="Claro" />
+                                        <RadioMenuFlyoutItem
+                                            x:Name="ThemeDarkItem"
+                                            Click="OnThemeDarkClicked"
+                                            GroupName="AppTheme"
+                                            Text="Oscuro" />
+                                    </MenuFlyoutSubItem>
+                                    <MenuFlyoutSeparator />
+                                    <!--
+                                        Windows no deja que un programa se ponga como
+                                        predeterminado: esto lleva a la página donde se
+                                        elige. Está aquí para quien dijo que no volviera
+                                        a preguntar y luego cambió de idea.
+                                    -->
+                                    <MenuFlyoutItem
+                                        x:Name="DefaultPdfItem"
+                                        Click="OnDefaultPdfClicked"
+                                        Text="Abrir los PDF con ZenInk…" />
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                    </StackPanel>
+
+                    <!--  Anotar: solo lo que deja algo dibujado en la hoja.  -->
+                    <StackPanel
+                        x:Name="RibbonAnotar"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="2"
+                        Visibility="Collapsed">
+
+                        <!--
+                            La captura abre la pestaña porque es lo que se hace
+                            con un plano revisado: recortar el detalle y pegarlo
+                            en un correo. No deja nada en la hoja, así que va
+                            separada del resto.
+                        -->
+                        <ToggleButton
+                            x:Name="CaptureToolButton"
+                            Click="OnCaptureToolClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Capturar una zona al portapapeles — arrastra un recuadro (K)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <!--
+                                    Las cuatro esquinas de un encuadre y el disparador
+                                    en medio. Sin cuerpo de cámara: a 18 px una cámara
+                                    entera es una mancha, y lo que hay que leer aquí es
+                                    «recorto un trozo», no «hago una foto».
+                                -->
+                                <controls:ToolIcon
+                                    Style="{StaticResource BarIconStyle}"
+                                    Accent="{ThemeResource IconCaptureBrush}"
+                                    AccentData="M8.2 10 H11.8 M10 8.2 V11.8"
+                                    Data="M2.8 7 V4.2a1.4 1.4 0 0 1 1.4-1.4H7 M13 2.8h2.8a1.4 1.4 0 0 1 1.4 1.4V7 M17.2 13v2.8a1.4 1.4 0 0 1-1.4 1.4H13 M7 17.2H4.2a1.4 1.4 0 0 1-1.4-1.4V13" />
+                                <TextBlock Text="Capturar" />
+                            </StackPanel>
+                        </ToggleButton>
+
+                        <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                        <ToggleButton
+                            x:Name="LineToolButton"
+                            Click="OnLineToolClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Línea (L)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4 16 L16 4" />
+                                <TextBlock Text="Línea" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton
+                            x:Name="ArrowToolButton"
+                            Click="OnArrowToolClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Flecha (F)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4 16 L15.4 4.6 M10.2 4.6 H15.4 V9.8" />
+                                <TextBlock Text="Flecha" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton
+                            x:Name="PolylineToolButton"
+                            Click="OnPolylineToolClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Polilínea — clic en cada vértice, Intro o doble clic para terminar (P)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.4 15.2 L7.6 6.6 L11.2 12.4 L16.6 4.8" />
+                                <TextBlock Text="Polilínea" />
+                            </StackPanel>
+                        </ToggleButton>
+
+                        <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                        <ToggleButton
+                            x:Name="RectangleToolButton"
+                            Click="OnRectangleToolClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Rectángulo (R)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.6 5.4h12.8v9.2H3.6Z" />
+                                <TextBlock Text="Rectángulo" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton
+                            x:Name="EllipseToolButton"
+                            Click="OnEllipseToolClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Elipse (E)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 15.4c3.6 0 6.4-2.4 6.4-5.4S13.6 4.6 10 4.6 3.6 7 3.6 10s2.8 5.4 6.4 5.4Z" />
+                                <TextBlock Text="Elipse" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton
+                            x:Name="PolygonToolButton"
+                            Click="OnPolygonToolClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Polígono — clic en cada vértice, Intro o doble clic para cerrarlo (G)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 3.2 L16.8 8.2 L14.2 16.4 H5.8 L3.2 8.2 Z" />
+                                <TextBlock Text="Polígono" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton
+                            x:Name="CloudToolButton"
+                            Click="OnCloudToolClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Nube de revisión — arrastra un recuadro, o clic en cada vértice (N)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <!--
+                                    Cuatro lóbulos y una base: a 18 px es lo que
+                                    se lee como nube. Va entera de rojo —no una
+                                    pieza suelta— porque una nube de revisión es
+                                    roja en cualquier plano: aquí el color no
+                                    decora, nombra.
+                                -->
+                                <controls:ToolIcon
+                                    Style="{StaticResource BarIconStyle}"
+                                    Accent="{ThemeResource IconRevisionBrush}"
+                                    AccentData="M5.6 15.2a2.7 2.7 0 0 1-.4-5.3 3.3 3.3 0 0 1 5.6-2.6 2.9 2.9 0 0 1 4.5 2.7 2.6 2.6 0 0 1-.5 5.2Z" />
+                                <TextBlock Text="Nube" />
+                            </StackPanel>
+                        </ToggleButton>
+
+                        <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                        <ToggleButton
+                            x:Name="HighlightToolButton"
+                            Click="OnHighlightToolClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Resaltar texto — arrastra sobre el texto (S)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <!--  La tinta va debajo del contorno, como en un rotulador de verdad.  -->
+                                <controls:ToolIcon
+                                    Style="{StaticResource BarIconStyle}"
+                                    Accent="{ThemeResource IconHighlightBrush}"
+                                    AccentFill="M5.6 12.2 12.4 5.4l2.6 2.6-6.8 6.8H5.6Z"
+                                    AccentFillOpacity="0.5"
+                                    Data="M5.6 12.2 12.4 5.4l2.6 2.6-6.8 6.8H5.6Z M3.8 17.2h12.4" />
+                                <TextBlock Text="Resaltar" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton
+                            x:Name="TextToolMarkButton"
+                            Click="OnFreeTextToolClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Texto — clic en la página y se escribe al lado (T)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <!--  Una A sobre una línea de base: el texto que se queda en el plano.  -->
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4.6 13.4 9 3.6h2L15.4 13.4 M6.6 10.2h6.8 M3.6 16.6h12.8" />
+                                <TextBlock Text="Texto" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton
+                            x:Name="NoteToolButton"
+                            Click="OnNoteToolClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Comentario — clic en la página y se escribe al lado (C)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.8 5h12.4v8.2H9.4L6.2 16.4V13.2H3.8Z" />
+                                <TextBlock Text="Comentario" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton
+                            x:Name="InkToolButton"
+                            Click="OnInkToolClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Lápiz — dibujar a mano alzada (A)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <!--  Solo la punta lleva color: es la parte que pinta.  -->
+                                <controls:ToolIcon
+                                    Style="{StaticResource BarIconStyle}"
+                                    Accent="{ThemeResource IconInkBrush}"
+                                    AccentFill="M4 16.2h3.4l3.2-3.2-3.4-3.4L4 12.8Z"
+                                    AccentFillOpacity="0.62"
+                                    Data="M4 16.2h3.4l8.8-8.8a1.7 1.7 0 0 0 0-2.4l-1-1a1.7 1.7 0 0 0-2.4 0L4 12.8Z M11.6 5.6 14.8 8.8" />
+                                <TextBlock Text="Lápiz" />
+                            </StackPanel>
+                        </ToggleButton>
+                    </StackPanel>
 
                     <!--
-                        El lápiz, el último: dibujar a mano alzada con ratón es
-                        el caso raro mientras la app no sea para pantalla táctil
-                        ni tableta.
+                        Hojas: el juego de planos. Los mismos comandos que el panel,
+                        pero alcanzables sin abrirlo — que es lo que la cinta vino a
+                        arreglar. Sobre qué actúan lo decide `PagesPanel.Target()`: lo
+                        marcado en el panel si hay algo marcado y el panel está a la
+                        vista, y si no, la hoja en la que estás.
                     -->
-                    <ToggleButton
-                        x:Name="InkToolButton"
-                        Click="OnInkToolClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Lápiz — dibujar a mano alzada">
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M4 16.2h3.4l8.8-8.8a1.7 1.7 0 0 0 0-2.4l-1-1a1.7 1.7 0 0 0-2.4 0L4 12.8Z M11.6 5.6 14.8 8.8" />
-                    </ToggleButton>
-                </StackPanel>
-                </ScrollViewer>
+                    <StackPanel
+                        x:Name="RibbonOrganizador"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="2"
+                        Visibility="Collapsed">
+                        <ToggleButton
+                            x:Name="ThumbnailsButton"
+                            Click="OnThumbnailsClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Panel de hojas">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.8 3.6h6v6h-6Z M11.2 3.6h6v6h-6Z M2.8 11.4h6v6h-6Z M11.2 11.4h6v6h-6Z" />
+                                <TextBlock Text="Panel" />
+                            </StackPanel>
+                        </ToggleButton>
 
-                <StackPanel
-                    Grid.Row="1"
-                    Padding="0,8"
-                    HorizontalAlignment="Center">
-                    <ToggleButton
-                        x:Name="ThumbnailsButton"
-                        Click="OnThumbnailsClicked"
-                        IsEnabled="False"
-                        Style="{StaticResource RailToolStyle}"
-                        ToolTipService.Placement="Right"
-                        ToolTipService.ToolTip="Panel de hojas">
-                        <controls:ToolIcon Style="{StaticResource RailIconStyle}" Data="M2.8 3.6h6v6h-6Z M11.2 3.6h6v6h-6Z M2.8 11.4h6v6h-6Z M11.2 11.4h6v6h-6Z" />
-                    </ToggleButton>
-                </StackPanel>
-            </Grid>
+                        <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                        <DropDownButton
+                            x:Name="RotateButton"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimDropDownStyle}"
+                            ToolTipService.ToolTip="Girar páginas">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <!--
+                                    Three quarters of a circle, drawn clockwise from
+                                    the top, with the head on the end it actually
+                                    arrives at. Pointing the head the other way — or
+                                    giving it barbs as long as the radius — closes the
+                                    gap and the whole thing reads as a filled blob at
+                                    18px.
+                                -->
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 3.8 A6.2 6.2 0 1 1 3.8 10 M1.9 12.2 L3.8 10 L5.7 12.2" />
+                                <TextBlock Text="Girar" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                    <MenuFlyoutItem Click="OnRotateLeftClicked" Text="Girar la página a la izquierda" />
+                                    <MenuFlyoutItem Click="OnRotateRightClicked" Text="Girar la página a la derecha" />
+
+                                    <MenuFlyoutSeparator />
+
+                                    <MenuFlyoutItem Click="OnRotateAllLeftClicked" Text="Girar todas las páginas a la izquierda" />
+                                    <MenuFlyoutItem Click="OnRotateAllRightClicked" Text="Girar todas las páginas a la derecha" />
+                                </MenuFlyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+
+                        <DropDownButton
+                            x:Name="InsertPagesButton"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimDropDownStyle}"
+                            ToolTipService.ToolTip="Insertar hojas detrás de la marcada">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4 3.4h8l3.6 3.6v9.6H4Z M12 3.4v3.6h3.6 M10 9.6v4.4 M7.8 11.8h4.4" />
+                                <TextBlock Text="Insertar" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                    <MenuFlyoutItem Click="OnInsertFromFileClicked" Text="Hojas de otro PDF…" />
+                                    <MenuFlyoutItem Click="OnInsertBlankClicked" Text="Una hoja en blanco…" />
+                                </MenuFlyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+
+                        <Button
+                            x:Name="DuplicatePageButton"
+                            Click="OnDuplicatePageClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimButtonStyle}"
+                            ToolTipService.ToolTip="Duplicar la hoja">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M7 2.8h8.2a1.4 1.4 0 0 1 1.4 1.4v8.2 M4.8 5.6h7.6a1.4 1.4 0 0 1 1.4 1.4v8.2a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4V7a1.4 1.4 0 0 1 1.4-1.4Z" />
+                                <TextBlock Text="Duplicar" />
+                            </StackPanel>
+                        </Button>
+                        <Button
+                            x:Name="DeletePageButton"
+                            Click="OnDeletePageClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimButtonStyle}"
+                            ToolTipService.ToolTip="Quitar la hoja del documento">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.6 5.6h12.8 M8 5.6V3.8h4v1.8 M5.4 5.6l.8 10.2a1 1 0 0 0 1 .9h5.6a1 1 0 0 0 1-.9l.8-10.2" />
+                                <TextBlock Text="Quitar" />
+                            </StackPanel>
+                        </Button>
+
+                        <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                        <Button
+                            x:Name="ExtractPagesButton"
+                            Click="OnExtractPagesClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimButtonStyle}"
+                            ToolTipService.ToolTip="Extraer las hojas a un PDF nuevo">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4 3.4h6l3.6 3.6v4.4 M10 3.4v3.6h3.6 M4 3.4v13.2h5 M13 12.6v5.2 M10.8 15.6 L13 17.8 L15.2 15.6" />
+                                <TextBlock Text="Extraer" />
+                            </StackPanel>
+                        </Button>
+                        <Button
+                            x:Name="SplitPagesButton"
+                            Click="OnSplitPagesClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimButtonStyle}"
+                            ToolTipService.ToolTip="Dividir el documento en archivos nuevos">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.4 3.6h5.2v5.2H3.4Z M11.4 3.6h5.2v5.2h-5.2Z M3.4 11.2h5.2v5.2H3.4Z M11.4 11.2h5.2v5.2h-5.2Z M10 1.8v16.4" />
+                                <TextBlock Text="Dividir" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </ScrollViewer>
+        </Grid>
+
+        <!--  Cuerpo: miniaturas · lienzo · propiedades  -->
+        <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto">
 
             <!--  Panel de hojas: miniaturas e índice  -->
             <rendering:PagesPanel
                 x:Name="Pages"
-                Grid.Column="1"
+                Grid.Column="0"
                 Width="232"
                 ActionRequested="OnPageActionRequested"
                 Visibility="Collapsed" />
 
             <!--  Lienzo  -->
-            <Grid Grid.Column="2">
+            <Grid Grid.Column="1">
                 <!--  Las pestañas son solo la tira; el visor de la activa se aloja aquí.  -->
                 <ContentControl
                     x:Name="ViewerPresenter"
@@ -844,6 +1060,50 @@
                             IsItemClickEnabled="True"
                             ItemClick="OnCommandChosen"
                             SelectionMode="Single" />
+                    </StackPanel>
+                </Border>
+
+                <!--
+                    Aviso de lo que acaba de pasar. Flota sobre el plano y no en
+                    la barra de arriba a propósito: lo que confirma una copia
+                    tiene que verse donde está mirando quien acaba de arrastrar
+                    el recuadro, y el rótulo gris junto al nombre del documento
+                    se pierde. Se va solo; no hay nada que cerrar.
+                -->
+                <Border
+                    x:Name="Toast"
+                    Margin="0,0,0,28"
+                    Padding="16,11"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Background="{ThemeResource SolidBackgroundFillColorTertiaryBrush}"
+                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    IsHitTestVisible="False"
+                    Opacity="0"
+                    Shadow="{ThemeResource CommandBarFlyoutOverflowShadow}"
+                    Visibility="Collapsed">
+                    <StackPanel
+                        Orientation="Horizontal"
+                        Spacing="11"
+                        VerticalAlignment="Center">
+                        <controls:ToolIcon
+                            x:Name="ToastIcon"
+                            Width="19"
+                            Height="19"
+                            VerticalAlignment="Center"
+                            Data="M4.2 10.4 L8.2 14.4 L15.8 6"
+                            Foreground="{ThemeResource IconSaveBrush}"
+                            Thickness="1.8" />
+                        <TextBlock
+                            x:Name="ToastText"
+                            VerticalAlignment="Center"
+                            FontWeight="SemiBold" />
+                        <TextBlock
+                            x:Name="ToastDetail"
+                            VerticalAlignment="Center"
+                            Opacity="0.6" />
                     </StackPanel>
                 </Border>
 
@@ -974,7 +1234,7 @@
             <!--  Propiedades de la herramienta activa  -->
             <Grid
                 x:Name="PropertiesPanel"
-                Grid.Column="3"
+                Grid.Column="2"
                 Width="280"
                 Background="{ThemeResource LayerFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"

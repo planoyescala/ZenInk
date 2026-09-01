@@ -15,8 +15,31 @@
             bounds of whichever strokes it happens to contain.
         -->
         <Grid Width="20" Height="20">
+            <!--
+                Tres capas, y el orden importa: el relleno de acento va debajo
+                del trazo —es la tinta del resaltador bajo su contorno, no
+                encima—, y el trazo de acento va arriba, porque es la pieza que
+                debe leerse primero.
+            -->
+            <Path
+                x:Name="AccentFillPath"
+                Width="20"
+                Height="20"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Stretch="None" />
             <Path
                 x:Name="IconPath"
+                Width="20"
+                Height="20"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Stretch="None"
+                StrokeEndLineCap="Round"
+                StrokeLineJoin="Round"
+                StrokeStartLineCap="Round" />
+            <Path
+                x:Name="AccentPath"
                 Width="20"
                 Height="20"
                 HorizontalAlignment="Left"

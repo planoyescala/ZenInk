@@ -379,7 +379,7 @@ public sealed partial class PagesPanel : UserControl
     /// </summary>
     private List<int> Target()
     {
-        var marked = SelectedSheets();
+        var marked = Marked();
         if (marked.Count > 0) return marked;
 
         return _viewer is { PageCount: > 0 } viewer ? [viewer.CurrentPageIndex] : [];
@@ -387,9 +387,17 @@ public sealed partial class PagesPanel : UserControl
 
     private int Destination()
     {
-        var marked = SelectedSheets();
+        var marked = Marked();
         return marked.Count > 0 ? marked[^1] + 1 : _viewer?.PageCount ?? 0;
     }
+
+    /// <summary>
+    /// What is marked, but only while the panel is on screen. Now that the
+    /// same commands sit in the ribbon, a closed panel would still be holding
+    /// whatever was marked the last time it was open — and «girar» would turn
+    /// a sheet the reader cannot see instead of the one they are looking at.
+    /// </summary>
+    private List<int> Marked() => Visibility == Visibility.Visible ? SelectedSheets() : [];
 
     private void OnMoveUpClicked(object sender, RoutedEventArgs e) => Run(PageAction.MoveUp);
 

@@ -3,8 +3,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Animation;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
+using Windows.Storage.Streams;
+using Windows.System;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
 using ZenInk.Core;
@@ -367,6 +370,7 @@ public sealed partial class MainPage : Page
         {
             var viewer = new PdfTiledViewer();
             viewer.ViewChanged += OnViewerViewChanged;
+            viewer.RegionCaptured += OnRegionCaptured;
             viewer.PagesChanged += OnViewerViewChanged;
             viewer.TextWanted += OnViewerTextWanted;
 
@@ -497,6 +501,7 @@ public sealed partial class MainPage : Page
             }
 
             viewer.ViewChanged -= OnViewerViewChanged;
+            viewer.RegionCaptured -= OnRegionCaptured;
             viewer.PagesChanged -= OnViewerViewChanged;
             viewer.TextWanted -= OnViewerTextWanted;
             viewer.CloseDocument();
@@ -2082,6 +2087,135 @@ public sealed partial class MainPage : Page
 
     private void OnInkToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Ink);
 
+    private void OnCaptureToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.CaptureRegion);
+
+    /// <summary>Tells the toast that is fading out that a newer one took its place.</summary>
+    private object? _toastToken;
+
+    /// <summary>
+    /// Says what just happened, over the drawing, and then goes away.
+    ///
+    /// This is for the things that leave no trace on screen — a copy to the
+    /// clipboard being the whole reason it exists. Without it the reader
+    /// drags a box, the box vanishes and nothing visibly happens, which reads
+    /// as a gesture that failed.
+    /// </summary>
+    private void ShowToast(string message, string detail = "")
+    {
+        ToastText.Text = message;
+        ToastDetail.Text = detail;
+        ToastDetail.Visibility = detail.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+
+        Toast.Visibility = Visibility.Visible;
+        FadeToast(1, 140);
+
+        var token = new object();
+        _toastToken = token;
+
+        _ = Task.Delay(TimeSpan.FromSeconds(3.5)).ContinueWith(_ => DispatcherQueue.TryEnqueue(() =>
+        {
+            // Only if it is still ours: a second capture while this one is up
+            // replaces the message rather than being cut short by it.
+            if (!ReferenceEquals(_toastToken, token)) return;
+
+            FadeToast(0, 320);
+            _ = Task.Delay(TimeSpan.FromMilliseconds(340)).ContinueWith(__ => DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!ReferenceEquals(_toastToken, token)) return;
+                Toast.Visibility = Visibility.Collapsed;
+            }));
+        }));
+    }
+
+    private void FadeToast(double to, int milliseconds)
+    {
+        var fade = new DoubleAnimation
+        {
+            To = to,
+            Duration = new Duration(TimeSpan.FromMilliseconds(milliseconds)),
+        };
+        Storyboard.SetTarget(fade, Toast);
+        Storyboard.SetTargetProperty(fade, "Opacity");
+
+        var story = new Storyboard();
+        story.Children.Add(fade);
+        story.Begin();
+    }
+
+    /// <summary>
+    /// The resolution a capture is rendered at. 200 dpi is what a drawing
+    /// pasted into a report wants: enough that a dimension stays legible when
+    /// the page is printed, without turning a modest region into a file nobody
+    /// can mail.
+    /// </summary>
+    private const double CaptureDpi = 200;
+
+    /// <summary>
+    /// Turns the box the reader drew into a picture on the clipboard.
+    ///
+    /// One shot: the hand comes back afterwards. A capture is a thing you do
+    /// once and then carry on reading, and a tool that stayed armed would put
+    /// the next pan gesture on the clipboard.
+    /// </summary>
+    private async void OnRegionCaptured(object? sender, CaptureSpot? spot)
+    {
+        if (sender is not PdfTiledViewer viewer || !ReferenceEquals(viewer, ActiveViewer)) return;
+
+        SetTool(ViewerTool.Pan);
+
+        if (spot is null)
+        {
+            ShowToast("Captura cancelada", "el recuadro se quedó demasiado pequeño");
+            return;
+        }
+
+        Hint("Preparando la captura…");
+
+        CaptureImage? shot;
+        try
+        {
+            shot = await viewer.RenderRegionPngAsync(spot.PageIndex, spot.SheetRect, CaptureDpi);
+        }
+        catch (Exception error)
+        {
+            ShowToast("No se pudo preparar la captura", error.Message);
+            return;
+        }
+
+        if (shot is null)
+        {
+            ShowToast("No se pudo preparar la captura");
+            return;
+        }
+
+        try
+        {
+            var package = new DataPackage { RequestedOperation = DataPackageOperation.Copy };
+            package.SetBitmap(RandomAccessStreamReference.CreateFromStream(shot.Png));
+            Clipboard.SetContent(package);
+
+            // Flush, and it is not optional. Without it the clipboard keeps a
+            // reference to the stream and only reads it when something pastes,
+            // so the picture dies with this stream — and worse, with ZenInk:
+            // copy, close the app, paste into a mail, and nothing arrives.
+            // This hands the pixels over now.
+            Clipboard.Flush();
+
+            // The size is not decoration: it is what says whether the capture
+            // is worth pasting, and it is the only way to notice that the
+            // twenty-megapixel ceiling softened this one.
+            ShowToast("Imagen copiada al portapapeles", $"{shot.Width} × {shot.Height} px");
+        }
+        catch (Exception error)
+        {
+            ShowToast("No se pudo copiar al portapapeles", error.Message);
+        }
+        finally
+        {
+            shot.Png.Dispose();
+        }
+    }
+
     private void OnLineToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Line);
 
     private void OnArrowToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Arrow);
@@ -2239,6 +2373,162 @@ public sealed partial class MainPage : Page
         {
             viewer.Tool = tool;
         }
+        // The ribbon follows the tool and not the other way round, so that
+        // every route in — a click, a letter, the command palette — leaves the
+        // strip agreeing with the drawing.
+        ShowTabFor(tool);
+        UpdateChrome();
+    }
+
+    /// <summary>
+    /// The tool letters. One key, no modifier, and the ribbon follows along so
+    /// that what is on screen never disagrees with what the drawing is doing.
+    /// </summary>
+    private void OnToolAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        // Not while someone is writing: there these are letters, not tools.
+        if (XamlRoot is { } root && FocusManager.GetFocusedElement(root) is TextBox or RichEditBox or AutoSuggestBox)
+        {
+            return;
+        }
+
+        if (ActiveViewer is not { PageCount: > 0 } || _busyMessage is not null) return;
+
+        var tool = sender.Key switch
+        {
+            VirtualKey.M => ViewerTool.Pan,
+            VirtualKey.V => ViewerTool.SelectAnnotation,
+            VirtualKey.L => ViewerTool.Line,
+            VirtualKey.F => ViewerTool.Arrow,
+            VirtualKey.P => ViewerTool.Polyline,
+            VirtualKey.R => ViewerTool.Rectangle,
+            VirtualKey.E => ViewerTool.Ellipse,
+            VirtualKey.G => ViewerTool.Polygon,
+            VirtualKey.N => ViewerTool.Cloud,
+            VirtualKey.S => ViewerTool.Highlight,
+            VirtualKey.T => ViewerTool.FreeText,
+            VirtualKey.C => ViewerTool.Note,
+            VirtualKey.A => ViewerTool.Ink,
+            VirtualKey.Z => ViewerTool.ZoomRectangle,
+            VirtualKey.X => ViewerTool.SelectText,
+            VirtualKey.K => ViewerTool.CaptureRegion,
+            _ => (ViewerTool?)null,
+        };
+        if (tool is not { } chosen) return;
+
+        SetTool(chosen);
+        args.Handled = true;
+    }
+
+    /// <summary>The ribbon's labels, found once: the rows never change shape.</summary>
+    private List<TextBlock>? _ribbonLabels;
+
+    /// <summary>Set while the ribbon is showing icons without their names.</summary>
+    private bool _ribbonCompact;
+
+    /// <summary>
+    /// Below this the widest row — «Anotar», with its eleven tools — no longer
+    /// fits, so the names come off and the icons stay. Measured against the
+    /// running app, not guessed: that row asks for about 1100 px, and the rest
+    /// is the margin that keeps the labels from flickering on and off while
+    /// the window is being dragged.
+    /// </summary>
+    private const double RibbonLabelWidth = 1120;
+
+    private void OnRibbonRowSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        bool compact = e.NewSize.Width < RibbonLabelWidth;
+        if (compact == _ribbonCompact) return;
+        _ribbonCompact = compact;
+
+        _ribbonLabels ??= new Panel[] { RibbonInicio, RibbonAnotar, RibbonOrganizador }
+            .SelectMany(RibbonLabelsIn)
+            .ToList();
+
+        foreach (var label in _ribbonLabels)
+        {
+            label.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        }
+    }
+
+    /// <summary>
+    /// The name inside each ribbon button. Every one of them is the TextBlock
+    /// that sits beside a <see cref="Controls.ToolIcon"/>, which is what tells
+    /// a label apart from the readouts — the page number and the zoom — that
+    /// live in the fixed row and must never be hidden.
+    ///
+    /// This reads the buttons' content and not the visual tree: three of the
+    /// four rows start collapsed, and a collapsed control has not applied its
+    /// template yet, so a visual walk would come back empty for them.
+    /// </summary>
+    private static IEnumerable<TextBlock> RibbonLabelsIn(Panel row)
+    {
+        foreach (var child in row.Children)
+        {
+            if (child is ContentControl { Content: StackPanel { Children: [Controls.ToolIcon, TextBlock label] } })
+            {
+                yield return label;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Shows the chosen tab's row of commands and hides the other three.
+    ///
+    /// The four rows all stay in the tree: which tool is down lives in the
+    /// button itself, and rebuilding the row on every tab change would mean
+    /// keeping that state somewhere else and putting it back by hand.
+    /// </summary>
+    private void OnRibbonTabChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        var chosen = sender.SelectedItem;
+        RibbonInicio.Visibility = Show(chosen == TabInicio);
+        RibbonAnotar.Visibility = Show(chosen == TabAnotar);
+        RibbonOrganizador.Visibility = Show(chosen == TabOrganizador);
+
+        static Visibility Show(bool on) => on ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Brings the tab that owns a tool to the front, so that picking one with
+    /// the keyboard leaves the ribbon showing where it came from. Without this
+    /// the letter would work and the ribbon would silently disagree with it.
+    ///
+    /// The four navigation modes sit outside the tabs, so choosing one leaves
+    /// the ribbon where it was: reaching for the hand in the middle of sorting
+    /// sheets should not throw away the tab you were working in.
+    /// </summary>
+    private void ShowTabFor(ViewerTool tool)
+    {
+        if (!tool.Draws() && tool != ViewerTool.CaptureRegion) return;
+
+        if (RibbonTabs.SelectedItem != TabAnotar)
+        {
+            RibbonTabs.SelectedItem = TabAnotar;
+        }
+    }
+
+    // --- hojas, desde la cinta ---------------------------------------------
+    //
+    // Los mismos comandos que el panel. Van todos por `PagesPanel.Run`, que es
+    // donde vive la regla de sobre qué hojas actúan; duplicarla aquí es como
+    // las dos rutas se separan.
+
+    private void OnInsertFromFileClicked(object sender, RoutedEventArgs e) => RunPageAction(PageAction.InsertFromFile);
+
+    private void OnInsertBlankClicked(object sender, RoutedEventArgs e) => RunPageAction(PageAction.InsertBlank);
+
+    private void OnDuplicatePageClicked(object sender, RoutedEventArgs e) => RunPageAction(PageAction.Duplicate);
+
+    private void OnDeletePageClicked(object sender, RoutedEventArgs e) => RunPageAction(PageAction.Delete);
+
+    private void OnExtractPagesClicked(object sender, RoutedEventArgs e) => RunPageAction(PageAction.Extract);
+
+    private void OnSplitPagesClicked(object sender, RoutedEventArgs e) => RunPageAction(PageAction.Split);
+
+    private void RunPageAction(PageAction action)
+    {
+        Pages.Run(action);
         UpdateChrome();
     }
 
@@ -2273,6 +2563,14 @@ public sealed partial class MainPage : Page
         RotateButton.IsEnabled = interactive;
         LineWeightButton.IsEnabled = interactive;
         ThumbnailsButton.IsEnabled = interactive;
+        InsertPagesButton.IsEnabled = interactive;
+        DuplicatePageButton.IsEnabled = interactive;
+        ExtractPagesButton.IsEnabled = interactive;
+        SplitPagesButton.IsEnabled = interactive;
+
+        // Quitar es el único que puede quedarse sin nada que hacer: un
+        // documento sin hojas no es un documento.
+        DeletePageButton.IsEnabled = interactive && viewer!.PageCount > 1;
         OpenButton.IsEnabled = !busy;
         PreviousPageButton.IsEnabled = interactive && (viewer?.CanGoPrevious ?? false);
         NextPageButton.IsEnabled = interactive && (viewer?.CanGoNext ?? false);
@@ -2283,6 +2581,8 @@ public sealed partial class MainPage : Page
         TextToolButton.IsChecked = textTool;
         ZoomToolButton.IsChecked = tool == ViewerTool.ZoomRectangle;
         ZoomToolButton.IsEnabled = interactive;
+        CaptureToolButton.IsChecked = tool == ViewerTool.CaptureRegion;
+        CaptureToolButton.IsEnabled = interactive;
         LineWeightButton.IsChecked = viewer?.ThinLines != true;
 
         UpdateMarkTools(viewer, tool, interactive);

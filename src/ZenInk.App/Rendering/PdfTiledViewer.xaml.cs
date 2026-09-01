@@ -12,6 +12,7 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.Graphics.DirectX;
 using Windows.System;
+using Windows.Storage.Streams;
 using Windows.UI;
 
 using ZenInk.Core;
@@ -20,6 +21,12 @@ namespace ZenInk_App.Rendering;
 
 /// <summary>Where a visible signature was asked to go: the sheet, and the box on it.</summary>
 public sealed record SignatureSpot(int PageIndex, RectPt SheetRect);
+
+/// <summary>The piece of one sheet the reader dragged a box around, in sheet points.</summary>
+public sealed record CaptureSpot(int PageIndex, RectPt SheetRect);
+
+/// <summary>A finished capture: the PNG, and how big it came out — which is what says whether it is worth pasting.</summary>
+public sealed record CaptureImage(InMemoryRandomAccessStream Png, int Width, int Height);
 
 /// <summary>Sheets to bring in from one file: which of its pages, and how to open it.</summary>
 public sealed record PageInsertion(string Path, string? Password, IReadOnlyList<int> Pages);
@@ -56,6 +63,15 @@ public enum ViewerTool
     /// a dozen wheel notches and a drag to recentre.
     /// </summary>
     ZoomRectangle,
+
+    /// <summary>
+    /// Drag a rectangle and that piece of the drawing goes to the clipboard.
+    ///
+    /// It is not a screen grab: the region is rendered again from the PDF at
+    /// print resolution, so a detail picked out at 29 % still arrives sharp in
+    /// whatever it is pasted into.
+    /// </summary>
+    CaptureRegion,
 
     /// <summary>Pick a mark up: click to select it, drag to move it.</summary>
     SelectAnnotation,
@@ -174,6 +190,12 @@ public sealed partial class PdfTiledViewer : UserControl
 
     /// <summary>Below this, a zoom-rectangle drag was a click and is treated as one.</summary>
     private const double MinZoomBandDips = 12.0;
+
+    /// <summary>Where a capture stops growing and starts getting softer instead. About 20 megapixels.</summary>
+    private const long MaxCapturePixels = 20_000_000;
+
+    /// <summary>Band size, so a big capture never asks PDFium for one enormous buffer.</summary>
+    private const int MaxCaptureBandPixels = 4_000_000;
 
     /// <summary>
     /// How far off the line a captured stroke may be thinned, in points. Well
@@ -301,6 +323,7 @@ public sealed partial class PdfTiledViewer : UserControl
     /// dialog, and it ends the moment it is given.
     /// </summary>
     private bool _bandIsForSignature;
+    private bool _bandIsForCapture;
 
     /// <summary>Set while the placed-but-unwritten signature is being dragged somewhere else.</summary>
     private bool _draggingPending;
@@ -1278,6 +1301,9 @@ public sealed partial class PdfTiledViewer : UserControl
     /// </summary>
     public event EventHandler<SignatureSpot?>? SignaturePlaced;
 
+    /// <summary>Raised when a capture box is drawn — or with null when the gesture was too small to mean one.</summary>
+    public event EventHandler<CaptureSpot?>? RegionCaptured;
+
     /// <summary>The signature waiting to be written, drawn on the sheet where it will land.</summary>
     public PendingSignature? Pending { get; private set; }
 
@@ -1502,7 +1528,7 @@ public sealed partial class PdfTiledViewer : UserControl
     {
         // The highlighter picks out text, so it wears the text cursor.
         ViewerTool.SelectText or ViewerTool.Highlight => InputSystemCursorShape.IBeam,
-        ViewerTool.ZoomRectangle => InputSystemCursorShape.Cross,
+        ViewerTool.ZoomRectangle or ViewerTool.CaptureRegion => InputSystemCursorShape.Cross,
         ViewerTool.SelectAnnotation => InputSystemCursorShape.Arrow,
         // Drawing wants a cursor whose hot spot you can aim: a hand would hide
         // the very corner the mark is meant to start on.
@@ -2093,10 +2119,11 @@ public sealed partial class PdfTiledViewer : UserControl
             _draggingPending = true;
             _pendingGrabbedAt = grabbed;
         }
-        else if (left && (IsPlacingSignature || _tool == ViewerTool.ZoomRectangle))
+        else if (left && (IsPlacingSignature || _tool is ViewerTool.ZoomRectangle or ViewerTool.CaptureRegion))
         {
             _isZoomBanding = true;
             _bandIsForSignature = IsPlacingSignature;
+            _bandIsForCapture = !IsPlacingSignature && _tool == ViewerTool.CaptureRegion;
             _zoomBandStart = point.Position;
             _zoomBandEnd = point.Position;
         }
@@ -2426,6 +2453,11 @@ public sealed partial class PdfTiledViewer : UserControl
             {
                 _bandIsForSignature = false;
                 ApplySignatureBand(where);
+            }
+            else if (_bandIsForCapture)
+            {
+                _bandIsForCapture = false;
+                ApplyCaptureBand(where);
             }
             else
             {
@@ -2808,6 +2840,147 @@ public sealed partial class PdfTiledViewer : UserControl
             Math.Abs(opposite.Y - corner.Y));
 
         SignaturePlaced?.Invoke(this, new SignatureSpot(page.Index, box));
+    }
+
+    /// <summary>
+    /// Turns the band into the piece of sheet to capture, and hands it out.
+    ///
+    /// A band too small is a cancelled gesture and not a tiny capture: a click
+    /// that slipped must not put a four-point stamp on the clipboard.
+    /// </summary>
+    private void ApplyCaptureBand(Point end)
+    {
+        _zoomBandEnd = end;
+        Canvas.Invalidate();
+
+        double width = Math.Abs(end.X - _zoomBandStart.X);
+        double height = Math.Abs(end.Y - _zoomBandStart.Y);
+
+        if (width < MinZoomBandDips || height < MinZoomBandDips
+            || !TryHitSheet(_zoomBandStart, out var page, out var corner))
+        {
+            RegionCaptured?.Invoke(this, null);
+            return;
+        }
+
+        var opposite = SheetPointClamped(page, end);
+        var box = new RectPt(
+            Math.Min(corner.X, opposite.X),
+            Math.Min(corner.Y, opposite.Y),
+            Math.Abs(opposite.X - corner.X),
+            Math.Abs(opposite.Y - corner.Y));
+
+        RegionCaptured?.Invoke(this, new CaptureSpot(page.Index, box));
+    }
+
+    /// <summary>
+    /// Draws a piece of one sheet — the drawing and the marks on it — into a
+    /// PNG, at <paramref name="dpi"/> rather than at whatever the screen
+    /// happened to be showing.
+    ///
+    /// That is the whole point of the feature. A screen grab of an A0 seen at
+    /// 29 % is 29 % of the detail; this asks PDFium for the same region again
+    /// at print resolution, so a dimension unreadable on screen is readable in
+    /// the paste. The marks go on afterwards as vectors, for the same reason
+    /// printing does it that way.
+    /// </summary>
+    public async Task<CaptureImage?> RenderRegionPngAsync(int pageIndex, RectPt box, double dpi)
+    {
+        if (_documentId < 0 || box.Width <= 0 || box.Height <= 0) return null;
+
+        var origin = OriginOf(pageIndex);
+        double scale = dpi / 72.0;
+
+        int width = Math.Max(1, (int)Math.Round(box.Width * scale));
+        int height = Math.Max(1, (int)Math.Round(box.Height * scale));
+
+        // A whole A0 asked for at 200 dpi is a third of a gigapixel. Rather
+        // than refuse, the scale drops until it fits: a slightly softer capture
+        // is a better answer than an error, and the reader picked the region,
+        // not the resolution.
+        long pixels = (long)width * height;
+        if (pixels > MaxCapturePixels)
+        {
+            double shrink = Math.Sqrt(MaxCapturePixels / (double)pixels);
+            scale *= shrink;
+            width = Math.Max(1, (int)Math.Round(box.Width * scale));
+            height = Math.Max(1, (int)Math.Round(box.Height * scale));
+        }
+
+        int startX = (int)Math.Floor(box.X * scale);
+        int startY = (int)Math.Floor(box.Y * scale);
+        int rotation = RotationOf(pageIndex);
+
+        var device = CanvasDevice.GetSharedDevice();
+
+        // 96 dpi on the target so that one DIP is one pixel: every rectangle
+        // below is then in output pixels and there is no second scale to get
+        // wrong.
+        using var target = new CanvasRenderTarget(device, width, height, 96);
+
+        using (var ds = target.CreateDrawingSession())
+        {
+            ds.Clear(Colors.White);
+
+            // Aliased and on whole pixels, as everywhere else: two abutting
+            // antialiased bands leave a pale seam across the capture.
+            ds.Antialiasing = CanvasAntialiasing.Aliased;
+
+            int bandHeight = (int)Math.Clamp(MaxCaptureBandPixels / Math.Max(1, width), 1, height);
+
+            for (int offset = 0; offset < height; offset += bandHeight)
+            {
+                int slice = Math.Min(bandHeight, height - offset);
+
+                var band = await _queue.RequestPrintBandAsync(
+                    origin.DocumentId, origin.PageIndex, rotation, scale,
+                    startX, startY + offset, width, slice, monochrome: false);
+
+                if (band is not { } data) return null;
+
+                using var bitmap = CanvasBitmap.CreateFromBytes(
+                    device, data.Bgra, data.Width, data.Height,
+                    DirectXPixelFormat.B8G8R8A8UIntNormalized);
+
+                ds.DrawImage(bitmap, new Rect(0, offset, width, slice));
+            }
+
+            ds.Antialiasing = CanvasAntialiasing.Antialiased;
+            DrawCapturedMarks(ds, pageIndex, box, scale);
+        }
+
+        var stream = new InMemoryRandomAccessStream();
+        await target.SaveAsync(stream, CanvasBitmapFileFormat.Png);
+        stream.Seek(0);
+        return new CaptureImage(stream, width, height);
+    }
+
+    /// <summary>
+    /// Lays the sheet's marks over the captured region, clipped to it — the
+    /// same geometry the canvas and the printer use, so a nube captured here
+    /// is the nube that was on screen.
+    /// </summary>
+    private void DrawCapturedMarks(CanvasDrawingSession ds, int pageIndex, RectPt box, double scale)
+    {
+        var marks = _annotations.ForPage(pageIndex);
+        if (marks.Count == 0) return;
+
+        // The placement wants the sheet as the file draws it, and Plan holds it
+        // that way already — the reader's turn travels separately.
+        var sheet = SheetSize(pageIndex, new PdfPageSize(box.Width, box.Height));
+
+        var placement = new SheetPlacement(
+            sheet.WidthPt,
+            sheet.HeightPt,
+            RotationOf(pageIndex),
+            -box.X * scale,
+            -box.Y * scale,
+            scale);
+
+        foreach (var mark in marks)
+        {
+            AnnotationRenderer.Draw(ds, mark, placement);
+        }
     }
 
     private void BeginSelection(Point position)
