@@ -63,7 +63,8 @@ public sealed record PdfSignatureInfo(
     bool DigestMatches,
     bool CoversWholeFile,
     long[] ByteRange,
-    string? Problem)
+    string? Problem,
+    PdfTimestampInfo? Timestamp = null)
 {
     /// <summary>True when this signature is CAdES, as PAdES requires.</summary>
     public bool IsPades => SubFilter is "ETSI.CAdES.detached";
@@ -246,7 +247,11 @@ public static class PdfSignatures
                 ? cms.SignerInfos[0].Certificate?.GetNameInfo(X509NameType.SimpleName, false) ?? "?"
                 : "?";
 
-            return new(subFilter, who, signedAt, true, wholeFile, range, null);
+            // The time somebody else vouched for, if the signature carries one.
+            // It is read even when it does not match, because a timestamp that
+            // belongs to another signature is a fact worth showing rather than
+            // hiding.
+            return new(subFilter, who, signedAt, true, wholeFile, range, null, PdfTimestamp.Read(cms));
         }
         catch (Exception ex)
         {

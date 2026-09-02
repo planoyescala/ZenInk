@@ -1505,6 +1505,43 @@ public sealed partial class MainPage : Page
             Padding = new Thickness(0),
         };
 
+        // The timestamp. Off unless the reader turns it on, and with nowhere to
+        // ask until they say where: whose clock a signature leans on is their
+        // decision, and a default authority here would be a stranger vouching
+        // for every drawing they sign.
+        var timestamp = new CheckBox
+        {
+            Content = "Sellar la hora con una autoridad (TSA)",
+            IsChecked = TimestampSetting.Wanted,
+        };
+
+        var authority = new TextBox
+        {
+            PlaceholderText = "https://…",
+            Text = TimestampSetting.Url,
+            Visibility = timestamp.IsChecked == true ? Visibility.Visible : Visibility.Collapsed,
+        };
+
+        var authorityWhy = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.7,
+            FontSize = 12,
+            Text = "Con sello, la firma sigue valiendo cuando el certificado caduque. "
+                 + "Sale a internet: viaja un resumen de la firma, ni el plano ni quién firma.",
+            Visibility = authority.Visibility,
+        };
+
+        void ShowAuthority()
+        {
+            var showing = timestamp.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            authority.Visibility = showing;
+            authorityWhy.Visibility = showing;
+        }
+
+        timestamp.Checked += (_, _) => ShowAuthority();
+        timestamp.Unchecked += (_, _) => ShowAuthority();
+
         var stampFields = new StackPanel { Spacing = 6 };
 
         // What the stamp will say, kept in step as it is typed.
@@ -1578,6 +1615,9 @@ public sealed partial class MainPage : Page
         body.Children.Add(issuer);
         body.Children.Add(importer);
         body.Children.Add(justStamp);
+        body.Children.Add(timestamp);
+        body.Children.Add(authority);
+        body.Children.Add(authorityWhy);
         body.Children.Add(visible);
 
         stampFields.Children.Add(Labelled("Encabezado", heading));
@@ -1679,7 +1719,15 @@ public sealed partial class MainPage : Page
         if (answer == ContentDialogResult.None) return;
 
         var certificate = certificates[Math.Max(0, picker.SelectedIndex)];
-        var signer = new CertificateSigner(certificate);
+
+        // Remembered whatever the reader does next, including cancelling: it is
+        // a preference about how they sign, not part of this signature.
+        TimestampSetting.Url = authority.Text;
+        TimestampSetting.Wanted = timestamp.IsChecked == true;
+
+        ITimestamper? clock = TimestampSetting.Wanted ? new HttpTimestamper(TimestampSetting.Url) : null;
+
+        var signer = new CertificateSigner(certificate, null, clock);
         var options = new PdfSignatureOptions(Reason: reason.Text.Trim());
 
         if (visible.IsChecked == true)
@@ -2062,6 +2110,12 @@ public sealed partial class MainPage : Page
         var lines = signatures.Select(s =>
             $"· {(s.Signer.Length > 0 ? s.Signer : "firmante desconocido")}"
             + (s.SignedAt is { } when ? $", {when:d} {when:t}" : "")
+            // The time an authority vouched for outranks the one the signer's
+            // own clock claimed, so it is the one shown when there is one.
+            + (s.Timestamp is { } stamp
+                ? $" · sellada {stamp.Stamped:d} {stamp.Stamped:t}"
+                  + (stamp.CoversSignature ? "" : " (el sello no es de esta firma)")
+                : "")
             + (s.DigestMatches ? "" : " — NO cuadra con el archivo"));
 
         string heading = signatures.Count == 1

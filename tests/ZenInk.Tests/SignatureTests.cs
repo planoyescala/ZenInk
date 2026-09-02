@@ -34,6 +34,7 @@ public static class SignatureTests
         CheckStacking(identity);
         CheckForeignAnnotationSurvives(identity);
         CheckTamperingShows(identity);
+        CheckTimestamp(identity);
         CheckReserveIsEnough(identity);
 
         Section("Signing — the stamp a visible signature leaves");
@@ -581,6 +582,97 @@ public static class SignatureTests
 
         // Left in %TEMP% like every other fixture: it is the only locked PDF
         // around, and the interface has to be tried against one by hand.
+    }
+
+    /// <summary>
+    /// A signature with a time somebody else vouched for.
+    ///
+    /// This is what keeps a signature standing after its certificate expires:
+    /// without it, "was it signed while the certificate was valid?" can only be
+    /// answered by the signer's own clock, which is no answer. The authority
+    /// here is a local one — a real one is somebody else's service, and a check
+    /// that needs the network is a check that fails on a train.
+    /// </summary>
+    private static void CheckTimestamp(X509Certificate2 identity)
+    {
+        Section("Signing — a time somebody else vouched for");
+
+        using var authority = new TestTimestamper();
+
+        string source = TestPdf.WriteCornerMark(0);
+        string signed = Path.Combine(Path.GetTempPath(), $"zenink-sellado-{Guid.NewGuid():N}.pdf");
+
+        try
+        {
+            PdfSignatures.Sign(
+                source,
+                signed,
+                new CertificateSigner(identity, null, authority),
+                new PdfSignatureOptions(Reason: "Conforme"));
+        }
+        catch (Exception ex)
+        {
+            Check("se firma con sello de tiempo", false, ex.Message);
+            TryDelete(source);
+            return;
+        }
+
+        var found = PdfSignatures.Read(signed);
+        Check("la firma sellada sigue cuadrando", found.Count == 1 && found[0].DigestMatches,
+            found.Count == 1 ? found[0].Problem : $"salieron {found.Count}");
+
+        if (found.Count == 1 && found[0].Timestamp is { } stamp)
+        {
+            Check("y trae el sello de la autoridad", stamp.Authority == authority.Name, stamp.Authority);
+            Check("con la hora que ella dio", stamp.Stamped == authority.Now, $"{stamp.Stamped:u}");
+
+            // The whole point of the token: it is over this signature, so it
+            // cannot be lifted off another one and pasted here.
+            Check("y el sello es de esta firma", stamp.CoversSignature);
+        }
+        else
+        {
+            Check("y trae el sello de la autoridad", false, "no hay sello en la firma");
+        }
+
+        // The room for the token is reserved before it exists, so a token that
+        // does not fit is the failure this guards against.
+        Check("el hueco reservado da para la firma y el sello",
+            new CertificateSigner(identity, null, authority).ReserveBytes
+            > new CertificateSigner(identity).ReserveBytes);
+
+        // And a signature nobody timestamped says so, rather than inventing one.
+        string plain = Path.Combine(Path.GetTempPath(), $"zenink-sinsello-{Guid.NewGuid():N}.pdf");
+        PdfSignatures.Sign(source, plain, identity, new PdfSignatureOptions());
+
+        var bare = PdfSignatures.Read(plain);
+        Check("una firma sin sello no se inventa uno", bare.Count == 1 && bare[0].Timestamp is null);
+
+        // A token stamped over something else is still shown — hiding it would
+        // be worse — but it says it is not this signature's.
+        string wrong = Path.Combine(Path.GetTempPath(), $"zenink-selloajeno-{Guid.NewGuid():N}.pdf");
+        authority.StampInstead = SHA256.HashData("otra firma"u8.ToArray());
+
+        try
+        {
+            PdfSignatures.Sign(
+                source, wrong, new CertificateSigner(identity, null, authority), new PdfSignatureOptions());
+
+            var alien = PdfSignatures.Read(wrong);
+            Check("un sello que no es de esta firma se ve como tal",
+                alien.Count == 1 && alien[0].Timestamp is { CoversSignature: false });
+        }
+        catch (CryptographicException)
+        {
+            // Refused outright by the request's own check, which is also a way
+            // for the alien token not to end up in the file.
+            Check("un sello que no es de esta firma se ve como tal", true);
+        }
+
+        TryDelete(signed);
+        TryDelete(plain);
+        TryDelete(wrong);
+        TryDelete(source);
     }
 
     // --- helpers -------------------------------------------------------------

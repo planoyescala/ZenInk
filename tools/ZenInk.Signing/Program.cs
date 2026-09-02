@@ -11,7 +11,7 @@ using ZenInk.Signing;
 //
 //   dotnet run --project tools/ZenInk.Signing -- [plano.pdf ...]   mide y firma
 //   dotnet run --project tools/ZenInk.Signing -- certificados      qué hay en el almacén
-//   dotnet run --project tools/ZenInk.Signing -- firmar in.pdf out.pdf [huella]
+//   dotnet run --project tools/ZenInk.Signing -- firmar in.pdf out.pdf [huella] [url-tsa]
 //   dotnet run --project tools/ZenInk.Signing -- marcar orig.pdf marcado.pdf
 //
 // With no arguments it uses whatever tools/ZenInk.Fixtures has left in %TEMP%.
@@ -64,10 +64,20 @@ if (args is ["sello", var stampFrom, var stampTo, ..])
 // cannot be checked without the user's own certificate installed.
 if (args is ["firmar", var from, var to, ..])
 {
-    var chosen = Store.Pick(args.Length > 3 ? args[3] : null);
+    var chosen = Store.Pick(args.Length > 3 && !args[3].StartsWith("http", StringComparison.OrdinalIgnoreCase)
+        ? args[3]
+        : null);
     if (chosen is null) return 1;
 
-    PdfSignatures.Sign(from, to, chosen, new PdfSignatureOptions(Reason: "Conforme"));
+    // A timestamp only if a URL is given: this is the one thing here that goes
+    // out to somebody else's server, and it does it because it was asked to.
+    string? tsa = args.FirstOrDefault(a => a.StartsWith("http", StringComparison.OrdinalIgnoreCase));
+    var clock = tsa is null ? null : new HttpTimestamper(tsa);
+
+    if (clock is not null) Console.WriteLine($"Sellando la hora con {tsa}");
+
+    PdfSignatures.Sign(
+        from, to, new CertificateSigner(chosen, null, clock), new PdfSignatureOptions(Reason: "Conforme"));
     Console.WriteLine($"Firmado con «{chosen.GetNameInfo(X509NameType.SimpleName, false)}» → {to}");
     Report(to, "  ");
     return 0;
@@ -202,6 +212,10 @@ static bool Report(string path, string indent)
             + $"{(signature.CoversWholeFile ? "cubre todo el archivo" : "cubre hasta su propia firma")} · "
             + $"{signature.SignedAt:yyyy-MM-dd HH:mm} · "
             + $"cuadra: {(signature.DigestMatches ? $"sí ({signature.Signer})" : "NO")}"
+            + (signature.Timestamp is { } stamp
+                ? $" · sellada {stamp.Stamped:yyyy-MM-dd HH:mm} por {stamp.Authority}"
+                  + (stamp.CoversSignature ? "" : " (EL SELLO NO ES DE ESTA FIRMA)")
+                : "")
             + (signature.Problem is null ? "" : $" — {signature.Problem}"));
     }
     return ok;

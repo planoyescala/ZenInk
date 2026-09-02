@@ -40,7 +40,10 @@ public interface IPdfSigner
 /// That is what makes a certificate installed as non-exportable — which is how
 /// the FNMT's installer leaves it — usable at all.
 /// </summary>
-public sealed class CertificateSigner(X509Certificate2 certificate, X509Certificate2Collection? chain = null)
+public sealed class CertificateSigner(
+    X509Certificate2 certificate,
+    X509Certificate2Collection? chain = null,
+    ITimestamper? timestamper = null)
     : IPdfSigner
 {
     private readonly X509Certificate2Collection _chain = chain ?? [];
@@ -66,7 +69,9 @@ public sealed class CertificateSigner(X509Certificate2 certificate, X509Certific
             int certificates = certificate.RawData.Length;
             foreach (var extra in _chain) certificates += extra.RawData.Length;
 
-            return certificates + 8192;
+            // A timestamp brings the authority's own chain with it, so the room
+            // for it is reserved before anyone has been asked for one.
+            return certificates + 8192 + (timestamper is null ? 0 : PdfTimestamp.ReserveBytes);
         }
     }
 
@@ -89,6 +94,16 @@ public sealed class CertificateSigner(X509Certificate2 certificate, X509Certific
         signer.SignedAttributes.Add(SigningCertificateV2(certificate));
 
         signed.ComputeSignature(signer, silent: false);
+
+        // The timestamp is asked for after the signature exists, because it is
+        // over the signature. If the authority cannot be reached the throw
+        // travels: a signature quietly written without the timestamp the reader
+        // asked for is one they would believe they had.
+        if (timestamper is { } authority)
+        {
+            PdfTimestamp.Add(signed, authority);
+        }
+
         return signed.Encode();
     }
 
