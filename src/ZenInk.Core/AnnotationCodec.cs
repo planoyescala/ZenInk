@@ -20,13 +20,21 @@ public static class AnnotationPayload
     /// <summary>The private key. Not a standard name, so nothing else will touch it.</summary>
     public const string Key = "ZenInk";
 
-    private const string Version = "z3";
+    private const string Version = "z4";
+
+    /// <summary>Before marks could measure, and so before any of them carried a scale.</summary>
+    private const string Version3 = "z3";
 
     /// <summary>Before marks could carry words of their own, and with them a type size.</summary>
     private const string Version2 = "z2";
 
     /// <summary>The first version, before marks could turn or carry a fill.</summary>
     private const string Version1 = "z1";
+
+    /// <summary>How many fields each version has, text included. The text is last and holds its own separators.</summary>
+    private const int FieldsInThisVersion = 13;
+
+    private const int FieldsBefore = 12;
 
     /// <summary>The mark as one line of text, geometry included.</summary>
     public static string Write(Annotation annotation)
@@ -41,6 +49,13 @@ public static class AnnotationPayload
         sb.Append(annotation.Style.Fill is { } fill ? fill.Packed.ToString("X6", CultureInfo.InvariantCulture) : "-").Append('|');
         sb.Append(Number(annotation.Style.FillOpacity)).Append('|');
         sb.Append(Number(annotation.Style.FontSizePt)).Append('|');
+
+        // The scale the measurement was taken at, so the number in the file can
+        // be checked against the line it belongs to by whoever opens it next —
+        // and so a sheet reopened here comes back calibrated.
+        sb.Append(annotation.Scale is { } scale
+            ? string.Create(CultureInfo.InvariantCulture, $"{scale.UnitsPerPoint:0.##########}:{scale.Unit}")
+            : "-").Append('|');
 
         for (int i = 0; i < annotation.Points.Count; i++)
         {
@@ -65,12 +80,15 @@ public static class AnnotationPayload
         if (string.IsNullOrEmpty(payload)) return false;
 
         // The text is last and unsplit, so a comment may contain the separator.
-        string[] fields = payload.Split('|', 12);
+        // How many fields precede it is what each version changed, so the limit
+        // is taken from the version rather than from the newest layout.
+        bool current = payload.StartsWith(Version + "|", StringComparison.Ordinal);
+        string[] fields = payload.Split('|', current ? FieldsInThisVersion : FieldsBefore);
         if (fields.Length < 7) return false;
 
         bool first = fields[0] == Version1;
         bool second = fields[0] == Version2;
-        if (!first && !second && fields[0] != Version) return false;
+        if (!first && !second && fields[0] != Version3 && !current) return false;
 
         if (!Enum.TryParse<AnnotationKind>(fields[1], ignoreCase: true, out var kind)) return false;
         if (!uint.TryParse(fields[2], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint packed)) return false;
@@ -81,6 +99,7 @@ public static class AnnotationPayload
         AnnotationColor? fill = null;
         float fillOpacity = 0.35f;
         float fontSize = 12f;
+        SheetScale? scale = null;
         int pointsField = 5;
 
         if (!first)
@@ -101,6 +120,13 @@ public static class AnnotationPayload
                 if (fields.Length < 11) return false;
                 float.TryParse(fields[8], NumberStyles.Float, CultureInfo.InvariantCulture, out fontSize);
                 pointsField = 9;
+
+                if (current)
+                {
+                    if (fields.Length < 12) return false;
+                    scale = ReadScale(fields[9]);
+                    pointsField = 10;
+                }
             }
         }
 
@@ -116,8 +142,23 @@ public static class AnnotationPayload
             author: fields.Length > pointsField + 1 ? Unescape(fields[pointsField + 1]) : string.Empty,
             id: null,
             created: DateTimeOffset.FromUnixTimeSeconds(created),
-            rotationDeg: rotation);
+            rotationDeg: rotation,
+            scale: scale);
         return true;
+    }
+
+    /// <summary>The scale as "units per point:unit", or none for a mark that is not a measurement.</summary>
+    private static SheetScale? ReadScale(string field)
+    {
+        int colon = field.IndexOf(':');
+        if (colon <= 0) return null;
+
+        if (!double.TryParse(
+            field.AsSpan(0, colon), NumberStyles.Float, CultureInfo.InvariantCulture, out double perPoint)) return null;
+
+        if (!Enum.TryParse<MeasureUnit>(field.AsSpan(colon + 1), ignoreCase: true, out var unit)) return null;
+
+        return perPoint > 0 ? new SheetScale(perPoint, unit) : null;
     }
 
     private static List<Vector2> ReadPoints(string field)

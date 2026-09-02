@@ -34,6 +34,15 @@ public sealed class AnnotationStore
     private const int MaxHistory = 500;
 
     private readonly Dictionary<int, List<Annotation>> _byPage = new();
+
+    /// <summary>
+    /// What each sheet is drawn to. It lives here, beside the marks, for the
+    /// one reason that matters: this is what already moves when the sheets do,
+    /// so a sheet brought in from another drawing cannot arrive under its
+    /// neighbour's scale.
+    /// </summary>
+    private readonly Dictionary<int, SheetScale> _scaleByPage = new();
+
     private readonly List<Edit> _undo = new();
     private readonly List<Edit> _redo = new();
 
@@ -43,7 +52,23 @@ public sealed class AnnotationStore
     /// and both present is one being changed. A step that carries
     /// <see cref="Pages"/> instead is the sheets being rearranged.
     /// </summary>
-    private readonly record struct Edit(int Page, Annotation? Before, Annotation? After, PageStep? Pages = null);
+    private readonly record struct Edit(
+        int Page, Annotation? Before, Annotation? After, PageStep? Pages = null, ScaleStep? Scale = null);
+
+    /// <summary>
+    /// A sheet being calibrated, and every measurement on it that the new scale
+    /// changes the number of.
+    ///
+    /// The two travel together because they are one thing to take back: a
+    /// calibration undone that left the numbers behind would leave the sheet
+    /// saying lengths no scale on it produces.
+    /// </summary>
+    private sealed record ScaleStep(
+        int Page,
+        SheetScale? Before,
+        SheetScale? After,
+        List<Annotation> MarksBefore,
+        List<Annotation> MarksAfter);
 
     /// <summary>
     /// The sheets moving, and the marks moving with them.
@@ -58,7 +83,9 @@ public sealed class AnnotationStore
         PagePlan Before,
         PagePlan After,
         Dictionary<int, List<Annotation>> MarksBefore,
-        Dictionary<int, List<Annotation>> MarksAfter);
+        Dictionary<int, List<Annotation>> MarksAfter,
+        Dictionary<int, SheetScale> ScalesBefore,
+        Dictionary<int, SheetScale> ScalesAfter);
 
     /// <summary>Bumped on every change, so a viewer can tell whether it must redraw.</summary>
     public int Version { get; private set; }
@@ -109,6 +136,7 @@ public sealed class AnnotationStore
     public void Load(IReadOnlyDictionary<int, IReadOnlyList<Annotation>> pages)
     {
         _byPage.Clear();
+        _scaleByPage.Clear();
         _undo.Clear();
         _redo.Clear();
 
@@ -116,10 +144,51 @@ public sealed class AnnotationStore
         {
             if (marks.Count == 0) continue;
             _byPage[page] = [.. marks];
+
+            // A sheet's calibration comes back from its own measurements: each
+            // one carries the scale it was taken at, and the last one taken is
+            // the one the reader was working to. It is the only place a
+            // calibration can be kept without inventing somewhere in the file
+            // to put it — and a sheet with no measurements has nothing to
+            // remember, because nothing was ever measured on it.
+            for (int i = marks.Count - 1; i >= 0; i--)
+            {
+                if (marks[i].Scale is not { } scale) continue;
+
+                _scaleByPage[page] = scale;
+                break;
+            }
         }
 
         IsDirty = false;
         Version++;
+    }
+
+    /// <summary>What this sheet is drawn to, or null while it has never been calibrated.</summary>
+    public SheetScale? ScaleOf(int pageIndex) =>
+        _scaleByPage.TryGetValue(pageIndex, out var scale) ? scale : null;
+
+    /// <summary>True for a sheet that can be measured on.</summary>
+    public bool IsCalibrated(int pageIndex) => _scaleByPage.ContainsKey(pageIndex);
+
+    /// <summary>
+    /// Calibrates a sheet, and brings every measurement already on it to the
+    /// new scale. One step, so taking it back takes back both.
+    /// </summary>
+    public void SetScale(int pageIndex, SheetScale? scale)
+    {
+        var before = ScaleOf(pageIndex);
+        if (Nullable.Equals(before, scale)) return;
+
+        var marks = ForPage(pageIndex);
+        Apply(
+            new Edit(pageIndex, null, null, null, new ScaleStep(
+                pageIndex,
+                before,
+                scale,
+                [.. marks],
+                [.. marks.Select(mark => Measures.Is(mark.Kind) ? mark.WithScale(scale) : mark)])),
+            remember: true);
     }
 
     /// <summary>
@@ -137,6 +206,7 @@ public sealed class AnnotationStore
     public void Clear()
     {
         _byPage.Clear();
+        _scaleByPage.Clear();
         _undo.Clear();
         _redo.Clear();
         Plan = PagePlan.Identity([], string.Empty);
@@ -188,24 +258,41 @@ public sealed class AnnotationStore
     public void Rearrange(PageEdit edit)
     {
         var after = new Dictionary<int, List<Annotation>>();
+        var afterScales = new Dictionary<int, SheetScale>();
         var seen = new HashSet<int>();
 
         for (int i = 0; i < edit.OriginOfNew.Length; i++)
         {
             int origin = edit.OriginOfNew[i];
-            if (origin < 0 || !_byPage.TryGetValue(origin, out var marks)) continue;
+            if (origin < 0) continue;
+
+            // The scale goes where the sheet goes, by the same route as its
+            // marks. A drawing at 1:50 moved to the front of the set is still
+            // at 1:50, and one duplicated is at 1:50 twice.
+            if (_scaleByPage.TryGetValue(origin, out var scale))
+            {
+                afterScales[i] = scale;
+            }
+
+            if (!_byPage.TryGetValue(origin, out var marks)) continue;
 
             after[i] = seen.Add(origin) ? [.. marks] : [.. marks.Select(Copy)];
         }
 
         Apply(
-            new Edit(-1, null, null, new PageStep(Plan, edit.Plan.Compacted(), CopyOfMarks(), after)),
+            new Edit(-1, null, null, new PageStep(
+                Plan,
+                edit.Plan.Compacted(),
+                CopyOfMarks(),
+                after,
+                new Dictionary<int, SheetScale>(_scaleByPage),
+                afterScales)),
             remember: true);
     }
 
     private static Annotation Copy(Annotation mark) => new(
         mark.Kind, mark.Points, mark.Style, mark.Text, mark.Author,
-        id: Guid.NewGuid(), created: mark.Created, rotationDeg: mark.RotationDeg);
+        id: Guid.NewGuid(), created: mark.Created, rotationDeg: mark.RotationDeg, scale: mark.Scale);
 
     private Dictionary<int, List<Annotation>> CopyOfMarks()
     {
@@ -267,9 +354,16 @@ public sealed class AnnotationStore
         var edit = _undo[^1];
         _undo.RemoveAt(_undo.Count - 1);
 
-        var inverse = edit.Pages is { } pages
-            ? new Edit(edit.Page, null, null, new PageStep(pages.After, pages.Before, pages.MarksAfter, pages.MarksBefore))
-            : new Edit(edit.Page, edit.After, edit.Before);
+        var inverse = edit switch
+        {
+            { Pages: { } pages } => new Edit(edit.Page, null, null, new PageStep(
+                pages.After, pages.Before, pages.MarksAfter, pages.MarksBefore, pages.ScalesAfter, pages.ScalesBefore)),
+
+            { Scale: { } scale } => new Edit(edit.Page, null, null, null, new ScaleStep(
+                scale.Page, scale.After, scale.Before, scale.MarksAfter, scale.MarksBefore)),
+
+            _ => new Edit(edit.Page, edit.After, edit.Before),
+        };
 
         Apply(inverse, remember: false);
         _redo.Add(edit);
@@ -303,6 +397,36 @@ public sealed class AnnotationStore
             foreach (var (page, marks) in pages.MarksAfter)
             {
                 if (marks.Count > 0) _byPage[page] = [.. marks];
+            }
+
+            _scaleByPage.Clear();
+            foreach (var (page, scale) in pages.ScalesAfter)
+            {
+                _scaleByPage[page] = scale;
+            }
+
+            Remember(edit, remember);
+            return;
+        }
+
+        if (edit.Scale is { } calibration)
+        {
+            if (calibration.After is { } scale)
+            {
+                _scaleByPage[calibration.Page] = scale;
+            }
+            else
+            {
+                _scaleByPage.Remove(calibration.Page);
+            }
+
+            if (calibration.MarksAfter.Count > 0)
+            {
+                _byPage[calibration.Page] = [.. calibration.MarksAfter];
+            }
+            else
+            {
+                _byPage.Remove(calibration.Page);
             }
 
             Remember(edit, remember);

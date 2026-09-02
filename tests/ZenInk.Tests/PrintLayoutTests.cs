@@ -234,6 +234,54 @@ public static class PrintLayoutTests
         var custom = new PrintSettings { ScaleMode = PrintScaleMode.Custom, CustomScalePercent = 50 };
         CheckClose("a custom percentage is taken literally",
             PrintLayout.ScaleFor(A4, A3, custom), 0.5, 1e-9);
+
+        DrawingScale();
+    }
+
+    /// <summary>
+    /// Printing to a drawing scale, which is the one mode that has to know what
+    /// the drawing already is.
+    /// </summary>
+    private static void DrawingScale()
+    {
+        Section("Print — printed at the scale the drawing is read at");
+
+        var plotted = SheetScale.FromRatio(200, MeasureUnit.Metre)!.Value;
+        var scales = new Dictionary<int, SheetScale> { [0] = plotted };
+
+        var asDrawn = new PrintSettings
+        {
+            ScaleMode = PrintScaleMode.Drawing,
+            DrawingRatio = 200,
+            Scales = scales,
+        };
+
+        CheckClose("a 1:200 drawing printed at 1:200 comes out untouched",
+            PrintLayout.ScaleFor(A4, A3, asDrawn, plotted), 1.0, 1e-6);
+
+        CheckClose("printed at 1:100 it comes out twice the size",
+            PrintLayout.ScaleFor(A4, A3, asDrawn with { DrawingRatio = 100 }, plotted), 2.0, 1e-6);
+
+        CheckClose("and at 1:500 it comes out smaller by the same reasoning",
+            PrintLayout.ScaleFor(A4, A3, asDrawn with { DrawingRatio = 500 }, plotted), 0.4, 1e-6);
+
+        // A sheet nobody calibrated cannot be printed to a scale, and saying so
+        // by fitting the paper is better than printing a number that is wrong.
+        double uncalibrated = PrintLayout.ScaleFor(A4, A3, asDrawn, null);
+        CheckClose("an uncalibrated sheet falls back to fitting the paper",
+            uncalibrated, PrintLayout.ScaleFor(A4, A3, new PrintSettings()), 1e-9);
+
+        // And the per-sheet scales reach the layout: the same job, two sheets,
+        // only one of them calibrated.
+        var pieces = PrintLayout.Build([A4, A4], [0, 1], A3, asDrawn with { DrawingRatio = 100 });
+
+        // The factor is not carried on the piece; it is the destination over
+        // the source, which is what the printer actually does with it.
+        double Factor(PrintPiece piece) => piece.Destination.Width / piece.Source.Width;
+
+        Check("the calibrated sheet and the other one print at different scales",
+            pieces.Count == 2 && Math.Abs(Factor(pieces[0]) - Factor(pieces[1])) > 0.01,
+            pieces.Count == 2 ? $"{Factor(pieces[0]):0.###} vs {Factor(pieces[1]):0.###}" : $"{pieces.Count} piezas");
     }
 
     private static void Poster()

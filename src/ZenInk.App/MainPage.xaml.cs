@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -374,6 +375,7 @@ public sealed partial class MainPage : Page
             viewer.PagesChanged += OnViewerViewChanged;
             viewer.TextWanted += OnViewerTextWanted;
             viewer.ComparisonChanged += OnViewerComparisonChanged;
+            viewer.CalibrationDragged += OnCalibrationDragged;
 
             tab = new TabViewItem
             {
@@ -2009,6 +2011,14 @@ public sealed partial class MainPage : Page
                 // A comparison prints as the comparison. What goes to the
                 // meeting has to be the picture that was on screen.
                 job.Overlay = viewer.OverlayFor;
+
+                // What each sheet is drawn to, which is what lets the dialog
+                // offer 1:100 at all. Sheets that were never calibrated simply
+                // are not in it, and the dialog does not promise them a scale.
+                if (viewer.Scales() is { Count: > 0 } scales)
+                {
+                    job.Configure(job.Settings with { Scales = scales }, job.Paper);
+                }
                 source = new PdfPrintSource(job, title, WindowNative.GetWindowHandle(App.Current.MainWindow));
             }
 
@@ -2190,7 +2200,8 @@ public sealed partial class MainPage : Page
         // The header goes on naming the active tool whenever there is one with
         // options — that is what makes the ribbon safe to use. It is only when
         // no tool owns the panel that the comparison takes the title.
-        bool ownsHeader = comparing && !tool.IsAnnotation() && tool != ViewerTool.SelectText;
+        bool ownsHeader = comparing && !tool.IsAnnotation()
+            && tool != ViewerTool.SelectText && tool != ViewerTool.Calibrate;
         PropertiesIconCompare.Visibility = ownsHeader ? Visibility.Visible : Visibility.Collapsed;
         if (ownsHeader)
         {
@@ -2476,6 +2487,168 @@ public sealed partial class MainPage : Page
 
     private void OnNoteToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Note);
 
+    // --- medir --------------------------------------------------------------
+    //
+    // Una medida es una marca con un número calculado, así que todo lo de
+    // arriba vale también aquí: se dibuja, se coge, se recolorea y se guarda
+    // igual. Lo único que estas herramientas necesitan y las demás no es que la
+    // hoja sepa a qué escala está.
+
+    private void OnCalibrateToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Calibrate);
+
+    private void OnDistanceToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Distance);
+
+    private void OnPerimeterToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Perimeter);
+
+    private void OnAreaToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Area);
+
+    private void OnAngleToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Angle);
+
+    private void OnClearScaleClicked(object sender, RoutedEventArgs e)
+    {
+        if (ActiveViewer is not { } viewer) return;
+
+        viewer.CalibrateSheet(viewer.CurrentPageIndex, null);
+        Hint("Hoja sin calibrar. Las medidas que haya se quedan sin número.");
+        UpdateChrome();
+    }
+
+    /// <summary>
+    /// The other half of calibrating: the drag said how much paper, and this
+    /// asks what that paper is. Nothing is set until the answer comes back, so
+    /// a dialog dismissed leaves the sheet exactly as it was.
+    /// </summary>
+    private async void OnCalibrationDragged(object? sender, CalibrationDrag drag)
+    {
+        if (!ReferenceEquals(sender, ActiveViewer) || ActiveViewer is not { } viewer) return;
+
+        var box = new TextBox { PlaceholderText = "Por ejemplo 5,40", Width = 140 };
+        var units = new ComboBox
+        {
+            ItemsSource = new[] { "mm", "cm", "m", "km", "in", "ft" },
+            SelectedIndex = 2,
+            Width = 90,
+        };
+
+        // The unit last used is the one this drawing is in, and a set of plans
+        // is in one unit throughout.
+        units.SelectedIndex = (int)_lastMeasureUnit switch
+        {
+            0 => 0,
+            1 => 1,
+            2 => 2,
+            3 => 3,
+            4 => 4,
+            _ => 5,
+        };
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        row.Children.Add(box);
+        row.Children.Add(units);
+
+        var body = new StackPanel { Spacing = 10, Width = 380 };
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = "¿Cuánto mide de verdad lo que acabas de recorrer?",
+        });
+        body.Children.Add(row);
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.6,
+            FontSize = 12,
+            Text = "Con esto quedan calibradas todas las medidas de esta hoja, también las que ya estén hechas.",
+        });
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Calibrar la hoja",
+            Content = body,
+            PrimaryButtonText = "Calibrar",
+            CloseButtonText = "Cancelar",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+
+        AppTheme.Dress(dialog);
+
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key != Windows.System.VirtualKey.Enter) return;
+
+            e.Handled = true;
+            _calibrationAccepted = true;
+            dialog.Hide();
+        };
+
+        _calibrationAccepted = false;
+        var answer = await Dialogs.ShowAsync(dialog);
+        if (answer != ContentDialogResult.Primary && !_calibrationAccepted) return;
+
+        // Typed in a Spanish keyboard, so a comma is a decimal mark and not a
+        // thousands separator.
+        if (!double.TryParse(
+            box.Text.Replace(',', '.'),
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out double length) || length <= 0)
+        {
+            await ShowMessageAsync("No se pudo calibrar", "Escribe la distancia como un número, por ejemplo 5,40.");
+            return;
+        }
+
+        var unit = (MeasureUnit)Math.Clamp(units.SelectedIndex, 0, 5);
+        _lastMeasureUnit = unit;
+
+        if (SheetScale.From(drag.PaperPt, length, unit) is not { } scale)
+        {
+            await ShowMessageAsync(
+                "No se pudo calibrar",
+                "El arrastre es demasiado corto para calibrar con él: recorre una distancia más larga del plano.");
+            return;
+        }
+
+        viewer.CalibrateSheet(drag.PageIndex, scale);
+
+        // Straight on to measuring: calibrating is never the point, it is what
+        // has to happen first.
+        SetTool(ViewerTool.Distance);
+        Hint($"Hoja calibrada a {scale.RatioLabel}. {scale.FormatLength(drag.PaperPt)} de lo que recorriste.");
+        UpdateChrome();
+    }
+
+    /// <summary>Says what the sheet in view is drawn to, in the ribbon and in the panel.</summary>
+    private void UpdateMeasureChrome(PdfTiledViewer? viewer, bool interactive)
+    {
+        var scale = interactive ? viewer?.ScaleHere : null;
+
+        ScaleIndicator.Text = !interactive ? string.Empty : scale is { } known ? known.RatioLabel : "Sin calibrar";
+        ClearScaleButton.IsEnabled = scale is not null;
+
+        // What a centimetre of paper stands for, which is the sanity check a
+        // reader can make against the drawing in their hand — the ratio alone
+        // is right and says nothing you can hold a rule up to.
+        const double PointsPerCentimetre = 72.0 / 2.54;
+
+        SheetScaleText.Text = scale is { } sheet
+            ? $"Calibrada a {sheet.RatioLabel} · 1 cm de papel = {sheet.FormatLength(PointsPerCentimetre)}"
+            : "Sin calibrar. Ninguna medida puede dar un número todavía.";
+
+        // The measuring tools are only honest on a calibrated sheet. An angle
+        // is the exception and stays available: paper and building agree about
+        // angles whatever the scale.
+        bool calibrated = scale is not null;
+        DistanceToolButton.IsEnabled = interactive && calibrated;
+        PerimeterToolButton.IsEnabled = interactive && calibrated;
+        AreaToolButton.IsEnabled = interactive && calibrated;
+    }
+
+    /// <summary>The unit of the last calibration; a set of drawings is in one unit throughout.</summary>
+    private MeasureUnit _lastMeasureUnit = MeasureUnit.Metre;
+
+    private bool _calibrationAccepted;
+
     // --- marcas -----------------------------------------------------------
 
     private void OnUndoClicked(object sender, RoutedEventArgs e) => Undo();
@@ -2726,6 +2899,7 @@ public sealed partial class MainPage : Page
         RibbonAnotar.Visibility = Show(chosen == TabAnotar);
         RibbonOrganizador.Visibility = Show(chosen == TabOrganizador);
         RibbonComparar.Visibility = Show(chosen == TabComparar);
+        RibbonMedir.Visibility = Show(chosen == TabMedir);
 
         // The panel is what a ribbon needs to stay safe, and comparing is the
         // one activity whose panel is not a tool's: the legend saying which
@@ -2746,6 +2920,19 @@ public sealed partial class MainPage : Page
     /// </summary>
     private void ShowTabFor(ViewerTool tool)
     {
+        // Measuring has a tab of its own, and calibrating belongs to it even
+        // though it leaves no mark: what the reader is doing there is telling
+        // the sheet what it is drawn to, and the tools that need that answer
+        // are the ones beside it.
+        if (tool.IsMeasurement())
+        {
+            if (RibbonTabs.SelectedItem != TabMedir)
+            {
+                RibbonTabs.SelectedItem = TabMedir;
+            }
+            return;
+        }
+
         if (!tool.Draws() && tool != ViewerTool.CaptureRegion) return;
 
         if (RibbonTabs.SelectedItem != TabAnotar)
@@ -2835,6 +3022,7 @@ public sealed partial class MainPage : Page
         UpdateViewMenu(viewer);
         UpdateSaveChrome(viewer, interactive);
         UpdateCompareChrome(viewer, tool, interactive);
+        UpdateMeasureChrome(viewer, interactive);
 
         Pages.Visibility = hasDocument && ThumbnailsButton.IsChecked == true
             ? Visibility.Visible
@@ -2845,12 +3033,19 @@ public sealed partial class MainPage : Page
         // which colour on the drawing is which file.
         bool markTool = tool.IsAnnotation();
         bool comparing = interactive && viewer is { IsComparing: true };
-        PropertiesPanel.Visibility = hasDocument && (textTool || markTool || comparing)
+
+        // Calibrating leaves no mark, so it owns no mark panel — but the active
+        // tool has to be visible somewhere, and what it needs to say is what
+        // the sheet is drawn to. That is the panel it gets.
+        bool calibrating = tool == ViewerTool.Calibrate;
+
+        PropertiesPanel.Visibility = hasDocument && (textTool || markTool || comparing || calibrating)
             ? Visibility.Visible
             : Visibility.Collapsed;
         TextToolPanel.Visibility = textTool ? Visibility.Visible : Visibility.Collapsed;
         MarkToolPanel.Visibility = markTool ? Visibility.Visible : Visibility.Collapsed;
         ComparePanel.Visibility = comparing ? Visibility.Visible : Visibility.Collapsed;
+        MeasurePanel.Visibility = calibrating || tool.Measures() ? Visibility.Visible : Visibility.Collapsed;
 
         bool hasSelection = viewer?.HasSelection ?? false;
         CopySelectionButton.IsEnabled = hasSelection;
@@ -2903,15 +3098,21 @@ public sealed partial class MainPage : Page
         UndoButton.IsEnabled = interactive && (viewer?.CanUndo ?? false);
         RedoButton.IsEnabled = interactive && (viewer?.CanRedo ?? false);
 
-        PropertiesIconText.Visibility = tool.IsAnnotation() ? Visibility.Collapsed : Visibility.Visible;
-        PropertiesIconMark.Visibility = tool.IsAnnotation() ? Visibility.Visible : Visibility.Collapsed;
+        // Calibrating counts as a tool of the sheet here: it has no mark, but
+        // it has a panel and it has to be named in it like every other tool.
+        bool ownsPanel = tool.IsAnnotation() || tool == ViewerTool.Calibrate;
+
+        PropertiesIconText.Visibility = ownsPanel ? Visibility.Collapsed : Visibility.Visible;
+        PropertiesIconMark.Visibility = ownsPanel ? Visibility.Visible : Visibility.Collapsed;
 
         if (!tool.IsAnnotation())
         {
-            if (tool == ViewerTool.SelectText)
+            PropertiesTitle.Text = tool switch
             {
-                PropertiesTitle.Text = "Selección de texto";
-            }
+                ViewerTool.SelectText => "Selección de texto",
+                ViewerTool.Calibrate => ToolTitle(tool),
+                _ => PropertiesTitle.Text,
+            };
             return;
         }
 
@@ -3027,6 +3228,11 @@ public sealed partial class MainPage : Page
         yield return (HighlightToolButton, tool == ViewerTool.Highlight);
         yield return (TextToolMarkButton, tool == ViewerTool.FreeText);
         yield return (NoteToolButton, tool == ViewerTool.Note);
+        yield return (CalibrateToolButton, tool == ViewerTool.Calibrate);
+        yield return (DistanceToolButton, tool == ViewerTool.Distance);
+        yield return (PerimeterToolButton, tool == ViewerTool.Perimeter);
+        yield return (AreaToolButton, tool == ViewerTool.Area);
+        yield return (AngleToolButton, tool == ViewerTool.Angle);
     }
 
     private static Microsoft.UI.Xaml.Media.SolidColorBrush Swatch(AnnotationColor colour) =>
@@ -3046,6 +3252,11 @@ public sealed partial class MainPage : Page
         ViewerTool.Highlight => "Resaltar texto",
         ViewerTool.FreeText => "Texto",
         ViewerTool.Note => "Comentario",
+        ViewerTool.Calibrate => "Calibrar la hoja",
+        ViewerTool.Distance => "Distancia",
+        ViewerTool.Perimeter => "Perímetro",
+        ViewerTool.Area => "Área",
+        ViewerTool.Angle => "Ángulo",
         _ => "Herramienta",
     };
 

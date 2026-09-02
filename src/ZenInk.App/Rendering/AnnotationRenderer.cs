@@ -62,6 +62,9 @@ internal static class AnnotationRenderer
     /// </summary>
     private const float MinimumStrokeDips = 1.1f;
 
+    /// <summary>How small a measurement's number may get on screen before it stops shrinking.</summary>
+    private const float SmallestLabelDips = 11f;
+
     /// <summary>The grips are a fixed size on screen: they are interface, not part of the drawing.</summary>
     private const float HandleSizeDips = 7f;
 
@@ -132,6 +135,58 @@ internal static class AnnotationRenderer
         {
             DrawArrowHead(ds, mark, placement, colour);
         }
+
+        // The number, in the same place the file puts it: both ask
+        // Measures.LabelAnchor, so the drawing sent on reads as it did here.
+        if (Measures.Is(mark.Kind) && mark.Text.Length > 0)
+        {
+            DrawLabel(ds, mark, placement, colour);
+        }
+    }
+
+    /// <summary>
+    /// What a measurement says, beside what it measured.
+    ///
+    /// On a plate under a sheet of paper the number would be lost among the
+    /// drawing's own dimensions, so it goes on a plate of its own — the sheet
+    /// showing through it, and the mark's colour around it, which is what says
+    /// the number belongs to the line it sits on rather than to the drawing.
+    /// </summary>
+    private static void DrawLabel(
+        CanvasDrawingSession ds, Annotation mark, SheetPlacement placement, Color colour)
+    {
+        // A measurement is its number, so the number does not shrink away with
+        // the drawing: below this it stops at a size that can still be read.
+        // Written marks may vanish at a distance — they are notes on the sheet —
+        // but a length nobody can read is a line, and a line is not what the
+        // reader asked for. The floor is in dips, so it never reaches the
+        // captured or printed picture, whose scale is far above it.
+        float size = MathF.Max(mark.Style.FontSizePt * placement.Scale, SmallestLabelDips);
+
+        var anchor = Measures.LabelAnchor(mark.Kind, mark.Points);
+        var at = placement.ToScreen(AnnotationGeometry.Rotate(anchor, mark.Centre, mark.RotationDeg));
+
+        using var format = new CanvasTextFormat
+        {
+            FontFamily = "Arial",
+            FontSize = size,
+            WordWrapping = CanvasWordWrapping.NoWrap,
+        };
+
+        using var layout = new CanvasTextLayout(ds, mark.Text, format, 0f, 0f);
+        float padding = size * 0.3f;
+
+        // Above and to the right of the anchor, which keeps it off the line
+        // itself whichever way that line runs.
+        var box = new Rect(
+            at.X + padding,
+            at.Y - (float)layout.LayoutBounds.Height - padding,
+            layout.LayoutBounds.Width + (padding * 2),
+            layout.LayoutBounds.Height + padding);
+
+        ds.FillRoundedRectangle(box, padding, padding, Color.FromArgb(215, 255, 255, 255));
+        ds.DrawRoundedRectangle(box, padding, padding, Color.FromArgb(160, colour.R, colour.G, colour.B), 1f);
+        ds.DrawTextLayout(layout, new Vector2((float)box.X + padding, (float)box.Y), colour);
     }
 
     /// <summary>

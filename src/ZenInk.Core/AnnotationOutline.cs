@@ -137,6 +137,24 @@ public static class AnnotationOutline
             case AnnotationKind.Polygon:
                 return Closed(points, Turn);
 
+            // A measured distance is a dimension line: the segment with a tick
+            // across each end, which is what tells it from a line somebody drew
+            // and what says where the measurement starts and stops.
+            case AnnotationKind.Distance:
+                return Dimension(points, style.WidthPt, Turn);
+
+            // Both are closed: a perimeter goes round and back to where it
+            // started, and an area is the ground it encloses.
+            case AnnotationKind.Perimeter:
+            case AnnotationKind.Area:
+                return Closed(points, Turn);
+
+            // Two arms and the arc between them, so the corner being measured
+            // is the one the reader can see marked rather than one of the two
+            // the arms could mean.
+            case AnnotationKind.Angle:
+                return Corner(points, Turn);
+
             case AnnotationKind.Ellipse:
                 return Ellipse(points, Turn);
 
@@ -191,6 +209,69 @@ public static class AnnotationOutline
             steps.Add(PathStep.Line(turn(new Vector2(box.Right, box.Bottom))));
             steps.Add(PathStep.Line(turn(new Vector2(box.Left, box.Bottom))));
             steps.Add(PathStep.Close());
+        }
+
+        return steps;
+    }
+
+    /// <summary>
+    /// A dimension line: the measured segment, and a tick across each end. The
+    /// ticks are as long as an arrow head would be, so a measurement and an
+    /// arrow drawn with the same pen weigh the same on the sheet.
+    /// </summary>
+    private static List<PathStep> Dimension(
+        IReadOnlyList<Vector2> points, float widthPt, Func<Vector2, Vector2> turn)
+    {
+        var steps = Open(points, turn);
+        if (points.Count < 2) return steps;
+
+        var along = points[^1] - points[0];
+        if (along.LengthSquared() <= 0) return steps;
+
+        var across = Vector2.Normalize(new Vector2(-along.Y, along.X))
+            * (AnnotationGeometry.ArrowHeadLength(widthPt) / 2f);
+
+        foreach (var end in (Vector2[])[points[0], points[^1]])
+        {
+            steps.Add(PathStep.Move(turn(end - across)));
+            steps.Add(PathStep.Line(turn(end + across)));
+        }
+
+        return steps;
+    }
+
+    /// <summary>
+    /// The two arms of an angle and the arc across them. The arc's radius is a
+    /// share of the shorter arm, so a wide corner and a tight one are both
+    /// marked inside the lines they belong to.
+    /// </summary>
+    private static List<PathStep> Corner(IReadOnlyList<Vector2> points, Func<Vector2, Vector2> turn)
+    {
+        var steps = Open(points, turn);
+        if (points.Count < 3) return steps;
+
+        var corner = points[1];
+        var first = points[0] - corner;
+        var second = points[2] - corner;
+        float reach = MathF.Min(first.Length(), second.Length());
+        if (reach <= 0) return steps;
+
+        float radius = reach * 0.3f;
+        float from = AnnotationGeometry.AngleDeg(corner, points[0]);
+        float sweep = (float)AnnotationGeometry.CornerAngle(points[0], corner, points[2]);
+
+        // Round the short way: the angle marked has to be the one the arms
+        // enclose, not the rest of the circle.
+        float turned = ((AnnotationGeometry.AngleDeg(corner, points[2]) - from + 540f) % 360f) - 180f;
+        float direction = turned >= 0 ? 1f : -1f;
+
+        const int Steps = 10;
+        for (int i = 0; i <= Steps; i++)
+        {
+            float degrees = from + (direction * sweep * i / Steps);
+            float radians = degrees * MathF.PI / 180f;
+            var at = corner + new Vector2(MathF.Cos(radians), MathF.Sin(radians)) * radius;
+            steps.Add(i == 0 ? PathStep.Move(turn(at)) : PathStep.Line(turn(at)));
         }
 
         return steps;

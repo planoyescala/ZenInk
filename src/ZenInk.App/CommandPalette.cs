@@ -103,6 +103,11 @@ public sealed partial class MainPage
             ("Herramienta: comentario", "nota post-it globo", ViewerTool.Note),
             ("Herramienta: lápiz", "mano alzada dibujar", ViewerTool.Ink),
             ("Capturar una zona al portapapeles", "recorte captura copiar imagen pantalla trozo", ViewerTool.CaptureRegion),
+            ("Calibrar la hoja", "escala medir 1:100 distancia conocida", ViewerTool.Calibrate),
+            ("Medir: distancia", "longitud largo metros cota", ViewerTool.Distance),
+            ("Medir: perímetro", "contorno vuelta alrededor", ViewerTool.Perimeter),
+            ("Medir: área", "superficie metros cuadrados m2 sala", ViewerTool.Area),
+            ("Medir: ángulo", "grados esquina inclinación", ViewerTool.Angle),
         }.Select(entry => new AppCommand(entry.Name, "", entry.Also, () => SetTool(entry.Tool))));
 
         return commands;

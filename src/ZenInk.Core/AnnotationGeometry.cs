@@ -62,6 +62,66 @@ public static class AnnotationGeometry
         return MathF.Atan2(offset.Y, offset.X) * 180f / MathF.PI;
     }
 
+    // --- measuring -------------------------------------------------------
+
+    /// <summary>
+    /// The run of segments end to end, on the paper. What a measurement turns
+    /// into a real length by way of the sheet's scale.
+    /// </summary>
+    public static double TotalLength(IReadOnlyList<Vector2> points, bool closed = false)
+    {
+        double total = 0;
+        for (int i = 1; i < points.Count; i++)
+        {
+            total += (points[i] - points[i - 1]).Length();
+        }
+
+        if (closed && points.Count > 2)
+        {
+            total += (points[0] - points[^1]).Length();
+        }
+
+        return total;
+    }
+
+    /// <summary>
+    /// The area a closed run of points encloses, on the paper. The shoelace
+    /// sum, taken as an absolute: which way round the reader traced the room is
+    /// not something they should have to think about.
+    ///
+    /// A shape that crosses itself is not defended against, because the answer
+    /// to one is not a number: it is a shape to be redrawn, and it is visible
+    /// as such.
+    /// </summary>
+    public static double PolygonArea(IReadOnlyList<Vector2> points)
+    {
+        if (points.Count < 3) return 0;
+
+        double twice = 0;
+        for (int i = 0, j = points.Count - 1; i < points.Count; j = i++)
+        {
+            twice += ((double)points[j].X * points[i].Y) - ((double)points[i].X * points[j].Y);
+        }
+
+        return Math.Abs(twice) / 2.0;
+    }
+
+    /// <summary>
+    /// The angle at <paramref name="corner"/> between the two arms, from 0 to
+    /// 180 degrees. Always the angle that is drawn: a reader measuring a corner
+    /// wants what they can see between the two lines, never its reflex twin.
+    /// </summary>
+    public static double CornerAngle(Vector2 from, Vector2 corner, Vector2 to)
+    {
+        var a = from - corner;
+        var b = to - corner;
+        double lengths = (double)a.Length() * b.Length();
+        if (lengths <= 0) return 0;
+
+        double cosine = Math.Clamp((((double)a.X * b.X) + ((double)a.Y * b.Y)) / lengths, -1.0, 1.0);
+        return Math.Acos(cosine) * 180.0 / Math.PI;
+    }
+
     // --- paths -----------------------------------------------------------
 
     /// <summary>

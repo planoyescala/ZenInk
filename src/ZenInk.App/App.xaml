@@ -33,6 +33,7 @@
                     <SolidColorBrush x:Key="IconSignatureBrush" Color="#2F6FB5" />
                     <SolidColorBrush x:Key="IconSaveBrush" Color="#3E8E52" />
                     <SolidColorBrush x:Key="IconCaptureBrush" Color="#2F6FB5" />
+                    <SolidColorBrush x:Key="IconMeasureBrush" Color="#7A5AA8" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="IconRevisionBrush" Color="#F0705C" />
@@ -41,6 +42,7 @@
                     <SolidColorBrush x:Key="IconSignatureBrush" Color="#6FB2F0" />
                     <SolidColorBrush x:Key="IconSaveBrush" Color="#69C182" />
                     <SolidColorBrush x:Key="IconCaptureBrush" Color="#6FB2F0" />
+                    <SolidColorBrush x:Key="IconMeasureBrush" Color="#B79BE0" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
                     <!--  En alto contraste manda el sistema: nada de tintes propios.  -->
@@ -50,6 +52,7 @@
                     <SolidColorBrush x:Key="IconSignatureBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
                     <SolidColorBrush x:Key="IconSaveBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
                     <SolidColorBrush x:Key="IconCaptureBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
+                    <SolidColorBrush x:Key="IconMeasureBrush" Color="{ThemeResource SystemColorButtonTextColor}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

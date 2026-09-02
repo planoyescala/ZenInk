@@ -19,6 +19,7 @@ try
     AnnotationTests.Run();
     SignatureTests.Run();
     CompareTests.Run();
+    MeasureTests.Run();
     await TextLayerTests.RunAsync();
     await RenderQueueTests.RunAsync();
     await RotationTests.RunAsync();

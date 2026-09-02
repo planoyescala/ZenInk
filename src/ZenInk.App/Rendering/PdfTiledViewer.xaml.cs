@@ -25,6 +25,13 @@ public sealed record SignatureSpot(int PageIndex, RectPt SheetRect);
 /// <summary>The piece of one sheet the reader dragged a box around, in sheet points.</summary>
 public sealed record CaptureSpot(int PageIndex, RectPt SheetRect);
 
+/// <summary>
+/// A drag over something whose real length the reader knows, waiting to be told
+/// what that length is. The paper's own measurement in points is all the viewer
+/// can say; the rest of the calibration is an answer, not a gesture.
+/// </summary>
+public sealed record CalibrationDrag(int PageIndex, float PaperPt);
+
 /// <summary>A finished capture: the PNG, and how big it came out — which is what says whether it is worth pasting.</summary>
 public sealed record CaptureImage(InMemoryRandomAccessStream Png, int Width, int Height);
 
@@ -134,6 +141,26 @@ public enum ViewerTool
 
     /// <summary>Place a comment; the text is typed in the panel.</summary>
     Note,
+
+    /// <summary>
+    /// Drag over something whose real length is known — a scale bar, a
+    /// dimension already on the drawing, a known bay — and say what it is. It
+    /// is the only tool that leaves nothing on the sheet: what it changes is
+    /// what every measurement on that sheet means.
+    /// </summary>
+    Calibrate,
+
+    /// <summary>Drag a line and it says how long it is.</summary>
+    Distance,
+
+    /// <summary>Place vertices round something and it says how far round it is.</summary>
+    Perimeter,
+
+    /// <summary>Place vertices round something and it says how much it covers.</summary>
+    Area,
+
+    /// <summary>Place an arm, the corner and the other arm, and it says the angle.</summary>
+    Angle,
 }
 
 public static class ViewerToolExtensions
@@ -143,10 +170,31 @@ public static class ViewerToolExtensions
         tool is ViewerTool.Ink or ViewerTool.Line or ViewerTool.Arrow
             or ViewerTool.Rectangle or ViewerTool.Ellipse or ViewerTool.Polyline
             or ViewerTool.Polygon or ViewerTool.Cloud
-            or ViewerTool.Highlight or ViewerTool.FreeText or ViewerTool.Note;
+            or ViewerTool.Highlight or ViewerTool.FreeText or ViewerTool.Note
+            || tool.Measures();
+
+    /// <summary>
+    /// True for the tools that leave a number on the sheet. Calibrating is not
+    /// one of them: it leaves nothing, it only says what the sheet is drawn to.
+    /// </summary>
+    public static bool Measures(this ViewerTool tool) =>
+        tool is ViewerTool.Distance or ViewerTool.Perimeter
+            or ViewerTool.Area or ViewerTool.Angle;
+
+    /// <summary>True for the tools of the measuring tab, calibrating included.</summary>
+    public static bool IsMeasurement(this ViewerTool tool) =>
+        tool.Measures() || tool == ViewerTool.Calibrate;
 
     /// <summary>True for the tools whose panel is about marks — drawing them or picking them up.</summary>
     public static bool IsAnnotation(this ViewerTool tool) => tool.Draws() || tool == ViewerTool.SelectAnnotation;
+
+    /// <summary>
+    /// True for the tools worked by dragging on the drawing itself. Calibrating
+    /// is one of them and is not a mark: the drag is the question, and the
+    /// sheet keeps nothing of it.
+    /// </summary>
+    public static bool DragsOnSheet(this ViewerTool tool) =>
+        tool.IsAnnotation() || tool == ViewerTool.Calibrate;
 
     /// <summary>The kind of mark a drawing tool makes.</summary>
     public static AnnotationKind ToKind(this ViewerTool tool) => tool switch
@@ -161,6 +209,13 @@ public static class ViewerToolExtensions
         ViewerTool.Highlight => AnnotationKind.Highlight,
         ViewerTool.FreeText => AnnotationKind.FreeText,
         ViewerTool.Note => AnnotationKind.Note,
+        // The calibration drag is drawn as the dimension line it is measuring
+        // along, so the reader can see what they are about to call a length.
+        // Nothing of it is kept.
+        ViewerTool.Calibrate or ViewerTool.Distance => AnnotationKind.Distance,
+        ViewerTool.Perimeter => AnnotationKind.Perimeter,
+        ViewerTool.Area => AnnotationKind.Area,
+        ViewerTool.Angle => AnnotationKind.Angle,
         _ => AnnotationKind.Ink,
     };
 }
@@ -1421,6 +1476,43 @@ public sealed partial class PdfTiledViewer : UserControl
     /// <summary>Raised when a capture box is drawn — or with null when the gesture was too small to mean one.</summary>
     public event EventHandler<CaptureSpot?>? RegionCaptured;
 
+    /// <summary>Raised when a calibration drag ends long enough to be worth asking about.</summary>
+    public event EventHandler<CalibrationDrag>? CalibrationDragged;
+
+    /// <summary>What a sheet is drawn to, or null while it has never been calibrated.</summary>
+    public SheetScale? ScaleOf(int pageIndex) => _annotations.ScaleOf(pageIndex);
+
+    /// <summary>The scale of the sheet in view, which is the one the panel talks about.</summary>
+    public SheetScale? ScaleHere => ScaleOf(CurrentPageIndex);
+
+    /// <summary>
+    /// What every calibrated sheet is drawn to. The print path needs them all:
+    /// a set can carry a site plan at 1:500 and a detail at 1:20, and printing
+    /// both at one drawing scale is two different factors.
+    /// </summary>
+    public IReadOnlyDictionary<int, SheetScale> Scales()
+    {
+        var scales = new Dictionary<int, SheetScale>();
+        for (int sheet = 0; sheet < _pageSizes.Count; sheet++)
+        {
+            if (_annotations.ScaleOf(sheet) is { } scale) scales[sheet] = scale;
+        }
+        return scales;
+    }
+
+    /// <summary>
+    /// Sets what a sheet is drawn to, bringing the measurements already on it
+    /// up to it. Null takes the calibration away again.
+    /// </summary>
+    public void CalibrateSheet(int pageIndex, SheetScale? scale)
+    {
+        if (pageIndex < 0) return;
+
+        _annotations.SetScale(pageIndex, scale);
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>The signature waiting to be written, drawn on the sheet where it will land.</summary>
     public PendingSignature? Pending { get; private set; }
 
@@ -1656,7 +1748,7 @@ public sealed partial class PdfTiledViewer : UserControl
         ViewerTool.SelectAnnotation => InputSystemCursorShape.Arrow,
         // Drawing wants a cursor whose hot spot you can aim: a hand would hide
         // the very corner the mark is meant to start on.
-        _ when _tool.Draws() => InputSystemCursorShape.Cross,
+        _ when _tool.DragsOnSheet() => InputSystemCursorShape.Cross,
         _ => InputSystemCursorShape.Hand,
     };
 
@@ -2251,7 +2343,7 @@ public sealed partial class PdfTiledViewer : UserControl
             _zoomBandStart = point.Position;
             _zoomBandEnd = point.Position;
         }
-        else if (left && _tool.IsAnnotation() && CanMark(e))
+        else if (left && _tool.DragsOnSheet() && CanMark(e))
         {
             _gesturePointerId = e.Pointer.PointerId;
             BeginMark(point.Position, point.Properties.IsEraser || point.Properties.IsRightButtonPressed);
@@ -2406,7 +2498,7 @@ public sealed partial class PdfTiledViewer : UserControl
             if (_vertices.Count == 0) return null;
 
             var placed = new List<Vector2>(_vertices) { _rubber };
-            return new Annotation(kind, placed, AnnotationStyle, author: Author);
+            return Make(kind, placed, _draftPage);
         }
 
         if (_draft.Count == 0) return null;
@@ -2414,8 +2506,23 @@ public sealed partial class PdfTiledViewer : UserControl
         IReadOnlyList<Vector2> points = kind == AnnotationKind.Ink ? _draft : [_draft[0], _draft[^1]];
         if (kind != AnnotationKind.Ink && points.Count < 2) return null;
 
-        return new Annotation(kind, points, AnnotationStyle, author: Author);
+        return Make(kind, points, _draftPage);
     }
+
+    /// <summary>
+    /// A new mark on a sheet, carrying that sheet's scale.
+    ///
+    /// Every mark goes through here so that a measurement cannot be made
+    /// without one: the scale is not something the reader sets on the mark, it
+    /// is what the sheet is drawn to, and a measurement made on a sheet
+    /// calibrated afterwards is brought up to it by the store.
+    /// </summary>
+    private Annotation Make(AnnotationKind kind, IReadOnlyList<Vector2> points, int page) =>
+        new(kind, points, AnnotationStyle, author: Author,
+            // While calibrating, the sheet's own scale is the one being
+            // replaced: showing a number from it under the drag would be the
+            // old answer following the reader's hand.
+            scale: page >= 0 && _tool != ViewerTool.Calibrate ? _annotations.ScaleOf(page) : null);
 
     /// <summary>Who the marks are attributed to, which is what a PDF reader shows as the author.</summary>
     private static string Author
@@ -2773,6 +2880,16 @@ public sealed partial class PdfTiledViewer : UserControl
 
         _vertices.Add(sheetPoint);
         _rubber = sheetPoint;
+
+        // An angle is an arm, a corner and the other arm. There is nothing to
+        // add a fourth point to, so it closes itself rather than waiting for a
+        // double click that would only mean the same thing.
+        if (_tool == ViewerTool.Angle && _vertices.Count == 3)
+        {
+            FinishVertices();
+            return;
+        }
+
         Canvas.Invalidate();
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -2790,7 +2907,7 @@ public sealed partial class PdfTiledViewer : UserControl
 
         if (_vertices.Count >= least && _draftPage >= 0)
         {
-            _annotations.Add(_draftPage, new Annotation(kind, [.. _vertices], AnnotationStyle, author: Author));
+            _annotations.Add(_draftPage, Make(kind, [.. _vertices], _draftPage));
         }
 
         _placingVertices = false;
@@ -2859,13 +2976,32 @@ public sealed partial class PdfTiledViewer : UserControl
         bool tooSmall = kind != AnnotationKind.Ink
             && (_draft.Count < 2 || Vector2.Distance(_draft[0], _draft[^1]) * _scale < MinShapeDips);
 
+        // Calibrating leaves nothing behind: the drag was a question about the
+        // sheet, and the answer is typed. It goes out as an event so the sheet
+        // is never left half-calibrated by a dialog the reader dismissed.
+        if (_tool == ViewerTool.Calibrate)
+        {
+            int page = _draftPage;
+            float measured = _draft.Count >= 2 ? Vector2.Distance(_draft[0], _draft[^1]) : 0f;
+
+            _draft.Clear();
+            _draftPage = -1;
+            Canvas.Invalidate();
+
+            if (measured >= SheetScale.ShortestCalibrationPt && page >= 0)
+            {
+                CalibrationDragged?.Invoke(this, new CalibrationDrag(page, measured));
+            }
+            return;
+        }
+
         if (!tooSmall)
         {
             IReadOnlyList<Vector2> points = kind == AnnotationKind.Ink
                 ? AnnotationGeometry.Simplify(_draft, InkSimplifyPt)
                 : [_draft[0], _draft[^1]];
 
-            _annotations.Add(_draftPage, new Annotation(kind, points, AnnotationStyle, author: Author));
+            _annotations.Add(_draftPage, Make(kind, points, _draftPage));
         }
 
         _draft.Clear();

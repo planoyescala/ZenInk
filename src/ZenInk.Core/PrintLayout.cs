@@ -49,6 +49,17 @@ public enum PrintScaleMode
 
     /// <summary>An explicit percentage, for the times the drawing was authored oversized.</summary>
     Custom,
+
+    /// <summary>
+    /// Printed to a drawing scale — 1:100, 1:50 — so a rule held against the
+    /// paper reads the building. It needs the sheet to be calibrated, because
+    /// it is the only mode that has to know what the drawing already is: the
+    /// factor is what takes it from the ratio it was plotted at to the one
+    /// being asked for. A sheet with no calibration falls back to fitting the
+    /// paper, which is the honest answer to a question that cannot be
+    /// answered.
+    /// </summary>
+    Drawing,
 }
 
 public enum PrintOrientation
@@ -78,6 +89,19 @@ public sealed record PrintSettings
 
     /// <summary>Only consulted for <see cref="PrintScaleMode.Custom"/>.</summary>
     public double CustomScalePercent { get; init; } = 100.0;
+
+    /// <summary>
+    /// The drawing scale asked for, as the number after the colon: 100 for
+    /// 1:100. Only consulted for <see cref="PrintScaleMode.Drawing"/>.
+    /// </summary>
+    public double DrawingRatio { get; init; } = 100.0;
+
+    /// <summary>
+    /// What each sheet is drawn to, for the sheets that have been calibrated.
+    /// Per sheet and not per job: a set can hold a site plan at 1:500 and a
+    /// detail at 1:20, and printing both "at 1:100" is two different factors.
+    /// </summary>
+    public IReadOnlyDictionary<int, SheetScale>? Scales { get; init; }
 
     public PrintOrientation Orientation { get; init; } = PrintOrientation.Auto;
 
@@ -158,17 +182,30 @@ public static class PrintLayout
     /// point. Fit is capped at the paper; the other modes are taken as asked,
     /// and whether the result fits is a separate question.
     /// </summary>
-    public static double ScaleFor(PdfPageSize sheet, PdfPageSize paper, PrintSettings settings)
+    public static double ScaleFor(
+        PdfPageSize sheet, PdfPageSize paper, PrintSettings settings, SheetScale? calibration = null)
     {
         var printable = PrintableBox(paper, settings.Margins);
         if (printable.Width <= 0 || printable.Height <= 0) return 0;
         if (sheet.WidthPt <= 0 || sheet.HeightPt <= 0) return 0;
 
+        double fit = Math.Min(printable.Width / sheet.WidthPt, printable.Height / sheet.HeightPt);
+
         return settings.ScaleMode switch
         {
             PrintScaleMode.ActualSize => 1.0,
             PrintScaleMode.Custom => Math.Max(0, settings.CustomScalePercent) / 100.0,
-            _ => Math.Min(printable.Width / sheet.WidthPt, printable.Height / sheet.HeightPt),
+
+            // From the ratio the sheet was plotted at to the one asked for. A
+            // drawing already at 1:200 printed at 1:100 comes out twice the
+            // size, which is exactly what it means and usually needs the next
+            // paper up — the poster option is there for that.
+            PrintScaleMode.Drawing =>
+                calibration is { } scale && settings.DrawingRatio > 0 && scale.Ratio > 0
+                    ? scale.Ratio / settings.DrawingRatio
+                    : fit,
+
+            _ => fit,
         };
     }
 
@@ -192,7 +229,11 @@ public static class PrintLayout
             var sheet = sheets[pageIndex];
             var oriented = OrientPaper(sheet, paper, settings.Orientation);
             var printable = PrintableBox(oriented, settings.Margins);
-            double scale = ScaleFor(sheet, oriented, settings);
+
+            SheetScale? calibration =
+                settings.Scales is { } scales && scales.TryGetValue(pageIndex, out var known) ? known : null;
+
+            double scale = ScaleFor(sheet, oriented, settings, calibration);
 
             if (scale < MinScale || printable.Width <= 0 || printable.Height <= 0) continue;
 

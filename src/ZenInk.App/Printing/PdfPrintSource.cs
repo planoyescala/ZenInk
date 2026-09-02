@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Graphics.Canvas.Printing;
 using Windows.Graphics.Printing;
 using Windows.Graphics.Printing.OptionDetails;
@@ -148,6 +149,18 @@ public sealed class PdfPrintSource : IAsyncDisposable
         var option = details.CreateItemListOption(ScaleOptionId, "Escala");
         option.AddItem("fit", "Ajustar al papel");
         option.AddItem("actual", "Tamaño real (1:1)");
+
+        // The drawing scales come first among the numbers, and only for a
+        // calibrated sheet: on one that has never been calibrated "1:100" would
+        // be a promise the program cannot keep.
+        if (_job.Settings.Scales is { Count: > 0 })
+        {
+            foreach (double ratio in DrawingRatios)
+            {
+                option.AddItem($"d{ratio:0.##}", $"1:{ratio:0.##} del dibujo");
+            }
+        }
+
         option.AddItem("25", "25 %");
         option.AddItem("50", "50 %");
         option.AddItem("71", "71 % (A1 a A2)");
@@ -159,9 +172,16 @@ public sealed class PdfPrintSource : IAsyncDisposable
         details.DisplayedOptions.Add(ScaleOptionId);
     }
 
+    /// <summary>
+    /// The scales a set of building drawings is issued at. Not every scale in
+    /// the world: a list you have to read is a list nobody reads.
+    /// </summary>
+    private static readonly double[] DrawingRatios = [20, 50, 100, 200, 500];
+
     private string CurrentScaleValue() => _job.Settings.ScaleMode switch
     {
         PrintScaleMode.ActualSize => "actual",
+        PrintScaleMode.Drawing => $"d{_job.Settings.DrawingRatio:0.##}",
         PrintScaleMode.Custom => ((int)Math.Round(_job.Settings.CustomScalePercent)).ToString(),
         _ => "fit",
     };
@@ -222,6 +242,12 @@ public sealed class PdfPrintSource : IAsyncDisposable
                 {
                     "fit" => settings with { ScaleMode = PrintScaleMode.FitToPaper },
                     "actual" => settings with { ScaleMode = PrintScaleMode.ActualSize },
+                    ['d', .. var ratio] => settings with
+                    {
+                        ScaleMode = PrintScaleMode.Drawing,
+                        DrawingRatio = double.TryParse(
+                            ratio, NumberStyles.Float, CultureInfo.InvariantCulture, out double asked) ? asked : 100,
+                    },
                     _ => settings with
                     {
                         ScaleMode = PrintScaleMode.Custom,

@@ -137,6 +137,12 @@ public static class PdfAnnotations
     /// </summary>
     private const string StandardFont = "Helvetica";
 
+    /// <summary>
+    /// How far off the measured line the number sits, so it never lands on the
+    /// very ink it is about.
+    /// </summary>
+    private const float MeasureLabelOffsetPt = 4f;
+
     /// <summary>Annotation flag bit 3: print this annotation. Without it, most readers will not.</summary>
     private const int FlagPrint = 4;
 
@@ -345,6 +351,15 @@ public static class PdfAnnotations
             else if (subtype == SubtypeStamp)
             {
                 AddShapeObject(annotation, outline, mark.Style);
+
+                // The number goes in beside the shape, not only in /Contents.
+                // A measurement whose figure lives in a tooltip is a line
+                // somebody drew as far as the person receiving the drawing is
+                // concerned.
+                if (Measures.Is(mark.Kind) && mark.Text.Length > 0)
+                {
+                    AddLabel(document, annotation, mark, transform);
+                }
             }
             else if (subtype == SubtypeHighlight)
             {
@@ -380,41 +395,55 @@ public static class PdfAnnotations
     {
         if (outline.Count == 0) return;
 
-        var start = outline[0].To;
-        var path = fpdf_edit.FPDFPageObjCreateNewPath(start.X, start.Y);
-        if (path is null) return;
+        FpdfPageobjectT? path = null;
 
-        for (int i = 1; i < outline.Count; i++)
+        void Finish()
+        {
+            if (path is not { } built) return;
+
+            if (style.Fill is { } fill)
+            {
+                fpdf_edit.FPDFPageObjSetFillColor(built, fill.R, fill.G, fill.B, style.FillAlpha);
+            }
+
+            fpdf_edit.FPDFPageObjSetStrokeColor(built, style.Color.R, style.Color.G, style.Color.B, 255);
+            fpdf_edit.FPDFPageObjSetStrokeWidth(built, style.WidthPt);
+            fpdf_edit.FPDFPathSetDrawMode(built, style.Fill is null ? FillModeNone : FillModeWinding, 1);
+
+            fpdf_annot.FPDFAnnotAppendObject(annotation, built);
+            path = null;
+        }
+
+        for (int i = 0; i < outline.Count; i++)
         {
             var step = outline[i];
             switch (step.Verb)
             {
-                case PathVerb.Line:
-                    fpdf_edit.FPDFPathLineTo(path, step.A.X, step.A.Y);
-                    break;
-                case PathVerb.Cubic:
-                    fpdf_edit.FPDFPathBezierTo(path, step.A.X, step.A.Y, step.B.X, step.B.Y, step.C.X, step.C.Y);
-                    break;
-                case PathVerb.Close:
-                    fpdf_edit.FPDFPathClose(path);
-                    break;
+                // A figure of its own. Most marks are one shape, but a measured
+                // distance carries a tick across each end and an angle carries
+                // the arc between its arms, and those are separate strokes: an
+                // object per figure is what stops them being joined by a line
+                // that was never drawn.
                 case PathVerb.Move:
-                    // A mark is one shape; a second subpath would be a bug
-                    // upstream rather than something to draw.
+                    Finish();
+                    path = fpdf_edit.FPDFPageObjCreateNewPath(step.A.X, step.A.Y);
+                    break;
+
+                case PathVerb.Line when path is { } open:
+                    fpdf_edit.FPDFPathLineTo(open, step.A.X, step.A.Y);
+                    break;
+
+                case PathVerb.Cubic when path is { } curving:
+                    fpdf_edit.FPDFPathBezierTo(curving, step.A.X, step.A.Y, step.B.X, step.B.Y, step.C.X, step.C.Y);
+                    break;
+
+                case PathVerb.Close when path is { } closing:
+                    fpdf_edit.FPDFPathClose(closing);
                     break;
             }
         }
 
-        if (style.Fill is { } fill)
-        {
-            fpdf_edit.FPDFPageObjSetFillColor(path, fill.R, fill.G, fill.B, style.FillAlpha);
-        }
-
-        fpdf_edit.FPDFPageObjSetStrokeColor(path, style.Color.R, style.Color.G, style.Color.B, 255);
-        fpdf_edit.FPDFPageObjSetStrokeWidth(path, style.WidthPt);
-        fpdf_edit.FPDFPathSetDrawMode(path, style.Fill is null ? FillModeNone : FillModeWinding, 1);
-
-        fpdf_annot.FPDFAnnotAppendObject(annotation, path);
+        Finish();
     }
 
     /// <summary>
@@ -458,6 +487,39 @@ public static class PdfAnnotations
 
             fpdf_annot.FPDFAnnotAppendObject(annotation, text);
         }
+    }
+
+    /// <summary>
+    /// Puts a measurement's number on the sheet, beside what it measures.
+    ///
+    /// Same placement as on screen — <see cref="Measures.LabelAnchor"/> decides
+    /// it for both — so the drawing that leaves here reads the way it read to
+    /// the person who took the measurement.
+    /// </summary>
+    private static void AddLabel(
+        FpdfDocumentT document, FpdfAnnotationT annotation, Annotation mark, SheetTransform transform)
+    {
+        var anchor = Measures.LabelAnchor(mark.Kind, mark.Points);
+        var baseline = anchor + new Vector2(MeasureLabelOffsetPt, -MeasureLabelOffsetPt);
+
+        // A point one unit along the writing says which way it runs once the
+        // sheet's own turn is in; nothing here has to know what that turn was.
+        var start = transform.ToPdf(AnnotationGeometry.Rotate(baseline, anchor, mark.RotationDeg));
+        var next = transform.ToPdf(AnnotationGeometry.Rotate(baseline + new Vector2(1f, 0f), anchor, mark.RotationDeg));
+
+        var direction = next - start;
+        float scale = direction.Length();
+        if (scale <= 0.0001f) return;
+        direction /= scale;
+
+        var text = fpdf_edit.FPDFPageObjNewTextObj(document, StandardFont, mark.Style.FontSizePt * scale);
+        if (text is null) return;
+
+        SetTextObject(text, mark.Text);
+        fpdf_edit.FPDFPageObjSetFillColor(text, mark.Style.Color.R, mark.Style.Color.G, mark.Style.Color.B, 255);
+        fpdf_edit.FPDFPageObjTransform(text, direction.X, direction.Y, -direction.Y, direction.X, start.X, start.Y);
+
+        fpdf_annot.FPDFAnnotAppendObject(annotation, text);
     }
 
     private static void SetTextObject(FpdfPageobjectT text, string line)
@@ -536,9 +598,14 @@ public static class PdfAnnotations
         // neither can carry a cloud or a polygon — PDFium cannot write their
         // vertices — and none of them can carry a fill you can see through.
         // One shape, one way in, and the same drawing for every reader.
+        // A measurement goes the same way, and for the same reason twice over:
+        // an area needs a fill you can see through, and every measurement
+        // carries its number as well as its shape. Only a stamp can hold both.
         AnnotationKind.Rectangle or AnnotationKind.Ellipse
             or AnnotationKind.Polygon or AnnotationKind.Cloud
-            or AnnotationKind.FreeText => SubtypeStamp,
+            or AnnotationKind.FreeText
+            or AnnotationKind.Distance or AnnotationKind.Perimeter
+            or AnnotationKind.Area or AnnotationKind.Angle => SubtypeStamp,
 
         // Ink, and also the line, the arrow and the polyline: all of them are a
         // stroked path, which is what an ink annotation is.
@@ -625,7 +692,12 @@ public static class PdfAnnotations
             pdfSpaceMark.Author,
             ParseName(name),
             pdfSpaceMark.Created,
-            pdfSpaceMark.RotationDeg);
+            pdfSpaceMark.RotationDeg,
+            // The calibration comes back with the measurement. Without it the
+            // mark would arrive as a line with no number — and the sheet it is
+            // on would come back uncalibrated, since its measurements are where
+            // that is remembered.
+            pdfSpaceMark.Scale);
     }
 
     /// <summary>

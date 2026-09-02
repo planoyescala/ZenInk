@@ -48,6 +48,25 @@ public enum AnnotationKind
 
     /// <summary>A comment anchored at one point; the text is the annotation.</summary>
     Note,
+
+    /// <summary>
+    /// A straight segment that says how long it is. The same two points as a
+    /// line; what makes it a measurement is that its text is worked out from
+    /// them and the sheet's scale rather than typed.
+    /// </summary>
+    Distance,
+
+    /// <summary>A run of segments, closed back to the start, that says how far round it is.</summary>
+    Perimeter,
+
+    /// <summary>A closed run of segments that says how much it encloses.</summary>
+    Area,
+
+    /// <summary>
+    /// Three points — an arm, the corner, the other arm — that say what the
+    /// angle between them is. The one measurement with no scale in it.
+    /// </summary>
+    Angle,
 }
 
 /// <summary>A mark's colour, as the PDF carries it: three channels, no alpha.</summary>
@@ -116,16 +135,24 @@ public sealed class Annotation
         string author = "",
         Guid? id = null,
         DateTimeOffset? created = null,
-        float rotationDeg = 0f)
+        float rotationDeg = 0f,
+        SheetScale? scale = null)
     {
         Kind = kind;
         Points = points;
         Style = style;
-        Text = text ?? string.Empty;
         Author = author ?? string.Empty;
         Id = id ?? Guid.NewGuid();
         Created = created ?? DateTimeOffset.Now;
         RotationDeg = Normalise(rotationDeg);
+        Scale = Measures.Is(kind) ? scale : null;
+
+        // A measurement's words are its number, and they are worked out here
+        // rather than passed in. That is the whole of what keeps a measurement
+        // honest: dragging one of its ends makes a new mark, and a new mark
+        // recomputes — there is no path by which the line says one thing and
+        // the number another.
+        Text = Measures.Is(kind) ? Measures.Label(kind, points, Scale) : text ?? string.Empty;
 
         Outline = AnnotationOutline.Build(kind, points, style, RotationDeg, Text);
         Bounds = ComputeBounds();
@@ -143,8 +170,19 @@ public sealed class Annotation
     /// <summary>The mark's own turn, in degrees clockwise about the middle of its points.</summary>
     public float RotationDeg { get; }
 
-    /// <summary>The comment's text. Only <see cref="AnnotationKind.Note"/> uses it today.</summary>
+    /// <summary>The comment's text, or a measurement's number.</summary>
     public string Text { get; }
+
+    /// <summary>
+    /// The sheet's scale as it stood when this measurement was made, and null
+    /// for everything else.
+    ///
+    /// It rides with the mark rather than only with the sheet so that the
+    /// number survives the file: a drawing reopened somewhere else brings its
+    /// measurements back with the calibration that produced them, instead of
+    /// with whatever the reader last calibrated.
+    /// </summary>
+    public SheetScale? Scale { get; }
 
     public string Author { get; }
 
@@ -167,7 +205,7 @@ public sealed class Annotation
     /// <summary>True for the kinds that can carry a fill at all.</summary>
     public static bool TakesFill(AnnotationKind kind) =>
         kind is AnnotationKind.Rectangle or AnnotationKind.Ellipse
-            or AnnotationKind.Polygon or AnnotationKind.Cloud;
+            or AnnotationKind.Polygon or AnnotationKind.Cloud or AnnotationKind.Area;
 
     /// <summary>
     /// True for the kinds drawn with a line of their own. A highlight is a wash
@@ -178,7 +216,8 @@ public sealed class Annotation
 
     /// <summary>True for the kinds whose points are a run of vertices the reader places one by one.</summary>
     public static bool TakesVertices(AnnotationKind kind) =>
-        kind is AnnotationKind.Polyline or AnnotationKind.Polygon or AnnotationKind.Cloud;
+        kind is AnnotationKind.Polyline or AnnotationKind.Polygon or AnnotationKind.Cloud
+            or AnnotationKind.Perimeter or AnnotationKind.Area or AnnotationKind.Angle;
 
     /// <summary>
     /// True for the marks that can still be changed once they are made.
@@ -190,8 +229,13 @@ public sealed class Annotation
     /// </summary>
     public static bool CanBeChanged(AnnotationKind kind) => kind != AnnotationKind.Highlight;
 
-    /// <summary>True for the kind that carries words drawn on the sheet itself.</summary>
-    public static bool TakesFontSize(AnnotationKind kind) => kind == AnnotationKind.FreeText;
+    /// <summary>
+    /// True for the kinds that carry words on the sheet itself — the ones typed
+    /// in, and the measurements, whose number has to be readable on an A0 held
+    /// at arm's length.
+    /// </summary>
+    public static bool TakesFontSize(AnnotationKind kind) =>
+        kind == AnnotationKind.FreeText || Measures.Is(kind);
 
     /// <summary>True for the kinds that are typed into rather than drawn.</summary>
     public static bool TakesText(AnnotationKind kind) =>
@@ -247,11 +291,20 @@ public sealed class Annotation
 
     public Annotation WithRotation(float degrees) => With(rotationDeg: degrees);
 
+    /// <summary>
+    /// The same mark calibrated differently — the sheet's scale having been set
+    /// or changed after it was drawn. The number is recomputed, because it is
+    /// never anything but the geometry seen through the scale.
+    /// </summary>
+    public Annotation WithScale(SheetScale? scale) => With(scale: scale, rescaled: true);
+
     private Annotation With(
         IReadOnlyList<Vector2>? points = null,
         AnnotationStyle? style = null,
         string? text = null,
-        float? rotationDeg = null) =>
+        float? rotationDeg = null,
+        SheetScale? scale = null,
+        bool rescaled = false) =>
         new(Kind,
             points ?? Points,
             style ?? Style,
@@ -259,7 +312,8 @@ public sealed class Annotation
             Author,
             Id,
             Created,
-            rotationDeg ?? RotationDeg);
+            rotationDeg ?? RotationDeg,
+            rescaled ? scale : Scale);
 
     /// <summary>
     /// Whether a click at <paramref name="point"/> lands on this mark. An

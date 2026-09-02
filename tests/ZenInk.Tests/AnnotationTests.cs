@@ -45,6 +45,7 @@ public static class AnnotationTests
         await NotDrawnTwiceAsync();
         await FilledMarkIsSeeThroughAsync();
         await WrittenMarksReachTheFileAsync();
+        await MeasurementsReachTheFileAsync();
         await FlatteningAsync();
     }
 
@@ -891,6 +892,88 @@ public static class AnnotationTests
             }
 
             Check("and the words are drawn for anyone opening the drawing", red > 150, $"{red} píxeles");
+
+            fpdfview.FPDF_ClosePage(page);
+            fpdfview.FPDF_CloseDocument(document);
+        }
+
+        File.Delete(copy);
+        File.Delete(source);
+    }
+
+    /// <summary>
+    /// A measurement through the file and back.
+    ///
+    /// It is the one mark whose text nobody typed, so the round trip has to
+    /// carry the calibration as well as the geometry: a length that comes back
+    /// without its scale is a line, and one that comes back with a different
+    /// scale is a lie. What another reader sees matters here more than for any
+    /// other mark — the number is the whole content.
+    /// </summary>
+    private static async Task MeasurementsReachTheFileAsync()
+    {
+        Section("Marks — a measurement goes into the file with its number");
+
+        var queue = PdfRenderQueue.Shared;
+        string source = TestPdf.WriteRectangle("zenink-annot-measure", "0 450 100 150");
+        string copy = Path.Combine(Path.GetTempPath(), "zenink-annot-measure-copy.pdf");
+
+        // A hundred points of paper called five metres: the sheet is at 1:141,
+        // and the line drawn is two hundred points, so it is ten metres long.
+        var scale = SheetScale.From(100, 5, MeasureUnit.Metre)!.Value;
+        var measured = new Annotation(
+            AnnotationKind.Distance,
+            [new Vector2(60, 300), new Vector2(260, 300)],
+            new AnnotationStyle(new AnnotationColor(220, 30, 30), 2f, null, 0.35f, 16f),
+            scale: scale);
+
+        var area = new Annotation(
+            AnnotationKind.Area,
+            [new Vector2(60, 360), new Vector2(160, 360), new Vector2(160, 460), new Vector2(60, 460)],
+            new AnnotationStyle(new AnnotationColor(30, 120, 220), 2f, new AnnotationColor(30, 120, 220)),
+            scale: scale);
+
+        await queue.SaveChangesCopyAsync(TestPlan.Turns(source, 0), copy, OnePage(0, measured, area));
+
+        var reopened = await queue.OpenDocumentAsync(copy);
+        var readBack = await queue.ReadAnnotationsAsync(reopened.DocumentId);
+        var list = readBack.TryGetValue(0, out var found) ? found : [];
+
+        Check("both measurements come back", list.Count == 2);
+
+        var distance = list.FirstOrDefault(mark => mark.Kind == AnnotationKind.Distance);
+        Check("the distance comes back as a distance", distance is not null);
+        if (distance is not null)
+        {
+            Check("with the scale it was taken at",
+                distance.Scale is { } read
+                && Math.Abs(read.UnitsPerPoint - scale.UnitsPerPoint) < 1e-9
+                && read.Unit == MeasureUnit.Metre);
+
+            Check("and so with the same number", distance.Text == measured.Text, distance.Text);
+            Check("which is the length of the line it is drawn on", measured.Text.StartsWith("10"), measured.Text);
+        }
+
+        Check("the area comes back as an area",
+            list.FirstOrDefault(mark => mark.Kind == AnnotationKind.Area) is { } back
+            && back.Text == area.Text);
+
+        await queue.CloseDocumentAsync(reopened.DocumentId);
+
+        // And what anyone else opening the drawing sees: the number, drawn.
+        var document = fpdfview.FPDF_LoadDocument(copy, null);
+        if (document is not null)
+        {
+            var page = fpdfview.FPDF_LoadPage(document, 0);
+            var image = Bitmap.RenderWithAnnotations(page, TestPdf.PageWidth, TestPdf.PageHeight);
+
+            int red = 0;
+            for (int i = 0; i + 3 < image.Length; i += 4)
+            {
+                if (image[i + 2] > 150 && image[i + 1] < 110 && image[i] < 110) red++;
+            }
+
+            Check("and the number is drawn for whoever opens the drawing", red > 150, $"{red} píxeles");
 
             fpdfview.FPDF_ClosePage(page);
             fpdfview.FPDF_CloseDocument(document);
