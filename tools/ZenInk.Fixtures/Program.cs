@@ -11,6 +11,10 @@ using System.Text;
 //              pale line and nothing else would reveal it
 //   conjunto   six sheets with searchable text: for find, rotation and the
 //              two-up view
+//   revisiones two issues of one drawing, J and K, differing in a handful of
+//              named places: for comparing revisions, where what matters is
+//              that the changes are few, separated and obvious enough to say
+//              by eye whether the ones found are the ones there
 
 string what = args.Length > 0 ? args[0].ToLowerInvariant() : "denso";
 string path = args.Length > 1
@@ -22,8 +26,9 @@ switch (what)
     case "denso": WriteDense(path); break;
     case "rellenos": WriteFills(path); break;
     case "conjunto": WriteSet(path); break;
+    case "revisiones": WriteRevisions(path); return 0;
     default:
-        Console.Error.WriteLine("Uso: denso | rellenos | conjunto [ruta]");
+        Console.Error.WriteLine("Uso: denso | rellenos | conjunto | revisiones [ruta]");
         return 1;
 }
 
@@ -146,6 +151,80 @@ static void WriteSet(string path)
     }
 
     Write(path, W, H, pages, withFont: true);
+}
+
+/// <summary>
+/// One drawing issued twice. Everything is shared except five places, and the
+/// five are the point: a comparison is only believable if you can look at the
+/// result and say whether what it found is what is there.
+/// </summary>
+static void WriteRevisions(string path)
+{
+    string stem = path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
+        ? path[..^4]
+        : path;
+
+    string first = $"{stem}-J.pdf";
+    string second = $"{stem}-K.pdf";
+
+    WriteIssue(first, "J", newer: false);
+    WriteIssue(second, "K", newer: true);
+
+    Console.WriteLine($"{first}  ({new FileInfo(first).Length / 1024} KB)");
+    Console.WriteLine($"{second}  ({new FileInfo(second).Length / 1024} KB)");
+}
+
+static void WriteIssue(string path, string revision, bool newer)
+{
+    const int W = 2384, H = 1684;
+    var c = new StringBuilder();
+
+    c.Append("0 0 0 RG\n2 w\n");
+    c.Append($"40 40 {W - 80} {H - 80} re S\n");
+    c.Append($"{W - 700} 70 630 300 re S\n");
+    c.Append("1 w\n");
+
+    // The rooms. Shared between the two issues, apart from the one whose wall
+    // moved — the change a comparison exists to catch.
+    for (int gx = 0; gx < 6; gx++)
+    {
+        for (int gy = 0; gy < 3; gy++)
+        {
+            double x = 160 + (gx * 340);
+            double y = 480 + (gy * 340);
+            double width = newer && gx == 3 && gy == 1 ? 300 : 240;
+
+            c.Append($"{N(x)} {N(y)} {N(width)} 240 re S\n");
+            c.Append($"BT /F1 22 Tf {N(x + 16)} {N(y + 200)} Td (LOCAL {(gy * 6) + gx + 1:00}) Tj ET\n");
+        }
+    }
+
+    // A door added in the newer issue, and a stair block dropped from it.
+    if (newer)
+    {
+        c.Append("3 w\n");
+        c.Append($"1360 480 m 1440 480 l S\n");
+        c.Append($"1360 480 m 1360 560 l S\n");
+        c.Append("1 w\n");
+    }
+    else
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            c.Append($"{N(1800 + (i * 22))} 1500 m {N(1800 + (i * 22))} 1620 l S\n");
+        }
+        c.Append("1800 1500 176 120 re S\n");
+    }
+
+    // A dimension that was revised, and the revision letter in the title block.
+    string figure = newer ? "3,80" : "3,45";
+    c.Append($"BT /F1 26 Tf 300 1560 Td (COTA DE REPLANTEO {figure} m) Tj ET\n");
+
+    c.Append($"BT /F1 40 Tf {W - 660} 250 Td (PLANTA GENERAL) Tj ET\n");
+    c.Append($"BT /F1 28 Tf {W - 660} 180 Td (E-01) Tj ET\n");
+    c.Append($"BT /F1 34 Tf {W - 300} 180 Td (REV. {revision}) Tj ET\n");
+
+    Write(path, W, H, [c.ToString()], withFont: true);
 }
 
 // --- the file ---------------------------------------------------------------

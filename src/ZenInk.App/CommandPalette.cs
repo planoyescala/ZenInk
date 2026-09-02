@@ -68,6 +68,12 @@ public sealed partial class MainPage
             new("Extraer hojas a un PDF nuevo…", "", "sacar separar exportar páginas", () => Pages.Run(PageAction.Extract)),
             new("Dividir el documento…", "", "partir separar trocear split", () => Pages.Run(PageAction.Split)),
 
+            new("Comparar con otra revisión…", "", "superponer diferencias cambios version revisar overlay", () => _ = PickRevisionAsync()),
+            new("Cambio siguiente", "F4", "diferencia comparar avanzar", () => StepChange(1)),
+            new("Cambio anterior", "Mayús+F4", "diferencia comparar atras", () => StepChange(-1)),
+            new("Intercambiar los colores de la comparación", "", "revisión rojo azul cambiar", () => OnCompareSwapClicked(this, empty)),
+            new("Dejar de comparar", "", "salir cerrar revisión superposición", () => OnCompareStopClicked(this, empty)),
+
             new("Seleccionar toda la página", "", "todo copiar", () => OnSelectAllClicked(this, empty)),
             new("Copiar la selección", "Ctrl+C", "portapapeles", () => OnCopySelectionClicked(this, empty)),
 

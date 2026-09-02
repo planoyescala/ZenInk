@@ -373,6 +373,8 @@ public sealed partial class MainPage : Page
             viewer.RegionCaptured += OnRegionCaptured;
             viewer.PagesChanged += OnViewerViewChanged;
             viewer.TextWanted += OnViewerTextWanted;
+            viewer.ComparisonChanged += OnViewerComparisonChanged;
+            viewer.ComparisonChanged += OnViewerComparisonChanged;
 
             tab = new TabViewItem
             {
@@ -2004,6 +2006,10 @@ public sealed partial class MainPage : Page
                 // Marks print whether or not they have been saved, for the same
                 // reason unsaved turns do: the paper should be what is on screen.
                 job.Marks = viewer.Annotations.Snapshot();
+
+                // A comparison prints as the comparison. What goes to the
+                // meeting has to be the picture that was on screen.
+                job.Overlay = viewer.OverlayFor;
                 source = new PdfPrintSource(job, title, WindowNative.GetWindowHandle(App.Current.MainWindow));
             }
 
@@ -2029,6 +2035,222 @@ public sealed partial class MainPage : Page
     }
 
     // --- buscar ------------------------------------------------------------
+
+    // --- comparar revisiones -----------------------------------------------
+    //
+    // Un plano no se lee entero cada vez: se lee qué cambió entre la revisión J
+    // y la K. La revisión se abre aparte y se dibuja dentro de los mismos
+    // tiles, así que moverse, ampliar y capturar siguen siendo lo de siempre.
+
+    private async void OnCompareOpenClicked(object sender, RoutedEventArgs e) => await PickRevisionAsync();
+
+    private async Task PickRevisionAsync()
+    {
+        if (ActiveViewer is not { } viewer || viewer.PageCount == 0) return;
+
+        var picker = new FileOpenPicker();
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(App.Current.MainWindow));
+        picker.FileTypeFilter.Add(".pdf");
+        picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+
+        StorageFile? file = await picker.PickSingleFileAsync();
+        if (file is null) return;
+
+        try
+        {
+            using (BusyScope("Abriendo la revisión…"))
+            {
+                await viewer.CompareWithAsync(file.Path, file.Name);
+            }
+
+            RibbonTabs.SelectedItem = TabComparar;
+            Hint($"Comparando con {file.Name}");
+        }
+        catch (PdfPasswordRequiredException)
+        {
+            // Asked for rather than guessed at: the revision is someone else's
+            // file as often as not, and a locked one is a normal thing to meet.
+            if (await AskForPasswordAsync(file.Name, wasWrong: false) is not { } password) return;
+
+            try
+            {
+                using (BusyScope("Abriendo la revisión…"))
+                {
+                    await viewer.CompareWithAsync(file.Path, file.Name, password);
+                }
+
+                RibbonTabs.SelectedItem = TabComparar;
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync(file.Name, ex);
+            }
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync(file.Name, ex);
+        }
+        finally
+        {
+            UpdateChrome();
+        }
+    }
+
+    private void OnCompareStopClicked(object sender, RoutedEventArgs e)
+    {
+        ActiveViewer?.StopComparing();
+        UpdateChrome();
+    }
+
+    private void OnNextChangeClicked(object sender, RoutedEventArgs e) => StepChange(1);
+
+    private void OnPreviousChangeClicked(object sender, RoutedEventArgs e) => StepChange(-1);
+
+    private void OnNextChangeAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        args.Handled = ActiveViewer?.IsComparing == true;
+        if (args.Handled) StepChange(1);
+    }
+
+    private void OnPreviousChangeAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        args.Handled = ActiveViewer?.IsComparing == true;
+        if (args.Handled) StepChange(-1);
+    }
+
+    private void StepChange(int direction)
+    {
+        ActiveViewer?.StepChange(direction);
+        UpdateChrome();
+    }
+
+    private void OnComparePairForwardClicked(object sender, RoutedEventArgs e) => ShiftPairing(1);
+
+    private void OnComparePairBackClicked(object sender, RoutedEventArgs e) => ShiftPairing(-1);
+
+    private void OnComparePairResetClicked(object sender, RoutedEventArgs e) => SetPairing(0);
+
+    private void ShiftPairing(int by)
+    {
+        if (ActiveViewer is not { } viewer) return;
+
+        SetPairing(viewer.ComparePageOffset + by);
+    }
+
+    private void SetPairing(int offset)
+    {
+        if (ActiveViewer is not { } viewer || !viewer.IsComparing) return;
+
+        viewer.ComparePageOffset = offset;
+        UpdateChrome();
+    }
+
+    private void OnCompareFitClicked(object sender, RoutedEventArgs e) => SetCompareFit(CompareFit.Fit);
+
+    private void OnCompareStretchClicked(object sender, RoutedEventArgs e) => SetCompareFit(CompareFit.Stretch);
+
+    private void SetCompareFit(CompareFit fit)
+    {
+        if (ActiveViewer is not { } viewer) return;
+
+        viewer.CompareFit = fit;
+        UpdateChrome();
+    }
+
+    private void OnCompareSwapClicked(object sender, RoutedEventArgs e)
+    {
+        ActiveViewer?.SwapCompareColours();
+        UpdateChrome();
+    }
+
+    private void OnCompareCommonChanged(object sender, RangeBaseValueChangedEventArgs e)
+    {
+        if (_syncingPanel || ActiveViewer is not { } viewer || !viewer.IsComparing) return;
+
+        viewer.ComparePalette = viewer.ComparePalette with { Common = (byte)Math.Clamp(e.NewValue, 0, 255) };
+        UpdateChrome();
+    }
+
+    private void OnViewerComparisonChanged(object? sender, EventArgs e)
+    {
+        if (!ReferenceEquals(sender, ActiveViewer)) return;
+
+        UpdateChrome();
+    }
+
+    /// <summary>
+    /// The comparison's half of the chrome. Everything here reads from the
+    /// viewer rather than being kept in step by hand, so a comparison set up
+    /// from the palette or ended by closing the document says the same thing as
+    /// one set up from the ribbon.
+    /// </summary>
+    private void UpdateCompareChrome(PdfTiledViewer? viewer, ViewerTool tool, bool interactive)
+    {
+        bool comparing = interactive && viewer is { IsComparing: true };
+
+        // The header goes on naming the active tool whenever there is one with
+        // options — that is what makes the ribbon safe to use. It is only when
+        // no tool owns the panel that the comparison takes the title.
+        bool ownsHeader = comparing && !tool.IsAnnotation() && tool != ViewerTool.SelectText;
+        PropertiesIconCompare.Visibility = ownsHeader ? Visibility.Visible : Visibility.Collapsed;
+        if (ownsHeader)
+        {
+            PropertiesIconText.Visibility = Visibility.Collapsed;
+            PropertiesIconMark.Visibility = Visibility.Collapsed;
+            PropertiesTitle.Text = "Comparación";
+        }
+
+        CompareOpenButton.IsEnabled = interactive;
+        CompareStopButton.IsEnabled = comparing;
+        ComparePairButton.IsEnabled = comparing;
+        CompareFitButton.IsEnabled = comparing;
+        CompareSwapButton.IsEnabled = comparing;
+
+        int changes = comparing ? viewer!.ChangeCount : 0;
+        PreviousChangeButton.IsEnabled = changes > 0;
+        NextChangeButton.IsEnabled = changes > 0;
+
+        if (!comparing)
+        {
+            ChangeIndicator.Text = string.Empty;
+            ComparePairLabel.Text = "Emparejar";
+            return;
+        }
+
+        // "Sin cambios" and "still looking" are different answers, and saying
+        // the first while the sweep is running is the one way this feature can
+        // lie outright.
+        ChangeIndicator.Text = !viewer!.ChangesReadyHere
+            ? "Buscando…"
+            : changes == 0
+                ? "Sin cambios"
+                : viewer.ChangeNumber > 0
+                    ? $"Cambio {viewer.ChangeNumber} de {changes}"
+                    : changes == 1 ? "1 cambio" : $"{changes} cambios";
+
+        int paired = viewer.PairedPageNumber(viewer.CurrentPageIndex);
+        ComparePairLabel.Text = paired > 0 ? $"Con la hoja {paired}" : "Sin pareja";
+
+        var palette = viewer.ComparePalette;
+        CompareSheetSwatch.Background = Swatch(palette.Sheet);
+        CompareRevisionSwatch.Background = Swatch(palette.Revision);
+
+        string name = (Tabs.SelectedItem as TabViewItem)?.Header as string ?? "Este documento";
+        CompareSheetName.Text = $"Solo en {name}";
+        CompareRevisionName.Text = $"Solo en {viewer.Revision!.Name}";
+
+        ComparePairing.Text = paired > 0
+            ? $"Hoja {viewer.CurrentPageNumber} sobre la hoja {paired} de la revisión."
+            : "Esta hoja no tiene pareja en la revisión, así que se ve tal cual.";
+
+        CompareStatus.Text = changes > 0
+            ? "F4 lleva al cambio siguiente; Mayús+F4, al anterior."
+            : string.Empty;
+
+        _syncingPanel = true;
+        CompareCommonSlider.Value = palette.Common;
+        _syncingPanel = false;
+    }
 
     private void OnFindClicked(object sender, RoutedEventArgs e) => ActiveViewer?.OpenFind();
 
@@ -2441,7 +2663,7 @@ public sealed partial class MainPage : Page
         if (compact == _ribbonCompact) return;
         _ribbonCompact = compact;
 
-        _ribbonLabels ??= new Panel[] { RibbonInicio, RibbonAnotar, RibbonOrganizador }
+        _ribbonLabels ??= new Panel[] { RibbonInicio, RibbonAnotar, RibbonOrganizador, RibbonComparar }
             .SelectMany(RibbonLabelsIn)
             .ToList();
 
@@ -2485,6 +2707,12 @@ public sealed partial class MainPage : Page
         RibbonInicio.Visibility = Show(chosen == TabInicio);
         RibbonAnotar.Visibility = Show(chosen == TabAnotar);
         RibbonOrganizador.Visibility = Show(chosen == TabOrganizador);
+        RibbonComparar.Visibility = Show(chosen == TabComparar);
+
+        // The panel is what a ribbon needs to stay safe, and comparing is the
+        // one activity whose panel is not a tool's: the legend saying which
+        // colour is which file only makes sense while this tab is up.
+        UpdateChrome();
 
         static Visibility Show(bool on) => on ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -2588,16 +2816,23 @@ public sealed partial class MainPage : Page
         UpdateMarkTools(viewer, tool, interactive);
         UpdateViewMenu(viewer);
         UpdateSaveChrome(viewer, interactive);
+        UpdateCompareChrome(viewer, tool, interactive);
 
         Pages.Visibility = hasDocument && ThumbnailsButton.IsChecked == true
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        // The panel is contextual: it appears for the tools that have options.
+        // The panel is contextual: it appears for the tools that have options,
+        // and for the comparison, whose legend is the only thing that says
+        // which colour on the drawing is which file.
         bool markTool = tool.IsAnnotation();
-        PropertiesPanel.Visibility = hasDocument && (textTool || markTool) ? Visibility.Visible : Visibility.Collapsed;
+        bool comparing = interactive && viewer is { IsComparing: true };
+        PropertiesPanel.Visibility = hasDocument && (textTool || markTool || comparing)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         TextToolPanel.Visibility = textTool ? Visibility.Visible : Visibility.Collapsed;
         MarkToolPanel.Visibility = markTool ? Visibility.Visible : Visibility.Collapsed;
+        ComparePanel.Visibility = comparing ? Visibility.Visible : Visibility.Collapsed;
 
         bool hasSelection = viewer?.HasSelection ?? false;
         CopySelectionButton.IsEnabled = hasSelection;

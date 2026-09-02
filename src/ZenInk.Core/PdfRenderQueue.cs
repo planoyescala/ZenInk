@@ -12,6 +12,17 @@ public sealed record PdfDocumentInfo(int DocumentId, IReadOnlyList<PdfPageSize> 
 public readonly record struct TileBitmapData(byte[] Bgra, int Width, int Height);
 
 /// <summary>
+/// A revision laid over the sheet being rendered: which page of which open
+/// document, where it sits, and the colours the two are read in.
+///
+/// It travels with the render request rather than being composed afterwards
+/// because both halves have to be rasterized on the same pixel grid, and this
+/// thread is the only one that may ask PDFium for either of them.
+/// </summary>
+public readonly record struct OverlaySheet(
+    int DocumentId, int PageIndex, SheetAlignment Alignment, ComparePalette Palette);
+
+/// <summary>
 /// Outcome of writing page rotations back into a PDF.
 ///
 /// <see cref="Document"/> is the document to use from here on: saving in place
@@ -116,7 +127,13 @@ public sealed class PdfRenderQueue : IDisposable
     /// <summary>Documents currently drawing every stroke as a hairline. Worker thread only.</summary>
     private readonly HashSet<int> _thinLineDocuments = [];
 
-    private readonly record struct TileRequest(int DocumentId, TileKey Key);
+    /// <summary>
+    /// <paramref name="Overlay"/> being part of the request is what keeps a
+    /// comparison's tiles from being served to a reader who is not comparing:
+    /// the request is the queue's identity for a tile, so a plain one and a
+    /// composed one of the same square are two different pieces of work.
+    /// </summary>
+    private readonly record struct TileRequest(int DocumentId, TileKey Key, OverlaySheet? Overlay = null);
 
     private readonly record struct TextRequest(int DocumentId, int PageIndex, int Rotation);
 
@@ -131,12 +148,14 @@ public sealed class PdfRenderQueue : IDisposable
         int DocumentId,
         int PageIndex,
         int Rotation,
-        double Scale,
+        double ScaleX,
+        double ScaleY,
         int StartX,
         int StartY,
         int Width,
         int Height,
-        bool Monochrome);
+        bool Monochrome,
+        OverlaySheet? Overlay = null);
 
     private sealed record TileJob(int TileSize, TaskCompletionSource<TileBitmapData?> Completion);
 
@@ -261,9 +280,21 @@ public sealed class PdfRenderQueue : IDisposable
         });
     }
 
-    public Task<TileBitmapData?> RequestTileAsync(int documentId, TileKey key, int tileSize)
+    public Task<TileBitmapData?> RequestTileAsync(int documentId, TileKey key, int tileSize) =>
+        RequestTileAsync(documentId, key, tileSize, null);
+
+    /// <summary>
+    /// The same tile with a revision composed into it. Served in the tile lane
+    /// and not with the print bands on purpose: a comparison is what the reader
+    /// is looking at, so it must not queue behind a print job.
+    /// </summary>
+    public Task<TileBitmapData?> RequestComparisonTileAsync(
+        int documentId, TileKey key, int tileSize, OverlaySheet overlay) =>
+        RequestTileAsync(documentId, key, tileSize, overlay);
+
+    private Task<TileBitmapData?> RequestTileAsync(int documentId, TileKey key, int tileSize, OverlaySheet? overlay)
     {
-        var request = new TileRequest(documentId, key);
+        var request = new TileRequest(documentId, key, overlay);
         lock (_tileGate)
         {
             if (_pendingTiles.TryGetValue(request, out var existing))
@@ -666,10 +697,32 @@ public sealed class PdfRenderQueue : IDisposable
         int startY,
         int width,
         int height,
-        bool monochrome)
+        bool monochrome,
+        OverlaySheet? overlay = null) =>
+        RequestBandAsync(
+            documentId, pageIndex, rotation, scale, scale, startX, startY, width, height, monochrome, overlay);
+
+    /// <summary>
+    /// The same band with the two axes scaled apart. Only the comparison needs
+    /// it, and only to lay a revision plotted on differently proportioned paper
+    /// onto the sheet it is being read against; everything else asks for one
+    /// scale and gets a square pixel.
+    /// </summary>
+    public Task<TileBitmapData?> RequestBandAsync(
+        int documentId,
+        int pageIndex,
+        int rotation,
+        double scaleX,
+        double scaleY,
+        int startX,
+        int startY,
+        int width,
+        int height,
+        bool monochrome,
+        OverlaySheet? overlay = null)
     {
         var request = new PrintBandRequest(
-            documentId, pageIndex, rotation & 3, scale, startX, startY, width, height, monochrome);
+            documentId, pageIndex, rotation & 3, scaleX, scaleY, startX, startY, width, height, monochrome, overlay);
 
         var tcs = new TaskCompletionSource<TileBitmapData?>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_printGate)
@@ -698,7 +751,12 @@ public sealed class PdfRenderQueue : IDisposable
         {
             for (int i = _tileOrder.Count - 1; i >= 0; i--)
             {
-                if (_tileOrder[i].DocumentId != documentId) continue;
+                // A comparison's tile reads two documents, and closing either
+                // of them leaves it with nothing to render: dropping it only by
+                // the sheet's own document would leave the composed ones behind
+                // to fault on a handle that is gone.
+                if (_tileOrder[i].DocumentId != documentId
+                    && _tileOrder[i].Overlay?.DocumentId != documentId) continue;
                 if (_pendingTiles.Remove(_tileOrder[i], out var job))
                 {
                     tiles.Add(job);
@@ -738,7 +796,7 @@ public sealed class PdfRenderQueue : IDisposable
             for (int i = 0; i < count; i++)
             {
                 var entry = _printOrder.Dequeue();
-                if (entry.Request.DocumentId == documentId)
+                if (entry.Request.DocumentId == documentId || entry.Request.Overlay?.DocumentId == documentId)
                 {
                     bands.Add(entry.Completion);
                 }
@@ -1503,11 +1561,18 @@ public sealed class PdfRenderQueue : IDisposable
     private TileBitmapData RenderTileCore(TileRequest request, int tileSize)
     {
         var key = request.Key;
-        var page = LoadPageCore(request.DocumentId, key.PageIndex);
         double levelScale = ZoomLevels.ScaleForLevel(key.Level);
-
         int rotation = key.Rotation & 3;
-        var (scaledWidth, scaledHeight) = RotatedRenderSize(page, levelScale, rotation);
+
+        if (request.Overlay is { } overlay)
+        {
+            return RenderComposedCore(
+                request.DocumentId, key.PageIndex, rotation, levelScale, levelScale,
+                key.Col * tileSize, key.Row * tileSize, tileSize, tileSize, overlay);
+        }
+
+        var page = LoadPageCore(request.DocumentId, key.PageIndex);
+        var (scaledWidth, scaledHeight) = RotatedRenderSize(page, levelScale, levelScale, rotation);
 
         var bitmap = fpdfview.FPDFBitmapCreateEx(tileSize, tileSize, (int)FPDFBitmapFormat.BGRA, IntPtr.Zero, tileSize * 4);
         if (bitmap is null)
@@ -1564,7 +1629,8 @@ public sealed class PdfRenderQueue : IDisposable
     /// of the destination, not of the page — passing the unswapped size is what
     /// squashes a rotated sheet into the wrong aspect.
     /// </summary>
-    private static (int Width, int Height) RotatedRenderSize(FpdfPageT page, double scale, int rotation)
+    private static (int Width, int Height) RotatedRenderSize(
+        FpdfPageT page, double scaleX, double scaleY, int rotation)
     {
         float widthPt = fpdfview.FPDF_GetPageWidthF(page);
         float heightPt = fpdfview.FPDF_GetPageHeightF(page);
@@ -1574,8 +1640,113 @@ public sealed class PdfRenderQueue : IDisposable
         }
 
         return (
-            Math.Max(1, (int)Math.Ceiling(widthPt * scale)),
-            Math.Max(1, (int)Math.Ceiling(heightPt * scale)));
+            Math.Max(1, (int)Math.Ceiling(widthPt * scaleX)),
+            Math.Max(1, (int)Math.Ceiling(heightPt * scaleY)));
+    }
+
+    /// <summary>
+    /// Renders a page into a packed BGRA buffer of exactly
+    /// <paramref name="width"/> by <paramref name="height"/>.
+    /// <paramref name="pageWidth"/> and <paramref name="pageHeight"/> are the
+    /// whole scaled page, and <paramref name="originX"/>/<paramref name="originY"/>
+    /// are where its top-left corner lands on the buffer — which is how both
+    /// the tiles and the print bands have always placed what they wanted, and
+    /// what lets PDFium do the clipping.
+    /// </summary>
+    private byte[] RenderPlateCore(
+        int documentId,
+        int pageIndex,
+        int rotation,
+        int pageWidth,
+        int pageHeight,
+        int originX,
+        int originY,
+        int width,
+        int height)
+    {
+        var page = LoadPageCore(documentId, pageIndex);
+
+        var bitmap = fpdfview.FPDFBitmapCreateEx(width, height, (int)FPDFBitmapFormat.BGRA, IntPtr.Zero, width * 4)
+            ?? throw new InvalidOperationException("No se pudo crear el bitmap de la comparación.");
+
+        try
+        {
+            fpdfview.FPDFBitmapFillRect(bitmap, 0, 0, width, height, 0xFFFFFFFFUL);
+            fpdfview.FPDF_RenderPageBitmap(
+                bitmap, page, originX, originY, pageWidth, pageHeight, rotation,
+                (int)RenderFlags.RenderAnnotations);
+
+            DrawFormFields(documentId, bitmap, page, originX, originY, pageWidth, pageHeight, rotation);
+
+            int stride = fpdfview.FPDFBitmapGetStride(bitmap);
+            IntPtr buffer = fpdfview.FPDFBitmapGetBuffer(bitmap);
+
+            var packed = new byte[width * 4 * height];
+            for (int row = 0; row < height; row++)
+            {
+                Marshal.Copy(buffer + (row * stride), packed, row * width * 4, width * 4);
+            }
+
+            return packed;
+        }
+        finally
+        {
+            fpdfview.FPDFBitmapDestroy(bitmap);
+        }
+    }
+
+    /// <summary>
+    /// Renders the sheet and the revision onto one grid and returns the two of
+    /// them composed.
+    ///
+    /// Both are rasterized a margin wider than the piece asked for, because the
+    /// composition looks one pixel around each point to tell a line that moved
+    /// from a line that was added. Cropping that margin off afterwards is what
+    /// keeps a tile's border honest — its outermost row had neighbours after
+    /// all.
+    ///
+    /// The revision is placed by its alignment: its own scale on top of the
+    /// render's, and its offset in the sheet's points turned into pixels the
+    /// same way. Nothing is resampled after the fact — PDFium rasterizes it
+    /// where it belongs.
+    /// </summary>
+    private TileBitmapData RenderComposedCore(
+        int documentId,
+        int pageIndex,
+        int rotation,
+        double scaleX,
+        double scaleY,
+        int startX,
+        int startY,
+        int width,
+        int height,
+        OverlaySheet overlay)
+    {
+        int margin = RevisionInk.Spread;
+        int wide = width + (margin * 2);
+        int tall = height + (margin * 2);
+
+        var sheetPage = LoadPageCore(documentId, pageIndex);
+        var (sheetWidth, sheetHeight) = RotatedRenderSize(sheetPage, scaleX, scaleY, rotation);
+        byte[] sheet = RenderPlateCore(
+            documentId, pageIndex, rotation, sheetWidth, sheetHeight,
+            margin - startX, margin - startY, wide, tall);
+
+        var alignment = overlay.Alignment;
+        int turns = alignment.QuarterTurns & 3;
+
+        var revisionPage = LoadPageCore(overlay.DocumentId, overlay.PageIndex);
+        var (revisionWidth, revisionHeight) = RotatedRenderSize(
+            revisionPage, scaleX * alignment.ScaleX, scaleY * alignment.ScaleY, turns);
+
+        byte[] revision = RenderPlateCore(
+            overlay.DocumentId, overlay.PageIndex, turns, revisionWidth, revisionHeight,
+            margin - startX + (int)Math.Round(alignment.OffsetXPt * scaleX),
+            margin - startY + (int)Math.Round(alignment.OffsetYPt * scaleY),
+            wide, tall);
+
+        return new TileBitmapData(
+            RevisionInk.Compose(sheet, revision, wide, tall, margin, overlay.Palette), width, height);
     }
 
     /// <summary>
@@ -1587,11 +1758,28 @@ public sealed class PdfRenderQueue : IDisposable
     /// </summary>
     private TileBitmapData RenderPrintBandCore(PrintBandRequest request)
     {
-        var page = LoadPageCore(request.DocumentId, request.PageIndex);
-        var (scaledWidth, scaledHeight) = RotatedRenderSize(page, request.Scale, request.Rotation);
-
         int width = Math.Max(1, request.Width);
         int height = Math.Max(1, request.Height);
+
+        // A captured or printed comparison is the same picture as the tiles it
+        // was read from, which is only true because both go through the one
+        // composition.
+        if (request.Overlay is { } overlay)
+        {
+            var composed = RenderComposedCore(
+                request.DocumentId, request.PageIndex, request.Rotation,
+                request.ScaleX, request.ScaleY, request.StartX, request.StartY, width, height, overlay);
+
+            if (request.Monochrome)
+            {
+                ToGrayscale(composed.Bgra);
+            }
+
+            return composed;
+        }
+
+        var page = LoadPageCore(request.DocumentId, request.PageIndex);
+        var (scaledWidth, scaledHeight) = RotatedRenderSize(page, request.ScaleX, request.ScaleY, request.Rotation);
 
         var bitmap = fpdfview.FPDFBitmapCreateEx(width, height, (int)FPDFBitmapFormat.BGRA, IntPtr.Zero, width * 4)
             ?? throw new InvalidOperationException("No se pudo crear el bitmap de impresión.");
@@ -1724,7 +1912,7 @@ public sealed class PdfRenderQueue : IDisposable
 
         // Same rotation and same destination box the tiles are rendered into,
         // so whatever PDFium does to the ink it also does to the boxes.
-        var (sizeX, sizeY) = RotatedRenderSize(page, Precision, rotation);
+        var (sizeX, sizeY) = RotatedRenderSize(page, Precision, Precision, rotation);
 
         int x0 = 0, y0 = 0, x1 = 0, y1 = 0, x2 = 0, y2 = 0;
         fpdfview.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, rotation, 0, 0, ref x0, ref y0);

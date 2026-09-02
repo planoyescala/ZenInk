@@ -74,6 +74,16 @@ public sealed class PdfPrintJob : IAsyncDisposable
         new Dictionary<int, IReadOnlyList<Annotation>>();
 
     /// <summary>
+    /// The revision laid over each sheet, while the reader is comparing.
+    ///
+    /// Printed and not left off, because a comparison is made to be shown to
+    /// somebody: half of its use is the copy that goes to the meeting. Asked
+    /// per sheet rather than handed over as a table because the pairing is the
+    /// viewer's to decide and it can change while the dialog is open.
+    /// </summary>
+    public Func<int, OverlaySheet?>? Overlay { get; set; }
+
+    /// <summary>
     /// Opens a private view of the document for printing — of the arrangement
     /// on screen, which is not always the one in the file.
     ///
@@ -227,7 +237,8 @@ public sealed class PdfPrintJob : IAsyncDisposable
                     startY + offset,
                     totalWidth,
                     height,
-                    Settings.Monochrome).GetAwaiter().GetResult();
+                    Settings.Monochrome,
+                    Overlay?.Invoke(piece.PageIndex)).GetAwaiter().GetResult();
 
                 if (band is not { } data)
                 {

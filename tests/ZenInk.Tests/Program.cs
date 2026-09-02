@@ -18,6 +18,7 @@ try
     RenderTests.Run();
     AnnotationTests.Run();
     SignatureTests.Run();
+    CompareTests.Run();
     await TextLayerTests.RunAsync();
     await RenderQueueTests.RunAsync();
     await RotationTests.RunAsync();
@@ -26,6 +27,7 @@ try
     await SignatureTests.RunAsync();
     await SignatureTests.LockedAsync();
     await PrintLayoutTests.RunRenderAsync();
+    await CompareTests.RunRenderAsync();
 }
 finally
 {

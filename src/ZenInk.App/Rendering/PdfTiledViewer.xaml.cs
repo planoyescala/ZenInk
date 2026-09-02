@@ -32,6 +32,14 @@ public sealed record CaptureImage(InMemoryRandomAccessStream Png, int Width, int
 public sealed record PageInsertion(string Path, string? Password, IReadOnlyList<int> Pages);
 
 /// <summary>
+/// The other revision, open alongside the document and laid over it. It is a
+/// document of its own in the queue — never a source of the plan — because
+/// nothing about it is ever written: comparing must not be able to change the
+/// drawing being compared.
+/// </summary>
+public sealed record ComparisonSource(string Path, string Name, int DocumentId, IReadOnlyList<PdfPageSize> Pages);
+
+/// <summary>
 /// One sheet as the pages panel sees it: where its picture comes from, how it
 /// stands, and how big it is. Blank paper has no document behind it and no
 /// preview to ask for.
@@ -254,6 +262,20 @@ public sealed partial class PdfTiledViewer : UserControl
     /// spot at a glance. The current hit is a different hue, not just a
     /// stronger one, so it stands out among its neighbours.
     /// </summary>
+    /// <summary>Air between a change and the ring around it, so the ring never sits on the ink it points at.</summary>
+    private const double ChangeRingInsetDips = 5.0;
+
+    /// <summary>
+    /// The rings round the changes. Grey and not a third colour: the sheet
+    /// already spends red and blue on saying which drawing an ink belongs to,
+    /// and a ring in a colour of its own would compete with the only thing the
+    /// picture is about. The one being stepped through is orange, which is what
+    /// the search already means by "this is the one you are on".
+    /// </summary>
+    private static readonly Color ChangeRingStroke = Color.FromArgb(150, 90, 90, 90);
+
+    private static readonly Color ChangeRingCurrent = Color.FromArgb(230, 255, 122, 0);
+
     private static readonly Color SearchFill = Color.FromArgb(105, 255, 214, 0);
 
     private static readonly Color SearchCurrentFill = Color.FromArgb(150, 255, 122, 0);
@@ -404,6 +426,46 @@ public sealed partial class PdfTiledViewer : UserControl
     private int _searchScanned;
     private bool _searchRunning;
     private int _searchCursor = -1;
+
+    /// <summary>
+    /// The revision laid over this document, when one is. Its tiles are kept
+    /// apart from the plain ones rather than sharing a key: the same square of
+    /// the same sheet is a different picture once something is laid over it,
+    /// and the two must never be handed to each other.
+    /// </summary>
+    private ComparisonSource? _revision;
+    private readonly TileCache _compareCache = new(CacheBudgetBytes / 2);
+    private readonly HashSet<TileKey> _compareInFlight = new();
+    private CompareFit _compareFit = CompareFit.Fit;
+    private ComparePalette _comparePalette = ComparePalette.Default;
+    private int _comparePageOffset;
+
+    /// <summary>
+    /// Bumped whenever anything about the comparison changes — the revision,
+    /// the pairing, the fit, the colours. Every composed tile and every sweep
+    /// already under way was made under the old answer, so this is what stops
+    /// one of them landing on top of the new one.
+    /// </summary>
+    private int _compareGeneration;
+
+    /// <summary>
+    /// The same idea for the sweep, and separate from it because the two go
+    /// stale for different reasons. Recolouring throws away every composed tile
+    /// and none of the measurements; repairing the sheets throws away both.
+    /// </summary>
+    private int _sweepGeneration;
+
+    private readonly Dictionary<int, IReadOnlyList<ChangeRegion>> _changes = new();
+    private readonly HashSet<int> _changesInFlight = new();
+
+    /// <summary>
+    /// Which change is being stood on, and on which sheet. The sheet is kept
+    /// alongside because in continuous view the current one changes as the
+    /// reader scrolls, and a cursor left pointing at a number would ring the
+    /// wrong change on the next sheet down.
+    /// </summary>
+    private int _changeSheet = -1;
+    private int _changeCursor = -1;
 
     public PdfTiledViewer()
     {
@@ -834,6 +896,15 @@ public sealed partial class PdfTiledViewer : UserControl
 
             _cache.Clear();
             _inFlight.Clear();
+
+            // The composed tiles were rasterized at the other setting too, and
+            // a comparison drawn half at each weight is a page full of changes
+            // that are not there.
+            if (_revision is not null)
+            {
+                RestartComparison();
+            }
+
             Canvas.Invalidate();
             ViewChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -882,6 +953,7 @@ public sealed partial class PdfTiledViewer : UserControl
         SourcePath = path;
         _documentGeneration++;
         StopZoomGlide();
+        StopComparing();
         _cache.Clear();
         _inFlight.Clear();
         _textLayers.Clear();
@@ -1177,6 +1249,14 @@ public sealed partial class PdfTiledViewer : UserControl
         _pageSizes = Plan.EffectiveSizes();
         ClearSelection();
         ClearAnnotationSelection();
+
+        // Turning a sheet changes how the revision has to lie on it, and moving
+        // sheets renumbers what each one is paired with. Both are measured
+        // against the old order, so both are thrown away.
+        if (_revision is not null)
+        {
+            RestartComparison();
+        }
 
         // Hit rectangles are in page-local space, so a turn moves them and a
         // move renumbers them. The ranges would survive a turn, but rescanning
@@ -1485,9 +1565,15 @@ public sealed partial class PdfTiledViewer : UserControl
         StopZoomGlide();
         _cache.Clear();
         _inFlight.Clear();
+        _compareCache.Clear();
+        _compareInFlight.Clear();
         if (_documentId >= 0)
         {
             _queue.ReleasePages(_documentId);
+        }
+        if (_revision is { } revision)
+        {
+            _queue.ReleasePages(revision.DocumentId);
         }
     }
 
@@ -1499,6 +1585,7 @@ public sealed partial class PdfTiledViewer : UserControl
     public void CloseDocument()
     {
         StopZoomGlide();
+        StopComparing();
         _cache.Clear();
         _inFlight.Clear();
         _textLayers.Clear();
@@ -2932,9 +3019,12 @@ public sealed partial class PdfTiledViewer : UserControl
             {
                 int slice = Math.Min(bandHeight, height - offset);
 
+                // Comparing and capturing are one gesture in a meeting: what
+                // gets pasted has to be the picture that was on screen, so the
+                // overlay travels with the band.
                 var band = await _queue.RequestPrintBandAsync(
                     origin.DocumentId, origin.PageIndex, rotation, scale,
-                    startX, startY + offset, width, slice, monochrome: false);
+                    startX, startY + offset, width, slice, monochrome: false, OverlayFor(pageIndex));
 
                 if (band is not { } data) return null;
 
@@ -3080,9 +3170,14 @@ public sealed partial class PdfTiledViewer : UserControl
 
                 DrawSearchHits(ds, page);
                 DrawSelection(ds, page);
+                DrawChangeRings(ds, page);
                 DrawAnnotations(ds, page);
                 DrawPendingSignature(ds, page);
             }
+
+            // Measured from the draw, like the text layers, so the sheet on
+            // screen is the one whose changes get counted first.
+            EnsureChanges(page.Index);
 
             // The highlighter needs the text as much as the text tool does:
             // both work by picking words out of the sheet.
@@ -3128,6 +3223,9 @@ public sealed partial class PdfTiledViewer : UserControl
         var origin = OriginOf(page.Index);
         if (origin.IsBlank) return;
 
+        var overlay = OverlayFor(page.Index);
+        var cache = overlay is null ? _cache : _compareCache;
+
         int rotation = RotationOf(page.Index);
         int colStart = (int)Math.Floor(left / tilePt);
         int colEnd = (int)Math.Floor((right - 1e-6) / tilePt);
@@ -3139,9 +3237,9 @@ public sealed partial class PdfTiledViewer : UserControl
             for (int col = colStart; col <= colEnd; col++)
             {
                 var key = new TileKey(origin.PageIndex, level, col, row, rotation, origin.DocumentId);
-                if (_cache.TryGet(key, out _)) continue;
+                if (cache.TryGet(key, out _)) continue;
 
-                RequestTile(key, origin.DocumentId);
+                RequestTile(key, origin.DocumentId, overlay);
             }
         }
     }
@@ -3188,6 +3286,13 @@ public sealed partial class PdfTiledViewer : UserControl
         var origin = OriginOf(page.Index);
         if (origin.IsBlank) return;
 
+        // A comparison draws from its own cache, one square at a time, exactly
+        // where the plain tile would have gone. That is what leaves panning,
+        // zoom, capture and print as they were: there is no second layer on
+        // screen to keep lined up with the first.
+        var overlay = OverlayFor(page.Index);
+        var cache = overlay is null ? _cache : _compareCache;
+
         int rotation = RotationOf(page.Index);
         int colStart = (int)Math.Floor(left / tilePt);
         int colEnd = (int)Math.Floor((right - 1e-6) / tilePt);
@@ -3207,11 +3312,11 @@ public sealed partial class PdfTiledViewer : UserControl
             {
                 var key = new TileKey(origin.PageIndex, level, col, row, rotation, origin.DocumentId);
 
-                if (!_cache.TryGet(key, out var bitmap))
+                if (!cache.TryGet(key, out var bitmap))
                 {
                     if (requestMissing)
                     {
-                        RequestTile(key, origin.DocumentId);
+                        RequestTile(key, origin.DocumentId, overlay);
                     }
                     continue;
                 }
@@ -3434,18 +3539,30 @@ public sealed partial class PdfTiledViewer : UserControl
         Math.Max(0, (run.Right - run.Left) * _scale),
         Math.Max(0, (run.Bottom - run.Top) * _scale));
 
-    private void RequestTile(TileKey key, int documentId)
+    private void RequestTile(TileKey key, int documentId, OverlaySheet? overlay = null)
     {
-        if (documentId < 0 || !_inFlight.Add(key)) return;
-        _ = LoadTileAsync(key, documentId, _documentGeneration);
+        var pending = overlay is null ? _inFlight : _compareInFlight;
+        if (documentId < 0 || !pending.Add(key)) return;
+
+        _ = LoadTileAsync(key, documentId, overlay, _documentGeneration, _compareGeneration);
     }
 
-    private async Task LoadTileAsync(TileKey key, int documentId, int generation)
+    private async Task LoadTileAsync(
+        TileKey key, int documentId, OverlaySheet? overlay, int generation, int compareGeneration)
     {
         try
         {
-            var data = await _queue.RequestTileAsync(documentId, key, ZoomLevels.TileSize);
+            var data = overlay is { } laid
+                ? await _queue.RequestComparisonTileAsync(documentId, key, ZoomLevels.TileSize, laid)
+                : await _queue.RequestTileAsync(documentId, key, ZoomLevels.TileSize);
+
             if (generation != _documentGeneration || !_isActive) return;
+
+            // A composed tile was made with the colours and the pairing of the
+            // moment it was asked for. Caching it against a comparison that has
+            // since been set up differently is how the old picture ends up on
+            // top of the new one.
+            if (overlay is not null && compareGeneration != _compareGeneration) return;
 
             if (data is { } tile)
             {
@@ -3456,7 +3573,7 @@ public sealed partial class PdfTiledViewer : UserControl
                     tile.Height,
                     DirectXPixelFormat.B8G8R8A8UIntNormalized,
                     Canvas.Dpi);
-                _cache.Add(key, bitmap);
+                (overlay is null ? _cache : _compareCache).Add(key, bitmap);
                 Canvas.Invalidate();
             }
         }
@@ -3466,7 +3583,7 @@ public sealed partial class PdfTiledViewer : UserControl
         }
         finally
         {
-            _inFlight.Remove(key);
+            (overlay is null ? _inFlight : _compareInFlight).Remove(key);
         }
     }
 
@@ -3511,6 +3628,321 @@ public sealed partial class PdfTiledViewer : UserControl
             {
                 _textLayers.Remove(oldest);
             }
+        }
+    }
+
+    // --- comparar revisiones ---------------------------------------------
+    //
+    // Un BIM Manager no lee un plano: lee qué ha cambiado entre la revisión J
+    // y la K. La revisión se abre como documento aparte y se dibuja dentro del
+    // propio tile, así que moverse, ampliar, capturar e imprimir siguen siendo
+    // lo de siempre — y no hay un segundo lienzo que mantener en su sitio.
+
+    /// <summary>Raised when the comparison starts, ends, or is set up differently.</summary>
+    public event EventHandler? ComparisonChanged;
+
+    /// <summary>The revision laid over the document, or null when nothing is.</summary>
+    public ComparisonSource? Revision => _revision;
+
+    public bool IsComparing => _revision is not null;
+
+    /// <summary>
+    /// Which page of the revision is paired with which sheet, as a shift. A
+    /// re-issued set usually pairs one to one; a cover sheet added or dropped
+    /// along the way is the case this exists for.
+    /// </summary>
+    public int ComparePageOffset
+    {
+        get => _comparePageOffset;
+        set => SetComparison(() => _comparePageOffset = value);
+    }
+
+    public CompareFit CompareFit
+    {
+        get => _compareFit;
+        set => SetComparison(() => _compareFit = value);
+    }
+
+    /// <summary>
+    /// The colours the two files are read in. Changing them redraws, but it
+    /// does not send the sweep round again: where the two drawings disagree has
+    /// nothing to do with what colour that is shown in, and re-measuring a
+    /// dense A0 to recolour it would take seconds and lose the reader's place
+    /// in the list.
+    /// </summary>
+    public ComparePalette ComparePalette
+    {
+        get => _comparePalette;
+        set => SetComparison(() => _comparePalette = value, resweep: false);
+    }
+
+    /// <summary>Exchanges the two files' colours, which is the whole of saying which one is the newer.</summary>
+    public void SwapCompareColours() => ComparePalette = _comparePalette.Swapped();
+
+    /// <summary>
+    /// Opens the other revision and lays it over the document.
+    ///
+    /// It is opened as a document of its own and never joins the plan: nothing
+    /// about it is written, and the drawing being compared must not be able to
+    /// pick up sheets from it by accident.
+    /// </summary>
+    public async Task CompareWithAsync(string path, string name, string? password = null)
+    {
+        var info = await _queue.OpenDocumentAsync(path, password);
+
+        StopComparing();
+        _revision = new ComparisonSource(path, name, info.DocumentId, info.Pages);
+        _comparePageOffset = 0;
+
+        RestartComparison();
+    }
+
+    /// <summary>Puts the drawing back the way it was read, and lets go of the revision.</summary>
+    public void StopComparing()
+    {
+        if (_revision is { } revision)
+        {
+            _ = _queue.CloseDocumentAsync(revision.DocumentId);
+        }
+
+        _revision = null;
+        RestartComparison();
+    }
+
+    /// <summary>
+    /// Throws away everything that was composed or measured under the previous
+    /// answer. Every setting goes through here, which is what keeps a tile made
+    /// with the old colours from landing on top of the new ones.
+    /// </summary>
+    private void RestartComparison(bool resweep = true)
+    {
+        _compareGeneration++;
+        _compareCache.Clear();
+        _compareInFlight.Clear();
+
+        if (resweep)
+        {
+            _sweepGeneration++;
+            _changes.Clear();
+            _changesInFlight.Clear();
+            _changeSheet = -1;
+            _changeCursor = -1;
+        }
+
+        Canvas.Invalidate();
+        ComparisonChanged?.Invoke(this, EventArgs.Empty);
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void SetComparison(Action change, bool resweep = true)
+    {
+        change();
+        if (_revision is null) return;
+
+        RestartComparison(resweep);
+    }
+
+    /// <summary>
+    /// How the revision sits on one sheet, or null when that sheet has no
+    /// counterpart. A sheet without one is drawn as itself rather than as an
+    /// empty comparison: the set gained or lost a drawing, and saying so by
+    /// showing the sheet in one colour would be a lie about its content.
+    /// </summary>
+    public OverlaySheet? OverlayFor(int sheet)
+    {
+        if (_revision is not { } revision) return null;
+        if (sheet < 0 || sheet >= _pageSizes.Count) return null;
+
+        int page = sheet + _comparePageOffset;
+        if (page < 0 || page >= revision.Pages.Count) return null;
+
+        var alignment = SheetAlignment.For(_pageSizes[sheet], revision.Pages[page], RotationOf(sheet), _compareFit);
+        return new OverlaySheet(revision.DocumentId, page, alignment, _comparePalette);
+    }
+
+    /// <summary>The revision's page paired with a sheet, numbered as a reader would say it, or 0 for none.</summary>
+    public int PairedPageNumber(int sheet)
+    {
+        if (_revision is not { } revision) return 0;
+
+        int page = sheet + _comparePageOffset;
+        return page >= 0 && page < revision.Pages.Count ? page + 1 : 0;
+    }
+
+    /// <summary>The changes found on a sheet. Empty both while the sweep runs and when it found none.</summary>
+    public IReadOnlyList<ChangeRegion> ChangesOn(int sheet) =>
+        _changes.TryGetValue(sheet, out var found) ? found : [];
+
+    /// <summary>Whether the sweep of a sheet has finished, which is what tells "none" from "not yet".</summary>
+    public bool ChangesReady(int sheet) => _changes.ContainsKey(sheet);
+
+    /// <summary>Which change the reader is standing on, counted from one, or 0 before they have stepped onto any.</summary>
+    public int ChangeNumber => _changeSheet == CurrentPageIndex ? _changeCursor + 1 : 0;
+
+    /// <summary>How many changes there are on the sheet in view.</summary>
+    public int ChangeCount => ChangesOn(CurrentPageIndex).Count;
+
+    /// <summary>Whether the sheet in view has been swept — what tells "no changes" from "still looking".</summary>
+    public bool ChangesReadyHere => _revision is not null && ChangesReady(CurrentPageIndex);
+
+    /// <summary>
+    /// Walks to the next or previous change on the sheet, wrapping round it.
+    ///
+    /// Within the sheet and not across the document on purpose: pairing is per
+    /// sheet, and jumping to another one would move the reader off the drawing
+    /// they were checking without their asking.
+    /// </summary>
+    public void StepChange(int direction)
+    {
+        int sheet = CurrentPageIndex;
+        var found = ChangesOn(sheet);
+        if (found.Count == 0) return;
+
+        if (_changeSheet != sheet)
+        {
+            _changeSheet = sheet;
+            _changeCursor = -1;
+        }
+
+        _changeCursor = _changeCursor < 0
+            ? (direction > 0 ? 0 : found.Count - 1)
+            : ((((_changeCursor + direction) % found.Count) + found.Count) % found.Count);
+
+        GoToChange(sheet, found[_changeCursor]);
+    }
+
+    private void GoToChange(int sheet, ChangeRegion change)
+    {
+        if (PageBoxOf(sheet) is not { } page) return;
+
+        StopZoomGlide();
+
+        var centre = new Vector2(
+            page.XPt + change.Box.X + (change.Box.Width / 2f),
+            page.YPt + change.Box.Y + (change.Box.Height / 2f));
+
+        _origin = centre - new Vector2(
+            (float)(Canvas.ActualWidth / _scale / 2.0),
+            (float)(Canvas.ActualHeight / _scale / 2.0));
+
+        ClampOrigin();
+        Canvas.Invalidate();
+        ComparisonChanged?.Invoke(this, EventArgs.Empty);
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Starts the sweep for a sheet if it has not been swept yet. Called from
+    /// the draw, so what is on screen is what gets measured first — the same
+    /// rule the tiles and the text layers already follow.
+    /// </summary>
+    private void EnsureChanges(int sheet)
+    {
+        if (_revision is null || _changes.ContainsKey(sheet)) return;
+        if (OverlayFor(sheet) is not { } overlay) return;
+
+        var origin = OriginOf(sheet);
+        if (origin.IsBlank || !_changesInFlight.Add(sheet)) return;
+
+        _ = SweepAsync(sheet, origin.DocumentId, origin.PageIndex, overlay, _documentGeneration, _sweepGeneration);
+    }
+
+    /// <summary>
+    /// Renders both revisions of one sheet onto a single coarse grid and asks
+    /// the engine where they disagree.
+    ///
+    /// It goes down the print band lane, which is served below the tiles: the
+    /// count of changes can arrive a moment late, but the drawing the reader is
+    /// looking at cannot.
+    /// </summary>
+    private async Task SweepAsync(
+        int sheet, int documentId, int pageIndex, OverlaySheet overlay, int generation, int sweepGeneration)
+    {
+        try
+        {
+            var laid = _pageSizes[sheet];
+            double scale = RevisionInk.DetectionDpi / 72.0;
+
+            // A wall-sized sheet drops its resolution rather than its memory.
+            long pixels = (long)Math.Ceiling(laid.WidthPt * scale) * (long)Math.Ceiling(laid.HeightPt * scale);
+            if (pixels > RevisionInk.MaxDetectionPixels)
+            {
+                scale *= Math.Sqrt(RevisionInk.MaxDetectionPixels / (double)pixels);
+            }
+
+            int width = Math.Max(1, (int)Math.Ceiling(laid.WidthPt * scale));
+            int height = Math.Max(1, (int)Math.Ceiling(laid.HeightPt * scale));
+
+            var alignment = overlay.Alignment;
+            var sheetBand = await _queue.RequestPrintBandAsync(
+                documentId, pageIndex, RotationOf(sheet), scale, 0, 0, width, height, monochrome: false);
+
+            var revisionBand = await _queue.RequestBandAsync(
+                overlay.DocumentId,
+                overlay.PageIndex,
+                alignment.QuarterTurns,
+                scale * alignment.ScaleX,
+                scale * alignment.ScaleY,
+                -(int)Math.Round(alignment.OffsetXPt * scale),
+                -(int)Math.Round(alignment.OffsetYPt * scale),
+                width,
+                height,
+                monochrome: false);
+
+            if (sheetBand is not { } a || revisionBand is not { } b) return;
+
+            // Off the UI thread: flooding three million pixels is not much, but
+            // it is more than a frame, and it would be felt as the drawing
+            // sticking under the hand.
+            var found = await Task.Run(
+                () => RevisionInk.FindChanges(a.Bgra, b.Bgra, width, height, 1.0 / scale));
+
+            if (generation != _documentGeneration || sweepGeneration != _sweepGeneration) return;
+
+            _changes[sheet] = found;
+            Canvas.Invalidate();
+            ComparisonChanged?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            // A sheet whose changes cannot be counted is still a sheet worth
+            // showing the comparison of.
+            System.Diagnostics.Debug.WriteLine($"ZenInk: no se pudo comparar la hoja {sheet}: {ex.Message}");
+        }
+        finally
+        {
+            _changesInFlight.Remove(sheet);
+        }
+    }
+
+    /// <summary>
+    /// Rings the places the two revisions disagree. Drawn over the composed
+    /// tiles and not into them, so that they can be stepped through and so that
+    /// a capture of the drawing carries the difference itself rather than a
+    /// box drawn around it.
+    /// </summary>
+    private void DrawChangeRings(CanvasDrawingSession ds, PageBox page)
+    {
+        var found = ChangesOn(page.Index);
+        if (found.Count == 0) return;
+
+        bool current = page.Index == _changeSheet;
+        float inset = (float)(ChangeRingInsetDips / Math.Max(_scale, 0.02));
+
+        for (int i = 0; i < found.Count; i++)
+        {
+            var box = found[i].Box;
+            var ring = new Rect(
+                (page.XPt + box.X - inset - _origin.X) * _scale,
+                (page.YPt + box.Y - inset - _origin.Y) * _scale,
+                Math.Max(1.0, (box.Width + (inset * 2)) * _scale),
+                Math.Max(1.0, (box.Height + (inset * 2)) * _scale));
+
+            bool here = current && i == _changeCursor;
+            ds.DrawRoundedRectangle(
+                ring, 3f, 3f,
+                here ? ChangeRingCurrent : ChangeRingStroke,
+                here ? 2.4f : 1.2f);
         }
     }
 

@@ -116,6 +116,14 @@
         <KeyboardAccelerator Key="K" Modifiers="Control" Invoked="OnCommandPaletteAccelerator" />
         <KeyboardAccelerator Key="F3" Invoked="OnFindNextAccelerator" />
         <KeyboardAccelerator Key="F3" Modifiers="Shift" Invoked="OnFindPreviousAccelerator" />
+
+        <!--
+            F4 junto a F3 a propósito: uno lleva al resultado siguiente y el
+            otro al cambio siguiente, y son el mismo gesto sobre cosas
+            distintas. Solo responden mientras hay una comparación puesta.
+        -->
+        <KeyboardAccelerator Key="F4" Invoked="OnNextChangeAccelerator" />
+        <KeyboardAccelerator Key="F4" Modifiers="Shift" Invoked="OnPreviousChangeAccelerator" />
         <KeyboardAccelerator Key="Escape" Invoked="OnEscapeAccelerator" />
         <!--
             Supr belongs to the page and not to the canvas: picking a mark up
@@ -236,6 +244,7 @@
                     Text="Inicio" />
                 <SelectorBarItem x:Name="TabAnotar" Text="Anotar" />
                 <SelectorBarItem x:Name="TabOrganizador" Text="Organizador" />
+                <SelectorBarItem x:Name="TabComparar" Text="Comparar" />
             </SelectorBar>
 
             <TextBlock
@@ -1007,6 +1016,136 @@
                             </StackPanel>
                         </Button>
                     </StackPanel>
+
+                    <!--
+                        Comparar: la revisión anterior debajo de la que hay
+                        abierta. Es una actividad y no una acción — se entra, se
+                        recorren los cambios y se sale—, que es lo que le da
+                        pestaña propia en vez de un botón escondido en un menú.
+
+                        Elegir la revisión va primero porque sin ella el resto
+                        no puede hacer nada, y los pasos entre cambios van justo
+                        detrás porque son lo que se pulsa cuarenta veces.
+                    -->
+                    <StackPanel
+                        x:Name="RibbonComparar"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="2"
+                        Visibility="Collapsed">
+                        <Button
+                            x:Name="CompareOpenButton"
+                            Click="OnCompareOpenClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimButtonStyle}"
+                            ToolTipService.ToolTip="Superponer otra revisión de este plano">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <!--
+                                    Dos hojas superpuestas, y solo la de encima
+                                    lleva color: es la revisión que se trae, y es
+                                    del mismo rojo con que sale sobre el plano.
+                                -->
+                                <controls:ToolIcon
+                                    Style="{StaticResource BarIconStyle}"
+                                    Accent="{ThemeResource IconRevisionBrush}"
+                                    AccentData="M8.6 7.4h8v9.2h-8Z"
+                                    Data="M3.4 3.4h8v9.2h-8Z" />
+                                <TextBlock Text="Revisión…" />
+                            </StackPanel>
+                        </Button>
+                        <Button
+                            x:Name="CompareStopButton"
+                            Click="OnCompareStopClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimButtonStyle}"
+                            ToolTipService.ToolTip="Dejar de comparar y volver al plano">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M5.4 5.4 L14.6 14.6 M14.6 5.4 L5.4 14.6" />
+                                <TextBlock Text="Salir" />
+                            </StackPanel>
+                        </Button>
+
+                        <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                        <!--  Solo llevan dibujo, así que el nombre tiene que ir aparte.  -->
+                        <Button
+                            x:Name="PreviousChangeButton"
+                            AutomationProperties.Name="Cambio anterior"
+                            Click="OnPreviousChangeClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimIconButtonStyle}"
+                            ToolTipService.ToolTip="Cambio anterior">
+                            <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M12.25 5.5 L7.75 10 L12.25 14.5" />
+                        </Button>
+                        <TextBlock
+                            x:Name="ChangeIndicator"
+                            MinWidth="96"
+                            Margin="4,0"
+                            VerticalAlignment="Center"
+                            Opacity="0.7"
+                            TextAlignment="Center" />
+                        <Button
+                            x:Name="NextChangeButton"
+                            AutomationProperties.Name="Cambio siguiente"
+                            Click="OnNextChangeClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimIconButtonStyle}"
+                            ToolTipService.ToolTip="Cambio siguiente">
+                            <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M7.75 5.5 L12.25 10 L7.75 14.5" />
+                        </Button>
+
+                        <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
+
+                        <DropDownButton
+                            x:Name="ComparePairButton"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimDropDownStyle}"
+                            ToolTipService.ToolTip="Qué hoja de la revisión va con cuál">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.2 4.4h5v11.2h-5Z M11.8 4.4h5v11.2h-5Z M8.8 10h2.4" />
+                                <TextBlock x:Name="ComparePairLabel" Text="Emparejar" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                    <MenuFlyoutItem Click="OnComparePairBackClicked" Text="Atrasar la revisión una hoja" />
+                                    <MenuFlyoutItem Click="OnComparePairForwardClicked" Text="Adelantar la revisión una hoja" />
+
+                                    <MenuFlyoutSeparator />
+
+                                    <MenuFlyoutItem Click="OnComparePairResetClicked" Text="Emparejar hoja con hoja" />
+                                </MenuFlyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+
+                        <DropDownButton
+                            x:Name="CompareFitButton"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimDropDownStyle}"
+                            ToolTipService.ToolTip="Cómo se coloca la revisión sobre la hoja">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.8 4h14.4v12H2.8Z M6.6 7.4h6.8v5.2H6.6Z" />
+                                <TextBlock Text="Ajuste" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                    <MenuFlyoutItem Click="OnCompareFitClicked" Text="Ajustar a la hoja, sin deformar" />
+                                    <MenuFlyoutItem Click="OnCompareStretchClicked" Text="Estirar hasta llenar la hoja" />
+                                </MenuFlyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+
+                        <Button
+                            x:Name="CompareSwapButton"
+                            Click="OnCompareSwapClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimButtonStyle}"
+                            ToolTipService.ToolTip="Cambiar de color cada archivo">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4.6 7.6h10.8 M12.8 5 L15.4 7.6 L12.8 10.2 M15.4 12.4H4.6 M7.2 9.8 L4.6 12.4 L7.2 15" />
+                                <TextBlock Text="Colores" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </ScrollViewer>
         </Grid>
@@ -1269,6 +1408,14 @@
                         Data="M4 16.2h3.4l8.8-8.8a1.7 1.7 0 0 0 0-2.4l-1-1a1.7 1.7 0 0 0-2.4 0L4 12.8Z M11.6 5.6 14.8 8.8"
                         Foreground="{ThemeResource AccentFillColorDefaultBrush}"
                         Visibility="Collapsed" />
+                    <controls:ToolIcon
+                        x:Name="PropertiesIconCompare"
+                        Width="15"
+                        Height="15"
+                        VerticalAlignment="Center"
+                        Data="M3.4 3.4h8v9.2h-8Z M8.6 7.4h8v9.2h-8Z"
+                        Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                        Visibility="Collapsed" />
                     <TextBlock
                         x:Name="PropertiesTitle"
                         VerticalAlignment="Center"
@@ -1276,8 +1423,14 @@
                         Text="Selección de texto" />
                 </StackPanel>
 
+                <!--
+                    Apilado y no superpuesto: las dos secciones de herramienta
+                    se excluyen entre sí, pero la comparación puede estar
+                    puesta a la vez que se marca, y entonces la leyenda de
+                    colores tiene que seguir viéndose debajo.
+                -->
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                    <Grid>
+                    <StackPanel>
                         <StackPanel
                             x:Name="TextToolPanel"
                             Padding="16,20"
@@ -1593,7 +1746,99 @@
                                 Opacity="0.55"
                                 TextWrapping="Wrap" />
                         </StackPanel>
-                    </Grid>
+
+                        <!--
+                            Comparar. La leyenda es la mitad del panel y no es
+                            decoración: sobre el plano solo hay dos colores, y
+                            lo único que dice cuál es el archivo nuevo y cuál el
+                            viejo es esta lista con los nombres al lado. Sin
+                            ella, «rojo» no significa nada.
+                        -->
+                        <StackPanel
+                            x:Name="ComparePanel"
+                            Padding="16,20"
+                            Spacing="16"
+                            Visibility="Collapsed">
+                            <StackPanel Spacing="9">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Border
+                                        x:Name="CompareSheetSwatch"
+                                        Width="14"
+                                        Height="14"
+                                        VerticalAlignment="Top"
+                                        Margin="0,2,0,0"
+                                        CornerRadius="3" />
+                                    <TextBlock
+                                        x:Name="CompareSheetName"
+                                        MaxWidth="200"
+                                        FontSize="12"
+                                        Text="Este documento"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Border
+                                        x:Name="CompareRevisionSwatch"
+                                        Width="14"
+                                        Height="14"
+                                        VerticalAlignment="Top"
+                                        Margin="0,2,0,0"
+                                        CornerRadius="3" />
+                                    <TextBlock
+                                        x:Name="CompareRevisionName"
+                                        MaxWidth="200"
+                                        FontSize="12"
+                                        Text="La revisión"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Border
+                                        Width="14"
+                                        Height="14"
+                                        VerticalAlignment="Top"
+                                        Margin="0,2,0,0"
+                                        Background="#8C8C8C"
+                                        CornerRadius="3" />
+                                    <TextBlock
+                                        FontSize="12"
+                                        Opacity="0.75"
+                                        Text="En las dos: no ha cambiado"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <TextBlock
+                                x:Name="ComparePairing"
+                                FontSize="12"
+                                Opacity="0.6"
+                                TextWrapping="Wrap" />
+
+                            <!--
+                                Cuánto se ve el dibujo que no ha cambiado. A
+                                cero desaparece y solo quedan los cambios, que
+                                es lo que se quiere para enseñarlos; alto deja
+                                el plano entero de contexto, que es lo que se
+                                quiere para entenderlos.
+                            -->
+                            <StackPanel Spacing="2">
+                                <TextBlock
+                                    FontSize="12"
+                                    Opacity="0.7"
+                                    Text="Fondo sin cambios" />
+                                <Slider
+                                    x:Name="CompareCommonSlider"
+                                    Maximum="255"
+                                    Minimum="0"
+                                    StepFrequency="5"
+                                    ValueChanged="OnCompareCommonChanged" />
+                            </StackPanel>
+
+                            <TextBlock
+                                x:Name="CompareStatus"
+                                FontSize="12"
+                                Opacity="0.55"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
                 </ScrollViewer>
             </Grid>
         </Grid>

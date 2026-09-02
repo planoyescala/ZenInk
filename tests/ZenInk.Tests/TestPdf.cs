@@ -39,6 +39,17 @@ public static class TestPdf
     }
 
     /// <summary>
+    /// A page with several rectangles on it. What comparing two revisions needs
+    /// and a single rectangle cannot give: a drawing that is mostly the same as
+    /// another one, and differs in a named place.
+    /// </summary>
+    public static string WriteRectangles(string name, params string[] rectangles)
+    {
+        string content = "0 0 0 rg\n" + string.Concat(rectangles.Select(rectangle => $"{rectangle} re f\n"));
+        return Write(name, content, "", withFont: false);
+    }
+
+    /// <summary>
     /// A set of sheets, each one a different width and each with its ink at a
     /// different height.
     ///
