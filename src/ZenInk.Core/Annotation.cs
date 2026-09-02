@@ -67,6 +67,17 @@ public enum AnnotationKind
     /// angle between them is. The one measurement with no scale in it.
     /// </summary>
     Angle,
+
+    /// <summary>
+    /// A box with a few lines of text in it, sized to fit: the shape a
+    /// signature block takes on a drawing.
+    ///
+    /// It is a mark and not a signature, and the difference is the whole point
+    /// of it. Nothing is sealed, nothing is verified, and anyone can move it or
+    /// rub it out — which is exactly what is wanted on a drawing that is being
+    /// reviewed rather than issued.
+    /// </summary>
+    Stamp,
 }
 
 /// <summary>A mark's colour, as the PDF carries it: three channels, no alpha.</summary>
@@ -239,7 +250,7 @@ public sealed class Annotation
 
     /// <summary>True for the kinds that are typed into rather than drawn.</summary>
     public static bool TakesText(AnnotationKind kind) =>
-        kind is AnnotationKind.Note or AnnotationKind.FreeText;
+        kind is AnnotationKind.Note or AnnotationKind.FreeText or AnnotationKind.Stamp;
 
     /// <summary>The middle of the mark's own points, which is what it turns about.</summary>
     public Vector2 Centre => AnnotationGeometry.Centre(Points);

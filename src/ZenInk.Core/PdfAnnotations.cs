@@ -360,6 +360,10 @@ public static class PdfAnnotations
                 {
                     AddLabel(document, annotation, mark, transform);
                 }
+                else if (mark.Kind == AnnotationKind.Stamp && mark.Text.Length > 0)
+                {
+                    AddStampText(document, annotation, mark, transform);
+                }
             }
             else if (subtype == SubtypeHighlight)
             {
@@ -522,6 +526,59 @@ public static class PdfAnnotations
         fpdf_annot.FPDFAnnotAppendObject(annotation, text);
     }
 
+    /// <summary>
+    /// A stamp's lines inside its box, laid out by the same fitting the
+    /// signature's own appearance uses. That shared fitting is the whole reason
+    /// a review stamp looks like the drawing said it would: the canvas asks the
+    /// same question and gets the same answer.
+    /// </summary>
+    private static void AddStampText(
+        FpdfDocumentT document, FpdfAnnotationT annotation, Annotation mark, SheetTransform transform)
+    {
+        var box = mark.Box();
+        var lines = AnnotationText.Lines(mark.Text)
+            .Where(line => line.Length > 0)
+            .Select(line => (Text: line, Strong: false))
+            .ToArray();
+
+        var (size, shown) = PdfSignatureStamp.Fit(lines, box.Width, box.Height);
+        if (size <= 0f) return;
+
+        var centre = mark.Centre;
+        float baseline = box.Top + PdfSignatureStamp.Padding + size;
+
+        foreach (var (line, _) in shown)
+        {
+            if (baseline > box.Bottom) break;
+
+            var at = new Vector2(box.Left + PdfSignatureStamp.Padding, baseline);
+            var start = transform.ToPdf(AnnotationGeometry.Rotate(at, centre, mark.RotationDeg));
+            var next = transform.ToPdf(
+                AnnotationGeometry.Rotate(at + new Vector2(1f, 0f), centre, mark.RotationDeg));
+
+            var direction = next - start;
+            float scale = direction.Length();
+            if (scale > 0.0001f)
+            {
+                direction /= scale;
+
+                var text = fpdf_edit.FPDFPageObjNewTextObj(document, StandardFont, size * scale);
+                if (text is not null)
+                {
+                    SetTextObject(text, line);
+                    fpdf_edit.FPDFPageObjSetFillColor(
+                        text, mark.Style.Color.R, mark.Style.Color.G, mark.Style.Color.B, 255);
+                    fpdf_edit.FPDFPageObjTransform(
+                        text, direction.X, direction.Y, -direction.Y, direction.X, start.X, start.Y);
+
+                    fpdf_annot.FPDFAnnotAppendObject(annotation, text);
+                }
+            }
+
+            baseline += size * PdfSignatureStamp.Leading;
+        }
+    }
+
     private static void SetTextObject(FpdfPageobjectT text, string line)
     {
         var buffer = new ushort[line.Length + 1];
@@ -603,7 +660,7 @@ public static class PdfAnnotations
         // carries its number as well as its shape. Only a stamp can hold both.
         AnnotationKind.Rectangle or AnnotationKind.Ellipse
             or AnnotationKind.Polygon or AnnotationKind.Cloud
-            or AnnotationKind.FreeText
+            or AnnotationKind.FreeText or AnnotationKind.Stamp
             or AnnotationKind.Distance or AnnotationKind.Perimeter
             or AnnotationKind.Area or AnnotationKind.Angle => SubtypeStamp,
 

@@ -1637,6 +1637,33 @@ public sealed partial class PdfTiledViewer : UserControl
         Canvas.Invalidate();
     }
 
+    /// <summary>
+    /// Puts a stamp on a sheet: a box with a few lines in it, and a mark like
+    /// any other — it can be moved, recoloured, taken back and rubbed out.
+    ///
+    /// It is picked up straight away, because a stamp is nearly always dragged
+    /// a little after it lands, and because the panel then says what it is.
+    /// </summary>
+    public void PlaceStamp(int pageIndex, RectPt box, string text)
+    {
+        if (pageIndex < 0 || pageIndex >= _pageSizes.Count) return;
+
+        var mark = new Annotation(
+            AnnotationKind.Stamp,
+            [new Vector2(box.Left, box.Top), new Vector2(box.Right, box.Bottom)],
+            AnnotationStyle,
+            text: text,
+            author: Author);
+
+        _annotations.Add(pageIndex, mark);
+        _selected = mark;
+        _selectedPage = pageIndex;
+        Tool = ViewerTool.SelectAnnotation;
+
+        Canvas.Invalidate();
+        ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     public void ClearPendingSignature()
     {
         if (Pending is null) return;

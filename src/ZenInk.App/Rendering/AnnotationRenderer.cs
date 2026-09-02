@@ -142,7 +142,67 @@ internal static class AnnotationRenderer
         {
             DrawLabel(ds, mark, placement, colour);
         }
+
+        if (mark.Kind == AnnotationKind.Stamp)
+        {
+            DrawStamp(ds, mark, placement, colour);
+        }
     }
+
+    /// <summary>
+    /// The lines inside a stamp, laid out by the same fitting a signature's own
+    /// appearance uses — so the box that says who reviewed a drawing reads the
+    /// same here, on paper, and in the file.
+    /// </summary>
+    private static void DrawStamp(
+        CanvasDrawingSession ds, Annotation mark, SheetPlacement placement, Color colour)
+    {
+        if (mark.Text.Length == 0) return;
+
+        var box = mark.Box();
+        var (size, lines) = PdfSignatureStamp.Fit(StampLines(mark.Text), box.Width, box.Height);
+        if (size <= 0f || size * placement.Scale < 3f) return;
+
+        using var format = new CanvasTextFormat
+        {
+            FontFamily = "Arial",
+            FontSize = size * placement.Scale,
+            WordWrapping = CanvasWordWrapping.NoWrap,
+        };
+
+        var centre = mark.Centre;
+        float baseline = box.Top + PdfSignatureStamp.Padding + size;
+
+        foreach (var (text, _) in lines)
+        {
+            if (baseline > box.Bottom) break;
+
+            var at = new Vector2(box.Left + PdfSignatureStamp.Padding, baseline);
+            var start = placement.ToScreen(AnnotationGeometry.Rotate(at, centre, mark.RotationDeg));
+            var along = placement.ToScreen(
+                AnnotationGeometry.Rotate(at + new Vector2(1f, 0f), centre, mark.RotationDeg));
+
+            var direction = along - start;
+            if (direction.LengthSquared() > float.Epsilon)
+            {
+                using var layout = new CanvasTextLayout(ds, text, format, 0f, 0f);
+
+                var previous = ds.Transform;
+                ds.Transform =
+                    Matrix3x2.CreateRotation(MathF.Atan2(direction.Y, direction.X)) *
+                    Matrix3x2.CreateTranslation(start);
+
+                ds.DrawTextLayout(layout, new Vector2(0f, -layout.LineMetrics[0].Baseline), colour);
+                ds.Transform = previous;
+            }
+
+            baseline += size * PdfSignatureStamp.Leading;
+        }
+    }
+
+    /// <summary>A stamp's text as the fitting wants it. Nothing is bold: this is a mark, not a signature.</summary>
+    private static IReadOnlyList<(string Text, bool Strong)> StampLines(string text) =>
+        [.. AnnotationText.Lines(text).Where(line => line.Length > 0).Select(line => (line, false))];
 
     /// <summary>
     /// What a measurement says, beside what it measured.

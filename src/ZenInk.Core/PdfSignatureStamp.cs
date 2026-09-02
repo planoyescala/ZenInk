@@ -18,10 +18,43 @@ namespace ZenInk.Core;
 public static class PdfSignatureStamp
 {
     /// <summary>Space left between the border and the text, in points.</summary>
-    private const float Padding = 4f;
+    public const float Padding = 4f;
+
+    /// <summary>Line to line, as a fraction of the type size.</summary>
+    public const float Leading = 1.25f;
 
     /// <summary>Below this the stamp is unreadable, so the text is dropped rather than smeared.</summary>
     private const float SmallestType = 3.5f;
+
+    /// <summary>
+    /// The type size a box gets, and the lines that survive at it.
+    ///
+    /// A box dragged out small does not get illegible text; it gets fewer
+    /// lines. What goes first is what matters least — the place, then the
+    /// reason, then the date — and the name is the last thing to go, because a
+    /// stamp that does not say who signed says nothing at all.
+    ///
+    /// It is public because the same stamp is drawn in three places — the
+    /// signature's own appearance, the canvas, and the file — and a stamp that
+    /// dropped a different line in each of them would be three stamps.
+    /// </summary>
+    public static (float Size, IReadOnlyList<(string Text, bool Strong)> Lines) Fit(
+        IReadOnlyList<(string Text, bool Strong)> lines, float width, float height)
+    {
+        if (lines.Count == 0) return (0f, lines);
+
+        var shown = new List<(string Text, bool Strong)>(lines);
+        float size = FitSize(shown, width, height);
+
+        while (size < SmallestType && shown.Count > 1)
+        {
+            int last = shown.FindLastIndex(line => !line.Strong);
+            shown.RemoveAt(last >= 0 ? last : shown.Count - 1);
+            size = FitSize(shown, width, height);
+        }
+
+        return size < SmallestType ? (0f, []) : (size, shown);
+    }
 
     /// <summary>The lines the stamp shows, in order, and which of them stands out.</summary>
     public static IReadOnlyList<(string Text, bool Strong)> Lines(
@@ -69,25 +102,12 @@ public static class PdfSignatureStamp
 
         if (lines.Count == 0) return content.ToString();
 
-        // A box dragged out small does not get illegible text; it gets fewer
-        // lines. What goes first is what matters least — the place, then the
-        // reason, then the date — and the name is the last thing to go, because
-        // a stamp that does not say who signed says nothing at all.
-        var shown = new List<(string Text, bool Strong)>(lines);
-        float size = FitSize(shown, width, height);
-
-        while (size < SmallestType && shown.Count > 1)
-        {
-            int last = shown.FindLastIndex(line => !line.Strong);
-            shown.RemoveAt(last >= 0 ? last : shown.Count - 1);
-            size = FitSize(shown, width, height);
-        }
-
-        if (size < SmallestType) return content.ToString();
+        var (size, shown) = Fit(lines, width, height);
+        if (size <= 0f) return content.ToString();
 
         lines = shown;
 
-        float leading = size * 1.25f;
+        float leading = size * Leading;
         float baseline = height - Padding - size;
 
         content.Append("0.12 0.12 0.14 rg\nBT\n");

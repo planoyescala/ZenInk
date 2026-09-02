@@ -1432,14 +1432,24 @@ public sealed partial class MainPage : Page
                         + "puedes instalarlo ahora: lo abre el asistente de Windows, que es "
                         + "quien te pide la contraseña.",
                 PrimaryButtonText = "Importar un certificado…",
+                SecondaryButtonText = "Poner solo un sello",
                 CloseButtonText = "Cancelar",
                 DefaultButton = ContentDialogButton.Primary,
             };
             AppTheme.Dress(nothing);
 
-            if (await Dialogs.ShowAsync(nothing) == ContentDialogResult.Primary && await ImportCertificateAsync())
+            var without = await Dialogs.ShowAsync(nothing);
+
+            if (without == ContentDialogResult.Primary && await ImportCertificateAsync())
             {
                 await AskAndSignAsync();
+            }
+            else if (without == ContentDialogResult.Secondary)
+            {
+                // Nothing to sign with, and a drawing that still has to say who
+                // reviewed it. The stamp is offered here rather than hidden
+                // behind importing a certificate the reader may not have.
+                await AskForStampAsync(viewer);
             }
             return;
         }
@@ -1484,6 +1494,16 @@ public sealed partial class MainPage : Page
         var visible = new CheckBox { Content = "Ponerla a la vista sobre el documento", IsChecked = true };
         var withDate = new CheckBox { Content = "Poner la fecha", IsChecked = true };
         var importer = new HyperlinkButton { Content = "Importar o añadir un certificado…", Padding = new Thickness(0) };
+
+        // The way out for a drawing that is being reviewed rather than issued.
+        // It is offered here, beside the real thing, and named for what it is:
+        // the reader should not have to discover halfway through that what they
+        // put on the sheet proves nothing.
+        var justStamp = new HyperlinkButton
+        {
+            Content = "Poner solo un sello, sin firma digital…",
+            Padding = new Thickness(0),
+        };
 
         var stampFields = new StackPanel { Spacing = 6 };
 
@@ -1557,6 +1577,7 @@ public sealed partial class MainPage : Page
         body.Children.Add(picker);
         body.Children.Add(issuer);
         body.Children.Add(importer);
+        body.Children.Add(justStamp);
         body.Children.Add(visible);
 
         stampFields.Children.Add(Labelled("Encabezado", heading));
@@ -1631,6 +1652,9 @@ public sealed partial class MainPage : Page
         // window, and the list of certificates has to be read again afterwards.
         importer.Click += (_, _) => { wantsImport = true; dialog.Hide(); };
 
+        bool wantsStamp = false;
+        justStamp.Click += (_, _) => { wantsStamp = true; dialog.Hide(); };
+
         AppTheme.Dress(dialog);
 
         var answer = await Dialogs.ShowAsync(dialog);
@@ -1639,6 +1663,16 @@ public sealed partial class MainPage : Page
         {
             await ImportCertificateAsync();
             await AskAndSignAsync();
+            return;
+        }
+
+        if (wantsStamp)
+        {
+            await StampWithoutSigningAsync(
+                viewer,
+                new PdfSignatureAppearance(
+                    who.Text.Trim(), papers.Text.Trim(), StampHeading(heading.Text), withDate.IsChecked == true),
+                reason.Text.Trim());
             return;
         }
 
@@ -1729,14 +1763,139 @@ public sealed partial class MainPage : Page
     /// /Rotate, or a crop box that does not start at the origin, needs the
     /// page's own matrix, and that lives behind the render queue.
     /// </summary>
+    /// <summary>
+    /// The stamp with no signature under it: the same box, drawn as a mark.
+    ///
+    /// It is not a lesser signature, it is a different thing — nothing is
+    /// sealed, nothing can be verified, and anybody with a PDF editor can move
+    /// it or take it off. What it is for is the drawing that is being reviewed
+    /// rather than issued, where what matters is that the sheet says who looked
+    /// at it.
+    /// </summary>
+    /// <summary>Puts a stamp on the drawing in view, without going near a certificate.</summary>
+    private async Task StampHereAsync()
+    {
+        if (ActiveViewer is { PageCount: > 0 } viewer)
+        {
+            await AskForStampAsync(viewer);
+        }
+    }
+
+    /// <summary>
+    /// Asks what the stamp should say, for the reader who has no certificate —
+    /// or does not want one on this drawing.
+    /// </summary>
+    private async Task AskForStampAsync(PdfTiledViewer viewer)
+    {
+        var who = new TextBox { PlaceholderText = "Nombre y apellidos" };
+        var papers = new TextBox { PlaceholderText = "DNI" };
+        var reason = new TextBox { PlaceholderText = "Motivo, si hace falta" };
+        var heading = new TextBox { Text = "Revisado por" };
+        var withDate = new CheckBox { Content = "Poner la fecha", IsChecked = true };
+
+        var body = new StackPanel { Spacing = 8, Width = 420 };
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = "Un sello es una marca sobre el dibujo: dice quién lo ha visto, pero no lo firma. "
+                 + "No queda constancia criptográfica y cualquiera puede moverlo o quitarlo.",
+        });
+
+        body.Children.Add(Labelled("Encabezado", heading));
+        body.Children.Add(Labelled("Nombre", who));
+        body.Children.Add(Labelled("DNI", papers));
+        body.Children.Add(Labelled("Motivo", reason));
+        body.Children.Add(withDate);
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Poner un sello",
+            Content = body,
+            PrimaryButtonText = "Colocarlo",
+            CloseButtonText = "Cancelar",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+
+        AppTheme.Dress(dialog);
+
+        if (await Dialogs.ShowAsync(dialog) != ContentDialogResult.Primary) return;
+
+        await StampWithoutSigningAsync(
+            viewer,
+            new PdfSignatureAppearance(
+                who.Text.Trim(), papers.Text.Trim(), StampHeading(heading.Text), withDate.IsChecked == true),
+            reason.Text.Trim());
+    }
+
+    /// <summary>
+    /// The heading a stamp with nothing under it may carry.
+    ///
+    /// "Firmado digitalmente por" is a claim about cryptography, and a box that
+    /// makes it without any is the one way this feature could deceive the
+    /// person receiving the drawing. Anything else the reader typed is theirs
+    /// to keep — this only refuses to repeat the one sentence that would be a
+    /// lie.
+    /// </summary>
+    private static string StampHeading(string typed)
+    {
+        string heading = typed.Trim();
+
+        return heading.Contains("digital", StringComparison.OrdinalIgnoreCase)
+            ? "Firmado por"
+            : heading;
+    }
+
+    private async Task StampWithoutSigningAsync(
+        PdfTiledViewer viewer, PdfSignatureAppearance stamp, string reason)
+    {
+        var lines = PdfSignatureStamp.Lines(stamp, reason, "", DateTimeOffset.Now);
+        if (await PlaceStampAsync(viewer, lines, forSigning: false) is not { } placed) return;
+
+        viewer.PlaceStamp(placed.Page, placed.Box, string.Join('\n', lines.Select(line => line.Text)));
+        Hint("Sello puesto. Es una marca: se mueve, se cambia y se borra como cualquier otra.");
+        UpdateChrome();
+    }
+
     private async Task<PdfSignatureOptions?> PlaceSignatureAsync(
         PdfTiledViewer viewer, PdfSignatureAppearance stamp, string reason)
     {
         var lines = PdfSignatureStamp.Lines(stamp, reason, "", DateTimeOffset.Now);
 
+        if (await PlaceStampAsync(viewer, lines) is not { } placed) return null;
+
+        var (rect, turns) = await viewer.ToPdfRectAsync(placed.Page, placed.Box);
+
+        return new PdfSignatureOptions(
+            PageIndex: placed.Page,
+            Rectangle: rect,
+            PageQuarterTurns: turns,
+            Appearance: stamp);
+    }
+
+    /// <summary>
+    /// Drags out where a stamp goes and hands back the box in sheet points —
+    /// the space marks live in. Both the signature and the plain stamp go
+    /// through it, so the two are placed by the same gesture and land in the
+    /// same place.
+    /// </summary>
+    private async Task<(int Page, RectPt Box)?> PlaceStampAsync(
+        PdfTiledViewer viewer, IReadOnlyList<(string Text, bool Strong)> lines, bool forSigning = true)
+    {
+        // The strip says what pressing it will do. A stamp that offered
+        // "Firmar aquí" would be promising a signature it is not going to make.
+        SignStripLabel.Text = forSigning
+            ? "Arrastra la firma para moverla"
+            : "Arrastra el sello para moverlo";
+        SignConfirmButton.Content = forSigning ? "Firmar aquí" : "Ponerlo aquí";
+        SignRedrawButton.Content = forSigning ? "Dibujarla otra vez" : "Dibujarlo otra vez";
+        SignDropButton.Content = forSigning ? "Quitarla" : "Quitarlo";
+
         while (true)
         {
-            _hintMessage = "Dibuja un rectángulo para colocar la firma · Esc para dejarlo";
+            _hintMessage = forSigning
+                ? "Dibuja un rectángulo para colocar la firma · Esc para dejarlo"
+                : "Dibuja un rectángulo para colocar el sello · Esc para dejarlo";
             UpdateChrome();
 
             var spot = await AskForSpotAsync(viewer);
@@ -1761,13 +1920,7 @@ public sealed partial class MainPage : Page
             if (decision == SignatureDecision.Drop || placed is null) return null;
             if (decision == SignatureDecision.Redraw) continue;
 
-            var (rect, turns) = await viewer.ToPdfRectAsync(placed.PageIndex, placed.SheetRect);
-
-            return new PdfSignatureOptions(
-                PageIndex: placed.PageIndex,
-                Rectangle: rect,
-                PageQuarterTurns: turns,
-                Appearance: stamp);
+            return (placed.PageIndex, placed.SheetRect);
         }
     }
 

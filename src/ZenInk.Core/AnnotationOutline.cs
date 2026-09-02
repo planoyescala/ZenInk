@@ -53,8 +53,16 @@ public static class AnnotationText
     /// <summary>An empty text still needs a box big enough to be caught and typed into.</summary>
     private const float MinimumWidthPt = 36f;
 
+    /// <summary>
+    /// The text as lines. A lone carriage return counts too: that is what a
+    /// WinUI text box hands back for a line break, so words typed into the
+    /// panel would otherwise come out of the file as one long line — right in
+    /// the box on screen, wrong in the drawing that was sent on.
+    /// </summary>
     public static IReadOnlyList<string> Lines(string text) =>
-        string.IsNullOrEmpty(text) ? [string.Empty] : text.Replace("\r\n", "\n").Split('\n');
+        string.IsNullOrEmpty(text)
+            ? [string.Empty]
+            : text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 
     /// <summary>The baseline of line <paramref name="index"/>, below the anchor.</summary>
     public static float BaselineOffset(int index, float fontSizePt) =>
@@ -125,7 +133,11 @@ public static class AnnotationOutline
             case AnnotationKind.Arrow:
                 return Open(points, Turn);
 
+            // A stamp is its box. What is inside it is text, placed by the same
+            // fitting the signature's own appearance uses, and text is not
+            // outline: the reader picks a stamp up by its frame.
             case AnnotationKind.Rectangle:
+            case AnnotationKind.Stamp:
                 return Closed(Corners(points), Turn);
 
             // A highlight follows the text, so it is a run of boxes and not

@@ -34,6 +34,12 @@ public sealed partial class MainPage
             new("Guardar como…", "", "copia duplicar exportar", () => OnSaveCopyClicked(this, empty)),
             new("Aplanar las marcas", "", "fijar quemar definitivo", () => OnFlattenClicked(this, empty)),
             new("Firmar el documento", "", "firma certificado fnmt digital", () => OnSignClicked(this, empty)),
+
+            // Separate from signing, and named so: it puts a box on the sheet
+            // saying who looked at it, and seals nothing at all.
+            new("Poner un sello (sin firma)", "", "sello revisado visto conforme marca nombre",
+                () => _ = StampHereAsync()),
+
             new("Descartar los cambios sin guardar", "", "deshacer todo revertir", () => OnDiscardChangesClicked(this, empty)),
             new("Imprimir", "Ctrl+P", "papel plotter", () => OnPrintClicked(this, empty)),
             new("Buscar texto", "Ctrl+F", "encontrar localizar", () => OnFindClicked(this, empty)),

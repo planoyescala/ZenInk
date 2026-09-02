@@ -1395,6 +1395,7 @@
                         Spacing="10"
                         VerticalAlignment="Center">
                         <TextBlock
+                            x:Name="SignStripLabel"
                             VerticalAlignment="Center"
                             Text="Arrastra la firma para moverla" />
                         <Button

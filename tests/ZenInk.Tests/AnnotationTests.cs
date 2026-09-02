@@ -46,6 +46,7 @@ public static class AnnotationTests
         await FilledMarkIsSeeThroughAsync();
         await WrittenMarksReachTheFileAsync();
         await MeasurementsReachTheFileAsync();
+        await StampsReachTheFileAsync();
         await FlatteningAsync();
     }
 
@@ -1032,6 +1033,88 @@ public static class AnnotationTests
             }
 
             Check("and the number is drawn for whoever opens the drawing", red > 150, $"{red} píxeles");
+
+            fpdfview.FPDF_ClosePage(page);
+            fpdfview.FPDF_CloseDocument(document);
+        }
+
+        File.Delete(copy);
+        File.Delete(source);
+    }
+
+    /// <summary>
+    /// A stamp — the box that says who reviewed a drawing — through the file
+    /// and back.
+    ///
+    /// It is deliberately a mark and not a signature: nothing is sealed and
+    /// anybody can take it off. What has to survive is its words and its box,
+    /// and its lines have to be drawn for whoever opens the drawing next.
+    /// </summary>
+    private static async Task StampsReachTheFileAsync()
+    {
+        Section("Marks — a stamp goes into the file as a box with words in it");
+
+        var queue = PdfRenderQueue.Shared;
+        string source = TestPdf.WriteRectangle("zenink-annot-stamp", "0 450 100 150");
+        string copy = Path.Combine(Path.GetTempPath(), "zenink-annot-stamp-copy.pdf");
+
+        var stamp = new Annotation(
+            AnnotationKind.Stamp,
+            [new Vector2(40, 200), new Vector2(240, 280)],
+            new AnnotationStyle(new AnnotationColor(20, 20, 24), 1f),
+            text: "Revisado por\nMANUEL MONTERO\nFecha: 02/09/2026");
+
+        Check("its shape is its box", stamp.Outline.Count == 5);
+
+        // What a WinUI text box hands back for a line break is a lone carriage
+        // return. Read as one line, a stamp typed in the panel goes into the
+        // file as one long line — right on screen, wrong in the drawing that
+        // was sent on. Found by putting a stamp on a real plan and zooming in.
+        Check("a line break typed in the panel is still a line break",
+            AnnotationText.Lines("Revisado por\rMANUEL MONTERO").Count == 2);
+        CheckClose("which is what was dragged out", stamp.Box().Width, 200, 0.01);
+
+        await queue.SaveChangesCopyAsync(TestPlan.Turns(source, 0), copy, OnePage(0, stamp));
+
+        var reopened = await queue.OpenDocumentAsync(copy);
+        var readBack = await queue.ReadAnnotationsAsync(reopened.DocumentId);
+        var match = readBack.TryGetValue(0, out var list) && list.Count == 1 ? list[0] : null;
+
+        Check("the stamp comes back", match is not null);
+        if (match is not null)
+        {
+            Check("as a stamp", match.Kind == AnnotationKind.Stamp);
+            Check("with its lines", match.Text == stamp.Text, match.Text.Replace("\n", "\\n"));
+            Check("and its box", Math.Abs(match.Box().Width - 200) < PointTolerance * 4);
+        }
+        await queue.CloseDocumentAsync(reopened.DocumentId);
+
+        // And what anybody else sees: the words, drawn on the sheet.
+        var document = fpdfview.FPDF_LoadDocument(copy, null);
+        if (document is not null)
+        {
+            var page = fpdfview.FPDF_LoadPage(document, 0);
+            var image = Bitmap.RenderWithAnnotations(page, TestPdf.PageWidth, TestPdf.PageHeight);
+
+            int dark = 0;
+            for (int i = 0; i + 3 < image.Length; i += 4)
+            {
+                if (image[i] < 90 && image[i + 1] < 90 && image[i + 2] < 90) dark++;
+            }
+
+            // The rectangle the fixture draws is black too, so this counts only
+            // what is inside the stamp's own box.
+            int inStamp = 0;
+            for (int y = 205; y < 275; y++)
+            {
+                for (int x = 45; x < 235; x++)
+                {
+                    int at = ((y * TestPdf.PageWidth) + x) * 4;
+                    if (at + 3 < image.Length && image[at] < 120 && image[at + 1] < 120 && image[at + 2] < 120) inStamp++;
+                }
+            }
+
+            Check("and the stamp is drawn where it was put", inStamp > 200, $"{inStamp} píxeles de {dark}");
 
             fpdfview.FPDF_ClosePage(page);
             fpdfview.FPDF_CloseDocument(document);
