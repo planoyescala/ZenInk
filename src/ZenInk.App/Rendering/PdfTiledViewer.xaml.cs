@@ -1692,11 +1692,12 @@ public sealed partial class PdfTiledViewer : UserControl
     /// as it stands, so saving has to have happened first and visibly — see the
     /// caller, which says so before it signs.
     /// </summary>
-    public async Task<string?> SignAsync(IPdfSigner signer, PdfSignatureOptions options)
+    public async Task<string?> SignAsync(
+        IPdfSigner signer, PdfSignatureOptions options, IRevocationSource? validation = null)
     {
         if (SourcePath is not { } path || _documentId < 0) return "El documento no tiene un archivo asociado.";
 
-        var outcome = await _queue.SignInPlaceAsync(_documentId, path, signer, options);
+        var outcome = await _queue.SignInPlaceAsync(_documentId, path, signer, options, validation);
         AdoptReopenedDocument(outcome.Document);
 
         if (!outcome.Saved) return outcome.Error;

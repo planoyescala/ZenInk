@@ -175,20 +175,30 @@ internal static class PdfSignatureWriter
         return dictionary.ToString();
     }
 
-    private static void Write(
+    /// <summary>
+    /// Appends the changed objects and a cross-reference for them, and hands
+    /// back the file as it now stands.
+    ///
+    /// Both things that are ever appended to a signed drawing go through here —
+    /// the signature itself and, later, the proof that its certificate was good
+    /// at the time — because the part that must not go wrong is the same for
+    /// both: every original byte stays where it was.
+    /// </summary>
+    private static byte[] Appended(
         PdfFileMap map,
-        string targetPath,
         Dictionary<int, string> changed,
-        int signature,
         int reserved,
-        IPdfSigner signer)
+        int signature,
+        out long byteRangeAt,
+        out long contentsAt)
     {
         var output = new MemoryStream(map.Data.Length + reserved * 2 + 8192);
         output.Write(map.Data, 0, map.Data.Length);
         if (map.Data[^1] is not ((byte)'\n' or (byte)'\r')) output.WriteByte((byte)'\n');
 
         var offsets = new Dictionary<int, long>();
-        long byteRangeAt = 0, contentsAt = 0;
+        byteRangeAt = 0;
+        contentsAt = 0;
 
         foreach (int number in changed.Keys.OrderBy(n => n))
         {
@@ -232,7 +242,18 @@ internal static class PdfSignatureWriter
         }
         Append(output, $"startxref\n{xrefAt}\n%%EOF\n");
 
-        byte[] file = output.ToArray();
+        return output.ToArray();
+    }
+
+    private static void Write(
+        PdfFileMap map,
+        string targetPath,
+        Dictionary<int, string> changed,
+        int signature,
+        int reserved,
+        IPdfSigner signer)
+    {
+        byte[] file = Appended(map, changed, reserved, signature, out long byteRangeAt, out long contentsAt);
 
         // The signature covers everything but its own /Contents.
         long from = contentsAt;                       // the '<'
@@ -247,6 +268,95 @@ internal static class PdfSignatureWriter
         }
         Patch(file, from + 1, Convert.ToHexString(blob).PadRight(reserved * 2, '0'));
 
+        File.WriteAllBytes(targetPath, file);
+    }
+
+    /// <summary>
+    /// Appends the proof that the signing certificates were good — the
+    /// certificates themselves, and the answers the authorities gave about
+    /// them — as a document security store.
+    ///
+    /// It goes in as another incremental update, on top of the signature and
+    /// after it, which is the only shape that works: the data is about a
+    /// signature that has to exist first, and appending leaves that signature
+    /// exactly as it was. The signature stops being the newest thing in the
+    /// file, and that is normal — it still covers everything up to itself.
+    /// </summary>
+    internal static void AppendValidation(
+        string sourcePath,
+        string targetPath,
+        IReadOnlyList<byte[]> certificates,
+        IReadOnlyList<byte[]> ocsps,
+        IReadOnlyList<byte[]> crls,
+        IReadOnlyDictionary<string, (int[] Certs, int[] Ocsps, int[] Crls)>? perSignature = null)
+    {
+        var map = PdfFileMap.Read(sourcePath);
+        if (map.Unsupported is not null)
+        {
+            throw new NotSupportedException($"No se pueden añadir los datos de validación: {map.Unsupported}.");
+        }
+        if (map.Root < 0 || map.Size < 0)
+        {
+            throw new InvalidDataException("El PDF no dice dónde está su catálogo.");
+        }
+
+        var changed = new Dictionary<int, string>();
+        int next = map.Size;
+
+        // Every blob becomes a stream of its own, because that is what a /DSS
+        // array holds: references, not bytes.
+        List<int> Streams(IReadOnlyList<byte[]> blobs)
+        {
+            var numbers = new List<int>(blobs.Count);
+            foreach (byte[] blob in blobs)
+            {
+                int number = next++;
+                changed[number] = $"<</Length {blob.Length}>>\nstream\n{Encoding.Latin1.GetString(blob)}\nendstream";
+                numbers.Add(number);
+            }
+            return numbers;
+        }
+
+        var certObjects = Streams(certificates);
+        var ocspObjects = Streams(ocsps);
+        var crlObjects = Streams(crls);
+
+        string Array(string key, List<int> numbers) =>
+            numbers.Count == 0 ? "" : $"/{key}[{string.Join(" ", numbers.Select(n => $"{n} 0 R"))}]";
+
+        // The per-signature index. Acrobat looks for it before it will call a
+        // signature long-term valid: the global arrays say the file carries
+        // proof, and this says which proof belongs to which signature.
+        string vriEntries = "";
+        if (perSignature is { Count: > 0 })
+        {
+            var entries = new List<string>();
+            foreach (var (key, which) in perSignature)
+            {
+                string body =
+                    Array("Cert", [.. which.Certs.Select(i => certObjects[i])])
+                    + Array("OCSP", [.. which.Ocsps.Select(i => ocspObjects[i])])
+                    + Array("CRL", [.. which.Crls.Select(i => crlObjects[i])]);
+
+                int number = next++;
+                changed[number] = $"<<{body}>>";
+                entries.Add($"/{key} {number} 0 R");
+            }
+
+            int vri = next++;
+            changed[vri] = $"<<{string.Join("", entries)}>>";
+            vriEntries = $"/VRI {vri} 0 R";
+        }
+
+        int dss = next++;
+        changed[dss] = $"<<{Array("Certs", certObjects)}{Array("OCSPs", ocspObjects)}{Array("CRLs", crlObjects)}{vriEntries}>>";
+
+        string catalogue = Body(map, map.Root, changed);
+        changed[map.Root] = KeyValue(catalogue, "/DSS") is { } already
+            ? catalogue[..already.Start] + $"{dss} 0 R" + catalogue[already.End..]
+            : Insert(catalogue, $"/DSS {dss} 0 R");
+
+        byte[] file = Appended(map, changed, 0, -1, out _, out _);
         File.WriteAllBytes(targetPath, file);
     }
 

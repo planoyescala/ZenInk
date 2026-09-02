@@ -615,7 +615,8 @@ public sealed class PdfRenderQueue : IDisposable
         int documentId,
         string path,
         IPdfSigner signer,
-        PdfSignatureOptions? options = null)
+        PdfSignatureOptions? options = null,
+        IRevocationSource? validation = null)
     {
         var tcs = new TaskCompletionSource<PdfSaveOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
         EnqueueControl(() =>
@@ -627,6 +628,31 @@ public sealed class PdfRenderQueue : IDisposable
             try
             {
                 PdfSignatures.Sign(path, staged, signer, options);
+
+                // The proof the drawing will carry, added to the staged copy
+                // before it takes the original's place — so a responder that is
+                // down costs the proof and never the signature.
+                if (validation is not null)
+                {
+                    string proven = Staging(staged);
+                    try
+                    {
+                        if (PdfSignatures.AddValidationData(staged, proven, validation) > 0)
+                        {
+                            File.Move(proven, staged, overwrite: true);
+                        }
+                        else
+                        {
+                            TryDelete(proven);
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // Signed but unproven is a worse drawing than signed and
+                        // proven, and a far better one than none at all.
+                        TryDelete(proven);
+                    }
+                }
             }
             catch (Exception ex)
             {

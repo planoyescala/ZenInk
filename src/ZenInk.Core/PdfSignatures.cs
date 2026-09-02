@@ -1,4 +1,5 @@
 using System.Formats.Asn1;
+using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -122,6 +123,152 @@ public static class PdfSignatures
         X509Certificate2 certificate,
         PdfSignatureOptions? options = null) =>
         Sign(sourcePath, targetPath, new CertificateSigner(certificate), options);
+
+    /// <summary>
+    /// Puts the proof that the signing certificates were good into the drawing
+    /// itself, so the signature can be checked years later without asking
+    /// anybody anything.
+    ///
+    /// That is what a long-term signature is: the certificates of the chain,
+    /// and the answers the authorities gave about them at the time, carried by
+    /// the file. Without it, checking an old signature means asking a responder
+    /// that may be gone, about a certificate that has expired, and getting
+    /// "unknown" — which reads as a signature that cannot be trusted rather
+    /// than one nobody can ask about any more.
+    ///
+    /// It is appended, like everything else here, so the signatures already in
+    /// the file stay exactly as they were.
+    /// </summary>
+    /// <returns>How many answers were gathered. Zero means the file was left alone.</returns>
+    public static int AddValidationData(string sourcePath, string targetPath, IRevocationSource source)
+    {
+        byte[] file = File.ReadAllBytes(sourcePath);
+        string text = Encoding.Latin1.GetString(file);
+
+        var certificates = new List<byte[]>();
+        var answers = new List<byte[]>();
+        var byThumbprint = new Dictionary<string, int>();
+        var perSignature = new Dictionary<string, (int[] Certs, int[] Ocsps, int[] Crls)>();
+
+        foreach (Match match in ByteRangePattern.Matches(text))
+        {
+            if (BlobOf(file, text, match) is not { } blob) continue;
+
+            SignedCms cms;
+            try
+            {
+                cms = new SignedCms();
+                cms.Decode(blob);
+            }
+            catch (CryptographicException)
+            {
+                continue;
+            }
+
+            var mine = new List<int>();
+            var asked = new List<int>();
+
+            foreach (var certificate in Chain(cms))
+            {
+                string key = certificate.Thumbprint;
+                if (!byThumbprint.TryGetValue(key, out int at))
+                {
+                    at = certificates.Count;
+                    certificates.Add(certificate.RawData);
+                    byThumbprint[key] = at;
+                }
+                mine.Add(at);
+            }
+
+            // Each certificate is asked about through the one above it: a root
+            // vouches for nobody, and nobody vouches for a root.
+            var chain = Chain(cms);
+            for (int i = 0; i + 1 < chain.Count; i++)
+            {
+                if (source.Ask(chain[i], chain[i + 1]) is not { } answer) continue;
+
+                asked.Add(answers.Count);
+                answers.Add(answer);
+            }
+
+            // The key a reader looks a signature up by: the hex of the SHA-1 of
+            // the bytes in its /Contents, in capitals, which is what the format
+            // says and what Acrobat looks for.
+            perSignature[Convert.ToHexString(SHA1.HashData(blob))] = ([.. mine], [.. asked], []);
+        }
+
+        if (certificates.Count == 0) return 0;
+
+        PdfSignatureWriter.AppendValidation(sourcePath, targetPath, certificates, answers, [], perSignature);
+
+        // Written, then read back, like everything else that touches a signed
+        // file: a drawing whose signature stopped verifying because proof was
+        // added to it would be the worst outcome this could have.
+        try
+        {
+            var after = Read(targetPath);
+            if (after.Any(signature => !signature.DigestMatches))
+            {
+                throw new InvalidDataException(
+                    "Al añadir los datos de validación la firma dejó de cuadrar.");
+            }
+        }
+        catch
+        {
+            TryDelete(targetPath);
+            throw;
+        }
+
+        return answers.Count;
+    }
+
+    /// <summary>The signature's own certificate first, then whoever issued it, as far as it can be followed.</summary>
+    private static List<X509Certificate2> Chain(SignedCms cms)
+    {
+        if (cms.SignerInfos.Count == 0 || cms.SignerInfos[0].Certificate is not { } signer) return [];
+
+        var chain = new X509Chain
+        {
+            ChainPolicy =
+            {
+                // Nothing is being trusted here: what is wanted is the path, so
+                // the certificates of it can travel with the drawing.
+                RevocationMode = X509RevocationMode.NoCheck,
+                VerificationFlags = X509VerificationFlags.AllFlags,
+            },
+        };
+
+        foreach (var extra in cms.Certificates) chain.ChainPolicy.ExtraStore.Add(extra);
+
+        chain.Build(signer);
+
+        var found = new List<X509Certificate2>();
+        foreach (var element in chain.ChainElements) found.Add(element.Certificate);
+
+        return found.Count > 0 ? found : [signer];
+    }
+
+    /// <summary>The DER blob out of one signature's /Contents, or null when the hole holds none.</summary>
+    private static byte[]? BlobOf(byte[] file, string text, Match match)
+    {
+        long start = long.Parse(match.Groups[1].Value) + long.Parse(match.Groups[2].Value);
+        long end = long.Parse(match.Groups[3].Value);
+        if (start >= end || end > file.LongLength) return null;
+
+        string gap = text[(int)start..(int)end];
+        int open = gap.IndexOf('<'), close = gap.LastIndexOf('>');
+        if (open < 0 || close < open) return null;
+
+        try
+        {
+            byte[] padded = Convert.FromHexString(gap[(open + 1)..close].Trim());
+            return new AsnReader(padded, AsnEncodingRules.BER).PeekEncodedValue().ToArray();
+        }
+        catch (Exception ex) when (ex is FormatException or AsnContentException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// The certificates on this machine that can sign a document, newest last.

@@ -20,6 +20,8 @@ public static class TimestampSetting
 
     private const string OnKey = "zenink.tsa.on";
 
+    private const string LtvKey = "zenink.ltv.on";
+
     public static string Url
     {
         get => Read(UrlKey) ?? string.Empty;
@@ -31,6 +33,21 @@ public static class TimestampSetting
     {
         get => Read(OnKey) == bool.TrueString && Url.Length > 0;
         set => Write(OnKey, value ? bool.TrueString : bool.FalseString);
+    }
+
+    /// <summary>
+    /// Whether to store the proof that the certificates were good along with
+    /// the signature, so it can be checked years later without asking anybody.
+    ///
+    /// Off by default and for the same reason as the timestamp: it asks
+    /// somebody else's server a question, and that is the reader's call to
+    /// make. Unlike the timestamp there is nothing to configure — the
+    /// certificate says which responder answers for it.
+    /// </summary>
+    public static bool KeepValidationData
+    {
+        get => Read(LtvKey) == bool.TrueString;
+        set => Write(LtvKey, value ? bool.TrueString : bool.FalseString);
     }
 
     private static string? Read(string key)

@@ -35,6 +35,7 @@ public static class SignatureTests
         CheckForeignAnnotationSurvives(identity);
         CheckTamperingShows(identity);
         CheckTimestamp(identity);
+        CheckValidationData(identity);
         CheckReserveIsEnough(identity);
 
         Section("Signing — the stamp a visible signature leaves");
@@ -673,6 +674,72 @@ public static class SignatureTests
         TryDelete(plain);
         TryDelete(wrong);
         TryDelete(source);
+    }
+
+    /// <summary>
+    /// The proof that the certificates were good, carried by the drawing.
+    ///
+    /// What is pinned here is the part that could quietly ruin a signed file:
+    /// the data goes in as another appended update, so every byte that was
+    /// there — the signature included — is still there and still verifies. What
+    /// the authorities actually say is theirs to say; here they are stood in
+    /// for, because a check that needs the network is a check that fails on a
+    /// train.
+    /// </summary>
+    private static void CheckValidationData(X509Certificate2 identity)
+    {
+        Section("Signing — the proof that travels with the drawing");
+
+        string source = TestPdf.WriteCornerMark(0);
+        string signed = Path.Combine(Path.GetTempPath(), $"zenink-ltv-firmado-{Guid.NewGuid():N}.pdf");
+        string withData = Path.Combine(Path.GetTempPath(), $"zenink-ltv-{Guid.NewGuid():N}.pdf");
+
+        PdfSignatures.Sign(source, signed, identity, new PdfSignatureOptions(Reason: "Conforme"));
+        byte[] before = File.ReadAllBytes(signed);
+
+        // A responder that always answers, so what is being checked is the
+        // writing rather than anybody's uptime.
+        var responder = new TestRevocationSource();
+        int answers = PdfSignatures.AddValidationData(signed, withData, responder);
+
+        byte[] after = File.ReadAllBytes(withData);
+        Check("los datos de validación se añaden sin tocar lo que había",
+            after.Length > before.Length && after.AsSpan(0, before.Length).SequenceEqual(before));
+
+        Check("y la firma sigue cuadrando después",
+            PdfSignatures.Read(withData) is [{ DigestMatches: true }],
+            string.Join(", ", PdfSignatures.Read(withData).Select(s => s.Problem ?? "ok")));
+
+        string text = Encoding.Latin1.GetString(after);
+        Check("el catálogo apunta a un /DSS", text.Contains("/DSS "));
+        Check("que lleva los certificados de la cadena", text.Contains("/Certs["));
+        Check("y el índice por firma que Acrobat busca", text.Contains("/VRI "));
+
+        Check("se preguntó por la cadena, salvo por la raíz",
+            answers == responder.Asked && responder.Asked >= 0, $"{answers} respuestas, {responder.Asked} preguntas");
+
+        // A self-signed certificate is its own root: nobody vouches for it, so
+        // there is nothing to ask and nothing to store beyond the certificate.
+        Check("un certificado que se firma solo no tiene a quién preguntar", responder.Asked == 0);
+
+        TryDelete(signed);
+        TryDelete(withData);
+        TryDelete(source);
+    }
+
+    /// <summary>Stands in for the responders, and counts what it was asked.</summary>
+    private sealed class TestRevocationSource : IRevocationSource
+    {
+        public int Asked { get; private set; }
+
+        public byte[]? Ask(X509Certificate2 certificate, X509Certificate2 issuer)
+        {
+            Asked++;
+
+            // Not a real OCSP response — nothing here parses one — but bytes
+            // that must come back out of the file exactly as they went in.
+            return "respuesta de prueba"u8.ToArray();
+        }
     }
 
     // --- helpers -------------------------------------------------------------

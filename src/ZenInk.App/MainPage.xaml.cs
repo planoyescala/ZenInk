@@ -1532,6 +1532,29 @@ public sealed partial class MainPage : Page
             Visibility = authority.Visibility,
         };
 
+        // The proof the drawing carries with it. Its own switch, because it is
+        // its own question — and because a reader may want the time vouched for
+        // without asking every authority in the chain about every certificate.
+        var validation = new CheckBox
+        {
+            Content = "Guardar los datos de validación en el archivo",
+            IsChecked = TimestampSetting.KeepValidationData,
+        };
+
+        var validationWhy = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.7,
+            FontSize = 12,
+            Text = "Para poder comprobar la firma dentro de años sin preguntarle a nadie. "
+                 + "Pregunta ahora a las autoridades que nombra tu certificado; si no contestan, "
+                 + "la firma se hace igual y se queda sin ellos.",
+            Visibility = validation.IsChecked == true ? Visibility.Visible : Visibility.Collapsed,
+        };
+
+        validation.Checked += (_, _) => validationWhy.Visibility = Visibility.Visible;
+        validation.Unchecked += (_, _) => validationWhy.Visibility = Visibility.Collapsed;
+
         void ShowAuthority()
         {
             var showing = timestamp.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
@@ -1618,6 +1641,8 @@ public sealed partial class MainPage : Page
         body.Children.Add(timestamp);
         body.Children.Add(authority);
         body.Children.Add(authorityWhy);
+        body.Children.Add(validation);
+        body.Children.Add(validationWhy);
         body.Children.Add(visible);
 
         stampFields.Children.Add(Labelled("Encabezado", heading));
@@ -1724,6 +1749,7 @@ public sealed partial class MainPage : Page
         // a preference about how they sign, not part of this signature.
         TimestampSetting.Url = authority.Text;
         TimestampSetting.Wanted = timestamp.IsChecked == true;
+        TimestampSetting.KeepValidationData = validation.IsChecked == true;
 
         ITimestamper? clock = TimestampSetting.Wanted ? new HttpTimestamper(TimestampSetting.Url) : null;
 
@@ -1800,7 +1826,52 @@ public sealed partial class MainPage : Page
             }
         }
 
+        await AddValidationDataAsync(target);
         await OpenPathInNewTabAsync(target, Path.GetFileName(target));
+    }
+
+    /// <summary>
+    /// Puts the proof that the certificates were good into the signed file, if
+    /// the reader asked for it.
+    ///
+    /// It runs after the signature and never instead of it: the drawing is
+    /// already signed by the time this is tried, so a responder that is down
+    /// costs the proof and not the signature. That is why a failure here is a
+    /// hint and not an error box — what the reader asked for happened.
+    /// </summary>
+    private async Task AddValidationDataAsync(string signedPath)
+    {
+        if (!TimestampSetting.KeepValidationData) return;
+
+        string staged = signedPath + ".ltv";
+
+        try
+        {
+            using (BusyScope("Guardando los datos de validación…"))
+            {
+                int answers = await Task.Run(
+                    () => PdfSignatures.AddValidationData(signedPath, staged, new HttpRevocationSource()));
+
+                if (answers == 0 && !File.Exists(staged))
+                {
+                    Hint("No se pudo preguntar por los certificados: la firma queda sin datos de validación.");
+                    return;
+                }
+
+                File.Move(staged, signedPath, overwrite: true);
+                Hint($"Firma con datos de validación: {answers} respuesta(s) de las autoridades.");
+            }
+        }
+        catch (Exception ex)
+        {
+            TryDeleteFile(staged);
+            Hint($"La firma está hecha, pero sin datos de validación: {ex.Message}");
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try { File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
     /// <summary>
@@ -2088,7 +2159,9 @@ public sealed partial class MainPage : Page
                 return;
             }
 
-            if (await viewer.SignAsync(signer, options) is { } error)
+            var proof = TimestampSetting.KeepValidationData ? new HttpRevocationSource() : null;
+
+            if (await viewer.SignAsync(signer, options, proof) is { } error)
             {
                 await ShowMessageAsync("No se pudo firmar el documento", error);
             }
