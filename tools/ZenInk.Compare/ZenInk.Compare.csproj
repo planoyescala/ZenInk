@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!--
+      Windows-only for one reason: it writes the composed sheet out as a PNG to
+      be looked at, and System.Drawing is what the other tools here use for
+      that. The measuring itself is the engine's, and has no platform of its own.
+    -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ZenInk.Compare</RootNamespace>
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Everything measured here lives in the engine, and it is driven exactly as
+      the viewer drives it: through the render queue, which is the only thing
+      allowed to call PDFium.
+    -->
+    <ProjectReference Include="../../src/ZenInk.Core/ZenInk.Core.csproj" />
+  </ItemGroup>
+
+</Project>
