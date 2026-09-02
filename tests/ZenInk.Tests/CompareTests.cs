@@ -23,6 +23,48 @@ public static class CompareTests
         Alignment();
         Composition();
         Detection();
+        Plates();
+    }
+
+    /// <summary>
+    /// The cache that keeps the rasterized halves of a composed tile. What it
+    /// has to get right is not holding on: a square kept past the page it was
+    /// drawn from is the wrong drawing on screen, and nothing about it would
+    /// say so.
+    /// </summary>
+    private static void Plates()
+    {
+        Section("Comparar — las planchas ya rasterizadas");
+
+        var cache = new PlateCache(3 * 400);
+        var first = new PlateKey(1, 0, 0, 800, 600, 0, 0, 10, 10);
+        var second = first with { OriginX = 10 };
+        var elsewhere = first with { DocumentId = 2 };
+
+        cache.Add(first, new byte[400]);
+        cache.Add(second, new byte[400]);
+        cache.Add(elsewhere, new byte[400]);
+
+        Check("a square rasterized once is there the second time", cache.TryGet(first, out var kept) && kept.Length == 400);
+        Check("and a square nobody asked for is not", !cache.TryGet(first with { PageIndex = 3 }, out _));
+
+        // Reading the first one moved it to the end of the queue, so the
+        // second is now the oldest and the one to go.
+        cache.Add(first with { OriginY = 20 }, new byte[400]);
+        Check("the budget is kept by dropping the least recently wanted", cache.Count == 3);
+        Check("and what was just read stays", cache.TryGet(first, out _));
+        Check("while the oldest goes", !cache.TryGet(second, out _));
+
+        cache.Drop(1);
+        Check("letting go of a document lets go of its squares", cache.Count == 1);
+        Check("and leaves the other document's alone", cache.TryGet(elsewhere, out _));
+
+        // A square bigger than the whole budget is still handed back: whoever
+        // paid for the render must not be the one evicted.
+        var alone = new PlateCache(100);
+        var big = new PlateKey(9, 0, 0, 10, 10, 0, 0, 40, 40);
+        alone.Add(big, new byte[6400]);
+        Check("a square that does not fit is kept anyway, not thrown away", alone.TryGet(big, out _));
     }
 
     private static void Alignment()
@@ -155,6 +197,22 @@ public static class CompareTests
         {
             CheckClose("and the box covers all of them", folded[0].Box.Width, 19 * pointsPerPixel, 4.0);
         }
+
+        // A boundary line that moved: one patch, connected, running the whole
+        // width of the drawing. Measured on two real issues of a plan, where a
+        // single box like this covered 88 % of the paper and the reader was
+        // told it was one of six changes to step through.
+        var bare = Blank(1200, 200);
+        var crossed = Sheet(1200, 200, (10, 100, 1190, 104));
+        var cut = RevisionInk.FindChanges(bare, crossed, 1200, 200, pointsPerPixel);
+
+        Check("a change that spans the drawing comes back as places", cut.Count > 1);
+        Check("and none of them is more than the eye takes in at once",
+            cut.All(change => change.Box.Width <= 720 + pointsPerPixel && change.Box.Height <= 720 + pointsPerPixel));
+        Check("and they are still walked left to right",
+            cut.Zip(cut.Skip(1)).All(pair => pair.First.Box.X < pair.Second.Box.X));
+        Check("and between them they hold the whole line",
+            cut.Sum(change => change.Pixels) >= (1190 - 10) * 4 * 0.9);
     }
 
     /// <summary>
@@ -203,6 +261,25 @@ public static class CompareTests
         // must not paint the gap between two sheets.
         Check("beyond the sheet there is nothing to compare",
             Value(composed.Bgra, composed.Width, 450, 100) is { R: 255, G: 255, B: 255 });
+
+        // Asked for again, and then recoloured and put back. Both halves of a
+        // composed tile are kept rasterized, so this second answer is composed
+        // rather than rendered — which is what makes recolouring a dense sheet
+        // instant. From here that shows up as the picture being identical: a
+        // stale half would differ, and a re-render would not be worth having.
+        var again = await queue.RequestComparisonTileAsync(sheet.DocumentId, new TileKey(0, 0, 0, 0), 512, overlay);
+        Check("the same comparison asked for twice is the same picture",
+            again is { } repeat && repeat.Bgra.AsSpan().SequenceEqual(composed.Bgra));
+
+        var swapped = await queue.RequestComparisonTileAsync(
+            sheet.DocumentId, new TileKey(0, 0, 0, 0), 512, overlay with { Palette = ComparePalette.Default.Swapped() });
+
+        Check("recolouring swaps which file is which",
+            swapped is { } other && Value(other.Bgra, other.Width, 100, 340) is var swap && swap.R > swap.B + 40);
+
+        var restored = await queue.RequestComparisonTileAsync(sheet.DocumentId, new TileKey(0, 0, 0, 0), 512, overlay);
+        Check("and colouring it back gives the picture that was there before",
+            restored is { } back && back.Bgra.AsSpan().SequenceEqual(composed.Bgra));
 
         // A capture and a print of a comparison go down the band path. They are
         // only the same picture as the screen because both compose the same

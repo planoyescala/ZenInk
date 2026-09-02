@@ -203,13 +203,29 @@ foreach (double zoom in options.Zooms)
 
     var plain = new List<long>();
     var composed = new List<long>();
+    var recoloured = new List<long>();
+
+    // The same square asked for again in the other colours: what moving the
+    // background slider, swapping which file is red, or panning back over
+    // paper already seen actually costs, now that both halves stay rasterized.
+    var otherColours = overlay with { Palette = ComparePalette.Default.Swapped() };
 
     // Down the diagonal: an empty corner and a full title block cost different
     // amounts, and one column of the sheet would report only one of them.
+    // Distinct squares only — asking twice for the same one would time the
+    // cache and call it a render.
+    var walk = new List<(int Col, int Row)>();
     for (int i = 0; i < options.Tiles; i++)
     {
-        int col = cols == 1 ? 0 : i * (cols - 1) / Math.Max(1, options.Tiles - 1);
-        int row = rows == 1 ? 0 : i * (rows - 1) / Math.Max(1, options.Tiles - 1);
+        var at = (
+            Col: cols == 1 ? 0 : i * (cols - 1) / Math.Max(1, options.Tiles - 1),
+            Row: rows == 1 ? 0 : i * (rows - 1) / Math.Max(1, options.Tiles - 1));
+
+        if (!walk.Contains(at)) walk.Add(at);
+    }
+
+    foreach (var (col, row) in walk)
+    {
         var key = new TileKey(sheet, level, col, row, 0, sheetDoc.DocumentId);
 
         clock.Restart();
@@ -219,13 +235,18 @@ foreach (double zoom in options.Zooms)
         clock.Restart();
         await queue.RequestComparisonTileAsync(sheetDoc.DocumentId, key, ZoomLevels.TileSize, overlay);
         composed.Add(clock.ElapsedMilliseconds);
+
+        clock.Restart();
+        await queue.RequestComparisonTileAsync(sheetDoc.DocumentId, key, ZoomLevels.TileSize, otherColours);
+        recoloured.Add(clock.ElapsedMilliseconds);
     }
 
     double plainMedian = Numbers.Median(plain);
     double composedMedian = Numbers.Median(composed);
 
-    Console.WriteLine($"         normal    {plainMedian:N0} ms de mediana  ({string.Join(" ", plain)})");
-    Console.WriteLine($"         compuesto {composedMedian:N0} ms de mediana  ({string.Join(" ", composed)})");
+    Console.WriteLine($"         normal      {plainMedian:N0} ms de mediana  ({string.Join(" ", plain)})");
+    Console.WriteLine($"         compuesto   {composedMedian:N0} ms de mediana  ({string.Join(" ", composed)})");
+    Console.WriteLine($"         recoloreado {Numbers.Median(recoloured):N0} ms de mediana  ({string.Join(" ", recoloured)})");
     // Zoomed out the whole sheet is fewer tiles than the screen holds, and
     // counting a full screen there would invent a wait nobody ever sits through.
     double onScreen = Math.Min(ScreenTiles, cols * rows);

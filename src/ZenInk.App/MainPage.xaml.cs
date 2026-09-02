@@ -374,7 +374,6 @@ public sealed partial class MainPage : Page
             viewer.PagesChanged += OnViewerViewChanged;
             viewer.TextWanted += OnViewerTextWanted;
             viewer.ComparisonChanged += OnViewerComparisonChanged;
-            viewer.ComparisonChanged += OnViewerComparisonChanged;
 
             tab = new TabViewItem
             {
@@ -2220,13 +2219,32 @@ public sealed partial class MainPage : Page
         // "Sin cambios" and "still looking" are different answers, and saying
         // the first while the sweep is running is the one way this feature can
         // lie outright.
+        //
+        // While it looks, it says what it is doing. The wait is two full-page
+        // renders — fifteen seconds of them on a dense A0 — and a word that
+        // never changes for that long is read as a hang.
+        //
+        // And at the ceiling the count becomes a floor: two hundred places is
+        // where the list stops being one, and "200 cambios" would be the one
+        // number here that is not what it says.
+        // "200+" and not "más de 200": this row is the one that overflows first
+        // when the window narrows, and the long form would be the widest thing
+        // in it.
+        string all = changes >= RevisionInk.MaxRegions ? $"{RevisionInk.MaxRegions}+" : changes.ToString();
+
         ChangeIndicator.Text = !viewer!.ChangesReadyHere
-            ? "Buscando…"
+            ? viewer.SweepStageHere switch
+            {
+                CompareSweepStage.Sheet => "Leyendo 1 de 2…",
+                CompareSweepStage.Revision => "Leyendo 2 de 2…",
+                CompareSweepStage.Looking => "Buscando cambios…",
+                _ => "Buscando…",
+            }
             : changes == 0
                 ? "Sin cambios"
                 : viewer.ChangeNumber > 0
-                    ? $"Cambio {viewer.ChangeNumber} de {changes}"
-                    : changes == 1 ? "1 cambio" : $"{changes} cambios";
+                    ? $"Cambio {viewer.ChangeNumber} de {all}"
+                    : changes == 1 ? "1 cambio" : $"{all} cambios";
 
         int paired = viewer.PairedPageNumber(viewer.CurrentPageIndex);
         ComparePairLabel.Text = paired > 0 ? $"Con la hoja {paired}" : "Sin pareja";

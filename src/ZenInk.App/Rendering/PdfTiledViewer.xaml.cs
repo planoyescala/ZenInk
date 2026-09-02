@@ -40,6 +40,28 @@ public sealed record PageInsertion(string Path, string? Password, IReadOnlyList<
 public sealed record ComparisonSource(string Path, string Name, int DocumentId, IReadOnlyList<PdfPageSize> Pages);
 
 /// <summary>
+/// Which part of counting the changes on a sheet is under way. The two renders
+/// are the whole of the wait — fifteen seconds of it on a dense A0 — and they
+/// are what the reader is told about, because a count that arrives without
+/// warning after a still "Buscando…" is indistinguishable from one that never
+/// arrives.
+/// </summary>
+public enum CompareSweepStage
+{
+    /// <summary>Nothing under way: either not comparing, or the count is in.</summary>
+    Idle,
+
+    /// <summary>Rasterizing the sheet being read.</summary>
+    Sheet,
+
+    /// <summary>Rasterizing the revision, onto the sheet's own grid.</summary>
+    Revision,
+
+    /// <summary>Both are in hand, and the disagreements are being flooded.</summary>
+    Looking,
+}
+
+/// <summary>
 /// One sheet as the pages panel sees it: where its picture comes from, how it
 /// stands, and how big it is. Blank paper has no document behind it and no
 /// preview to ask for.
@@ -266,6 +288,13 @@ public sealed partial class PdfTiledViewer : UserControl
     private const double ChangeRingInsetDips = 5.0;
 
     /// <summary>
+    /// Above this many changes on a sheet, only the one being stood on is
+    /// ringed. Seen on two real issues of a plan: a hundred and fifty-eight
+    /// boxes is not a map of where to look, it is a mesh over the drawing.
+    /// </summary>
+    private const int MostRingsWorthDrawing = 24;
+
+    /// <summary>
     /// The rings round the changes. Grey and not a third colour: the sheet
     /// already spends red and blue on saying which drawing an ink belongs to,
     /// and a ring in a colour of its own would compete with the only thing the
@@ -457,6 +486,14 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private readonly Dictionary<int, IReadOnlyList<ChangeRegion>> _changes = new();
     private readonly HashSet<int> _changesInFlight = new();
+
+    /// <summary>
+    /// How far along the sweep of each sheet is. Measured on a 51 MB A0 the
+    /// sweep is fifteen seconds, nearly all of it the two full-page renders, so
+    /// a reader watching "Buscando…" sit there has no way to tell work from a
+    /// hang. This is what the wait is made of.
+    /// </summary>
+    private readonly Dictionary<int, CompareSweepStage> _sweepStage = new();
 
     /// <summary>
     /// Which change is being stood on, and on which sheet. The sheet is kept
@@ -3725,8 +3762,16 @@ public sealed partial class PdfTiledViewer : UserControl
             _sweepGeneration++;
             _changes.Clear();
             _changesInFlight.Clear();
+            _sweepStage.Clear();
             _changeSheet = -1;
             _changeCursor = -1;
+
+            // Off the moment the comparison is set up, rather than waiting for
+            // the sheet to be drawn. It is the same fifteen seconds either way
+            // on a dense A0, and starting it here is the part of them that can
+            // be spent while the reader is still looking at the file dialog
+            // closing.
+            EnsureChanges(CurrentPageIndex);
         }
 
         Canvas.Invalidate();
@@ -3860,6 +3905,8 @@ public sealed partial class PdfTiledViewer : UserControl
     {
         try
         {
+            Reached(sheet, CompareSweepStage.Sheet, sweepGeneration);
+
             var laid = _pageSizes[sheet];
             double scale = RevisionInk.DetectionDpi / 72.0;
 
@@ -3877,6 +3924,8 @@ public sealed partial class PdfTiledViewer : UserControl
             var sheetBand = await _queue.RequestPrintBandAsync(
                 documentId, pageIndex, RotationOf(sheet), scale, 0, 0, width, height, monochrome: false);
 
+            Reached(sheet, CompareSweepStage.Revision, sweepGeneration);
+
             var revisionBand = await _queue.RequestBandAsync(
                 overlay.DocumentId,
                 overlay.PageIndex,
@@ -3890,6 +3939,8 @@ public sealed partial class PdfTiledViewer : UserControl
                 monochrome: false);
 
             if (sheetBand is not { } a || revisionBand is not { } b) return;
+
+            Reached(sheet, CompareSweepStage.Looking, sweepGeneration);
 
             // Off the UI thread: flooding three million pixels is not much, but
             // it is more than a frame, and it would be felt as the drawing
@@ -3912,14 +3963,38 @@ public sealed partial class PdfTiledViewer : UserControl
         finally
         {
             _changesInFlight.Remove(sheet);
+            _sweepStage.Remove(sheet);
         }
     }
+
+    /// <summary>
+    /// Says where a sheet's sweep has got to, unless the answer is already
+    /// stale — the reader may have repaired the sheets or picked another
+    /// revision while PDFium was busy with this one.
+    /// </summary>
+    private void Reached(int sheet, CompareSweepStage stage, int sweepGeneration)
+    {
+        if (sweepGeneration != _sweepGeneration) return;
+
+        _sweepStage[sheet] = stage;
+        ComparisonChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>How far along the sweep of the sheet in view is, for saying so while it runs.</summary>
+    public CompareSweepStage SweepStageHere =>
+        _sweepStage.TryGetValue(CurrentPageIndex, out var stage) ? stage : CompareSweepStage.Idle;
 
     /// <summary>
     /// Rings the places the two revisions disagree. Drawn over the composed
     /// tiles and not into them, so that they can be stepped through and so that
     /// a capture of the drawing carries the difference itself rather than a
     /// box drawn around it.
+    ///
+    /// Past a certain number only the one being stood on is ringed. A dozen
+    /// rings are a map of where to look; a hundred and fifty are a mesh laid
+    /// over the drawing, and the drawing is what the reader came for — on a
+    /// sheet that changed everywhere the colour already says so, which is what
+    /// the rings were there to add.
     /// </summary>
     private void DrawChangeRings(CanvasDrawingSession ds, PageBox page)
     {
@@ -3928,9 +4003,12 @@ public sealed partial class PdfTiledViewer : UserControl
 
         bool current = page.Index == _changeSheet;
         float inset = (float)(ChangeRingInsetDips / Math.Max(_scale, 0.02));
+        bool onlyCurrent = found.Count > MostRingsWorthDrawing;
 
         for (int i = 0; i < found.Count; i++)
         {
+            if (onlyCurrent && !(current && i == _changeCursor)) continue;
+
             var box = found[i].Box;
             var ring = new Rect(
                 (page.XPt + box.X - inset - _origin.X) * _scale,

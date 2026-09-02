@@ -193,9 +193,29 @@ public static class RevisionInk
     /// <summary>
     /// Above this many patches the list stops being something to step through,
     /// so the largest are kept and the rest dropped. A sheet that reaches it
-    /// has been redrawn rather than revised, and that is visible at a glance.
+    /// has been redrawn rather than revised, and a reader told "200 changes"
+    /// should be told that it is a floor — which is why this is not private.
     /// </summary>
-    private const int MaxRegions = 200;
+    public const int MaxRegions = 200;
+
+    /// <summary>
+    /// How far across the paper one change may reach before it stops being a
+    /// place to go to. About a sheet of A4 laid on the drawing: roughly what a
+    /// reader takes in at once, and measured on the paper rather than as a
+    /// share of the sheet, because that is what the eye works in — a change
+    /// twenty-five centimetres across is a zone whether it is on an A0 or an
+    /// A1.
+    ///
+    /// It exists because of two real issues of one drawing, where nothing came
+    /// near the two hundred and yet one box covered 88 % of the paper: a
+    /// boundary line that moved is a single connected patch running from one
+    /// edge of the sheet to the other, and everything near it folds into it.
+    /// "6 cambios", one of which is the drawing, is worse than no count at all.
+    /// Past this a patch is cut on a grid, which is how a line that moved along
+    /// a façade becomes somewhere to step through instead of one box around
+    /// everything.
+    /// </summary>
+    private const double MaxRegionPoints = 720.0;
 
     /// <summary>
     /// Lays the revision's render over the sheet's and returns what comes out,
@@ -283,7 +303,17 @@ public static class RevisionInk
             changed[i] = Math.Max(onlySheet, onlyRevision) >= ChangeThreshold;
         }
 
-        var found = Merge(Components(changed, width, height), MergeDistancePixels);
+        // The cap goes to both steps, and for two different reasons: it stops
+        // the fold from chaining half the drawing into one box, and it cuts up
+        // the patches that were already that big when they came out of the
+        // flood — a moved boundary line is one of those, and no merge is
+        // involved in it at all.
+        int reach = Math.Max(1, (int)(MaxRegionPoints / Math.Max(pointsPerPixel, 0.001)));
+        int widest = Math.Min(width, reach);
+        int tallest = Math.Min(height, reach);
+
+        var found = Merge(Components(changed, width, height), MergeDistancePixels, widest, tallest);
+        found = Split(found, changed, width, height, widest, tallest);
 
         if (found.Count > MaxRegions)
         {
@@ -470,8 +500,14 @@ public static class RevisionInk
     /// Folds patches that sit close together into one. A revised dimension
     /// arrives as its arrow, its line and each of its digits; a reader stepping
     /// through changes wants to be taken to the dimension.
+    ///
+    /// Two patches are left apart when folding them would make something
+    /// bigger than <paramref name="widest"/> by <paramref name="tallest"/>. A
+    /// fold has no floor to stop it: on a drawing with changes everywhere,
+    /// each fold brings the next patch within reach, and the sheet ends up as
+    /// one box.
     /// </summary>
-    private static List<Box> Merge(List<Box> boxes, int distance)
+    private static List<Box> Merge(List<Box> boxes, int distance, int widest, int tallest)
     {
         bool merged = true;
         while (merged && boxes.Count > 1)
@@ -486,7 +522,10 @@ public static class RevisionInk
                 {
                     if (!folded[i].Near(box, distance)) continue;
 
-                    folded[i] = folded[i].Union(box);
+                    var union = folded[i].Union(box);
+                    if (union.Width > widest || union.Height > tallest) continue;
+
+                    folded[i] = union;
                     joined = true;
                     merged = true;
                     break;
@@ -499,5 +538,73 @@ public static class RevisionInk
         }
 
         return boxes;
+    }
+
+    /// <summary>
+    /// Cuts the patches that span too much of the sheet into pieces a reader
+    /// can be taken to, on a grid of at most <paramref name="widest"/> by
+    /// <paramref name="tallest"/>.
+    ///
+    /// Each piece is tightened back onto the changed pixels inside it, so what
+    /// comes out is still a box around a change and not a box around a cell of
+    /// the grid. Cells with nothing in them are dropped, which is most of them:
+    /// a line that moved along a façade covers a wide box and very little of
+    /// its area.
+    /// </summary>
+    private static List<Box> Split(List<Box> boxes, bool[] changed, int width, int height, int widest, int tallest)
+    {
+        if (!boxes.Any(box => box.Width > widest || box.Height > tallest)) return boxes;
+
+        var cut = new List<Box>(boxes.Count);
+
+        foreach (var box in boxes)
+        {
+            if (box.Width <= widest && box.Height <= tallest)
+            {
+                cut.Add(box);
+                continue;
+            }
+
+            for (int top = box.Top; top <= box.Bottom; top += tallest)
+            {
+                int bottom = Math.Min(box.Bottom, top + tallest - 1);
+
+                for (int left = box.Left; left <= box.Right; left += widest)
+                {
+                    int right = Math.Min(box.Right, left + widest - 1);
+                    if (Tighten(changed, width, height, left, top, right, bottom) is { } piece)
+                    {
+                        cut.Add(piece);
+                    }
+                }
+            }
+        }
+
+        return cut;
+    }
+
+    /// <summary>The box around the changed pixels inside a cell, or null when there are too few to be a change.</summary>
+    private static Box? Tighten(bool[] changed, int width, int height, int left, int top, int right, int bottom)
+    {
+        int foundLeft = int.MaxValue, foundTop = int.MaxValue;
+        int foundRight = int.MinValue, foundBottom = int.MinValue;
+        int count = 0;
+
+        for (int y = Math.Max(0, top); y <= Math.Min(height - 1, bottom); y++)
+        {
+            int row = y * width;
+            for (int x = Math.Max(0, left); x <= Math.Min(width - 1, right); x++)
+            {
+                if (!changed[row + x]) continue;
+
+                count++;
+                if (x < foundLeft) foundLeft = x;
+                if (x > foundRight) foundRight = x;
+                if (y < foundTop) foundTop = y;
+                if (y > foundBottom) foundBottom = y;
+            }
+        }
+
+        return count >= MinChangePixels ? new Box(foundLeft, foundTop, foundRight, foundBottom, count) : null;
     }
 }

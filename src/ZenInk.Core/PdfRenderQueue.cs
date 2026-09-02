@@ -76,6 +76,22 @@ public sealed class PdfRenderQueue : IDisposable
     /// <summary>Parsed pages held open per document. Each retains its content, so this is capped.</summary>
     private const int MaxLoadedPagesPerDocument = 6;
 
+    /// <summary>
+    /// What the halves of composed tiles are allowed to occupy. A tile's plate
+    /// is 514x514, so this is about a hundred and twenty of them — four
+    /// screenfuls of comparison. Small next to what it saves: on a dense A0
+    /// each of those plates cost above a second to rasterize, and next to the
+    /// gigabyte PDFium holds for one parsed page of that drawing.
+    /// </summary>
+    private const long PlateCacheBudgetBytes = 128L * 1024 * 1024;
+
+    /// <summary>
+    /// Only tile-sized squares are worth keeping. A band is a one-off, and a
+    /// full-page one at print resolution would empty the cache to hold a
+    /// picture nobody will ask for twice.
+    /// </summary>
+    private const long MaxCachedPlatePixels = 600L * 600L;
+
     private const int PageObjectTypePath = 2;
     private const int PageObjectTypeForm = 5;
 
@@ -126,6 +142,12 @@ public sealed class PdfRenderQueue : IDisposable
 
     /// <summary>Documents currently drawing every stroke as a hairline. Worker thread only.</summary>
     private readonly HashSet<int> _thinLineDocuments = [];
+
+    /// <summary>
+    /// The rasterized halves of composed tiles. Worker thread only, like the
+    /// documents it holds pixels from.
+    /// </summary>
+    private readonly PlateCache _plates = new(PlateCacheBudgetBytes);
 
     /// <summary>
     /// <paramref name="Overlay"/> being part of the request is what keeps a
@@ -246,6 +268,7 @@ public sealed class PdfRenderQueue : IDisposable
         DropPendingWork(documentId);
         EnqueueControl(() =>
         {
+            _plates.Drop(documentId);
             if (_documents.TryGetValue(documentId, out var document))
             {
                 ClosePages(document);
@@ -272,6 +295,10 @@ public sealed class PdfRenderQueue : IDisposable
             {
                 _thinLineDocuments.Remove(documentId);
             }
+
+            // The squares already rasterized carry the old line weights, and
+            // nothing about them says so.
+            _plates.Drop(documentId);
 
             if (_documents.TryGetValue(documentId, out var document))
             {
@@ -1652,6 +1679,11 @@ public sealed class PdfRenderQueue : IDisposable
     /// are where its top-left corner lands on the buffer — which is how both
     /// the tiles and the print bands have always placed what they wanted, and
     /// what lets PDFium do the clipping.
+    ///
+    /// A tile-sized square comes out of <see cref="_plates"/> when it has been
+    /// drawn before, so <b>the buffer belongs to the cache and must be read
+    /// only</b>. Writing into it would change a picture somebody else is still
+    /// showing.
     /// </summary>
     private byte[] RenderPlateCore(
         int documentId,
@@ -1664,6 +1696,17 @@ public sealed class PdfRenderQueue : IDisposable
         int width,
         int height)
     {
+        // A tile-sized square is worth keeping; a band is not. On a dense A0
+        // this is the difference between a comparison that has to be rendered
+        // twice every time it is looked at and one that is only rendered once.
+        bool keep = (long)width * height <= MaxCachedPlatePixels;
+        var slot = new PlateKey(documentId, pageIndex, rotation, pageWidth, pageHeight, originX, originY, width, height);
+
+        if (keep && _plates.TryGet(slot, out var kept))
+        {
+            return kept;
+        }
+
         var page = LoadPageCore(documentId, pageIndex);
 
         var bitmap = fpdfview.FPDFBitmapCreateEx(width, height, (int)FPDFBitmapFormat.BGRA, IntPtr.Zero, width * 4)
@@ -1686,6 +1729,8 @@ public sealed class PdfRenderQueue : IDisposable
             {
                 Marshal.Copy(buffer + (row * stride), packed, row * width * 4, width * 4);
             }
+
+            if (keep) _plates.Add(slot, packed);
 
             return packed;
         }
@@ -2006,6 +2051,7 @@ public sealed class PdfRenderQueue : IDisposable
     private void CloseDocumentCore(int documentId)
     {
         _thinLineDocuments.Remove(documentId);
+        _plates.Drop(documentId);
         if (!_documents.Remove(documentId, out var document)) return;
 
         ClosePages(document);
