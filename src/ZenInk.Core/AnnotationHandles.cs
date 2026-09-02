@@ -17,6 +17,27 @@ public enum MarkHandle
 
     /// <summary>The knob that turns the mark on the spot.</summary>
     Rotate,
+
+    /// <summary>
+    /// One of the mark's own points. A shape placed corner by corner is
+    /// corrected corner by corner — stretching its box moves every vertex at
+    /// once, which on a measured room means redrawing it rather than fixing
+    /// the one corner that missed.
+    /// </summary>
+    Vertex,
+}
+
+/// <summary>
+/// A grip, and which of the mark's points it is when it is one of those.
+/// <see cref="Index"/> is −1 for the grips that belong to the frame.
+/// </summary>
+public readonly record struct MarkGrip(MarkHandle Which, int Index = -1)
+{
+    public static MarkGrip None => new(MarkHandle.None);
+
+    public bool Exists => Which != MarkHandle.None;
+
+    public static implicit operator MarkHandle(MarkGrip grip) => grip.Which;
 }
 
 /// <summary>
@@ -38,6 +59,13 @@ public static class AnnotationHandles
 
     /// <summary>Nothing may be squeezed below this, in points, or it could never be caught again.</summary>
     private const float MinimumSizePt = 4f;
+
+    /// <summary>
+    /// Above this many points a mark is gripped by its frame instead. A traced
+    /// outline with forty corners would be forty squares to pick between, and
+    /// the one under the pointer would be a guess.
+    /// </summary>
+    private const int MostVertexGrips = 24;
 
     /// <summary>Which marks can be dragged somewhere else at all.</summary>
     public static bool CanMove(Annotation mark) => Annotation.CanBeChanged(mark.Kind);
@@ -64,7 +92,7 @@ public static class AnnotationHandles
     /// in points, so the caller decides how far the knob floats at the zoom
     /// in force.
     /// </summary>
-    public static IReadOnlyList<(MarkHandle Which, Vector2 At)> For(Annotation mark, float rotateOffsetPt = RotateOffsetPt)
+    public static IReadOnlyList<(MarkGrip Grip, Vector2 At)> For(Annotation mark, float rotateOffsetPt = RotateOffsetPt)
     {
         if (!CanRotate(mark)) return [];
 
@@ -82,37 +110,65 @@ public static class AnnotationHandles
         // would mean nothing.
         if (!CanResize(mark))
         {
-            return [(MarkHandle.Rotate, At(midX, box.Top - rotateOffsetPt))];
+            return [(new MarkGrip(MarkHandle.Rotate), At(midX, box.Top - rotateOffsetPt))];
+        }
+
+        // A shape whose points are its corners is gripped by those corners,
+        // and by nothing else. The frame's eight grips would say the shape can
+        // only change as a whole, which for a room traced round its walls — or
+        // for a measurement of one — is the wrong offer.
+        if (HasVertexGrips(mark))
+        {
+            var grips = new List<(MarkGrip, Vector2)>(mark.Points.Count + 1);
+            for (int i = 0; i < mark.Points.Count; i++)
+            {
+                grips.Add((new MarkGrip(MarkHandle.Vertex, i), AnnotationGeometry.Rotate(mark.Points[i], centre, degrees)));
+            }
+
+            grips.Add((new MarkGrip(MarkHandle.Rotate), At(midX, box.Top - rotateOffsetPt)));
+            return grips;
         }
 
         return
         [
-            (MarkHandle.TopLeft, At(box.Left, box.Top)),
-            (MarkHandle.Top, At(midX, box.Top)),
-            (MarkHandle.TopRight, At(box.Right, box.Top)),
-            (MarkHandle.Right, At(box.Right, midY)),
-            (MarkHandle.BottomRight, At(box.Right, box.Bottom)),
-            (MarkHandle.Bottom, At(midX, box.Bottom)),
-            (MarkHandle.BottomLeft, At(box.Left, box.Bottom)),
-            (MarkHandle.Left, At(box.Left, midY)),
-            (MarkHandle.Rotate, At(midX, box.Top - rotateOffsetPt)),
+            (new MarkGrip(MarkHandle.TopLeft), At(box.Left, box.Top)),
+            (new MarkGrip(MarkHandle.Top), At(midX, box.Top)),
+            (new MarkGrip(MarkHandle.TopRight), At(box.Right, box.Top)),
+            (new MarkGrip(MarkHandle.Right), At(box.Right, midY)),
+            (new MarkGrip(MarkHandle.BottomRight), At(box.Right, box.Bottom)),
+            (new MarkGrip(MarkHandle.Bottom), At(midX, box.Bottom)),
+            (new MarkGrip(MarkHandle.BottomLeft), At(box.Left, box.Bottom)),
+            (new MarkGrip(MarkHandle.Left), At(box.Left, midY)),
+            (new MarkGrip(MarkHandle.Rotate), At(midX, box.Top - rotateOffsetPt)),
         ];
     }
 
+    /// <summary>
+    /// Which marks are gripped point by point: the ones placed that way, and
+    /// the two-point ones whose points are their ends. Freehand is not among
+    /// them — a stroke has hundreds of points, and a grip on each would be a
+    /// wall of squares over the drawing.
+    /// </summary>
+    public static bool HasVertexGrips(Annotation mark) =>
+        CanResize(mark)
+        && mark.Points.Count <= MostVertexGrips
+        && (Annotation.TakesVertices(mark.Kind)
+            || mark.Kind is AnnotationKind.Line or AnnotationKind.Arrow or AnnotationKind.Distance);
+
     /// <summary>The grip nearest a point, within <paramref name="tolerancePt"/>, or none.</summary>
-    public static MarkHandle At(
+    public static MarkGrip At(
         Annotation mark, Vector2 sheetPoint, float tolerancePt, float rotateOffsetPt = RotateOffsetPt)
     {
-        var best = MarkHandle.None;
+        var best = MarkGrip.None;
         float nearest = tolerancePt;
 
-        foreach (var (which, at) in For(mark, rotateOffsetPt))
+        foreach (var (grip, at) in For(mark, rotateOffsetPt))
         {
             float distance = Vector2.Distance(at, sheetPoint);
             if (distance > nearest) continue;
 
             nearest = distance;
-            best = which;
+            best = grip;
         }
 
         return best;
@@ -133,13 +189,26 @@ public static class AnnotationHandles
     /// on a turned mark, where scaling moves the middle the turn happens about
     /// and would otherwise slide the whole thing sideways.
     /// </summary>
-    public static Annotation Drag(Annotation mark, MarkHandle handle, Vector2 sheetPoint)
+    public static Annotation Drag(Annotation mark, MarkGrip grip, Vector2 sheetPoint)
     {
+        var handle = grip.Which;
         if (handle == MarkHandle.None || !CanResize(mark)) return mark;
 
         if (handle == MarkHandle.Rotate)
         {
             return mark.WithRotation(RotationFor(mark, sheetPoint));
+        }
+
+        // One corner, and only that one. The pointer is where the grip is
+        // seen — with the mark's turn in it — so it comes back out of the turn
+        // before it becomes one of the mark's own points.
+        if (handle == MarkHandle.Vertex)
+        {
+            if (grip.Index < 0 || grip.Index >= mark.Points.Count) return mark;
+
+            var moved = mark.Points.ToArray();
+            moved[grip.Index] = AnnotationGeometry.Rotate(sheetPoint, mark.Centre, -mark.RotationDeg);
+            return mark.WithPoints(moved);
         }
 
         var box = Frame(mark);

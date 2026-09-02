@@ -303,7 +303,7 @@ public static class AnnotationTests
         Check("a written mark can be turned", AnnotationHandles.CanRotate(one));
         Check("but not stretched", !AnnotationHandles.CanResize(one));
         Check("so it carries the knob and nothing else",
-            AnnotationHandles.For(one) is [(MarkHandle.Rotate, _)]);
+            AnnotationHandles.For(one) is [({ Which: MarkHandle.Rotate }, _)]);
     }
 
     private static void Clouds()
@@ -389,9 +389,9 @@ public static class AnnotationTests
         Check("there are eight grips and a knob to turn by", grips.Count == 9);
 
         Check("the top-left grip is on the top-left corner",
-            grips.Any(g => g.Which == MarkHandle.TopLeft && Vector2.Distance(g.At, new Vector2(100, 100)) < 0.01f));
+            grips.Any(g => g.Grip.Which == MarkHandle.TopLeft && Vector2.Distance(g.At, new Vector2(100, 100)) < 0.01f));
         Check("the turn knob floats above the mark",
-            grips.Any(g => g.Which == MarkHandle.Rotate
+            grips.Any(g => g.Grip.Which == MarkHandle.Rotate
                 && Math.Abs(g.At.X - 200f) < 0.01f
                 && Math.Abs(g.At.Y - (100f - AnnotationHandles.RotateOffsetPt)) < 0.01f));
 
@@ -400,18 +400,18 @@ public static class AnnotationTests
         Check("a click in the middle of nowhere finds none",
             AnnotationHandles.At(box, new Vector2(200, 150), 6f) == MarkHandle.None);
 
-        var widened = AnnotationHandles.Drag(box, MarkHandle.Right, new Vector2(500, 150));
+        var widened = AnnotationHandles.Drag(box, new MarkGrip(MarkHandle.Right), new Vector2(500, 150));
         CheckClose("dragging the right edge moves that edge", widened.Box().Right, 500, 0.01);
         CheckClose("and leaves the left one where it was", widened.Box().Left, 100, 0.01);
         CheckClose("and does not touch the height", widened.Box().Height, 100, 0.01);
 
-        var squeezed = AnnotationHandles.Drag(box, MarkHandle.Right, new Vector2(80, 150));
+        var squeezed = AnnotationHandles.Drag(box, new MarkGrip(MarkHandle.Right), new Vector2(80, 150));
         Check("a mark cannot be squeezed inside out", squeezed.Box().Width > 0.5f, $"{squeezed.Box().Width}");
 
         // A turned mark is stretched along its own edge, and the corner
         // opposite the grip has to stay put on the sheet while that happens.
         var turned = box.WithRotation(35f);
-        var pulled = AnnotationHandles.Drag(turned, MarkHandle.BottomRight,
+        var pulled = AnnotationHandles.Drag(turned, new MarkGrip(MarkHandle.BottomRight),
             AnnotationGeometry.Rotate(new Vector2(400, 260), turned.Centre, 35f));
 
         // Where the anchored corner sits on the sheet: its own frame's corner,
@@ -427,12 +427,70 @@ public static class AnnotationTests
             $"moved {Vector2.Distance(TopLeftOnSheet(turned), TopLeftOnSheet(pulled)):0.###} pt");
         CheckClose("while the mark grew along its own axis", pulled.Box().Width, 300, 0.5);
 
-        var spun = AnnotationHandles.Drag(box, MarkHandle.Rotate, new Vector2(400, 150));
+        var spun = AnnotationHandles.Drag(box, new MarkGrip(MarkHandle.Rotate), new Vector2(400, 150));
         CheckClose("dragging the knob to the right turns the mark a quarter", spun.RotationDeg, 90, 0.01);
         CheckClose("and it snaps to the nearest step when asked to", AnnotationHandles.Snap(97f), 90, 0.01);
 
         var note = new Annotation(AnnotationKind.Note, [new Vector2(10, 10)], AnnotationStyle.Default);
         Check("a note has no grips — it is an icon, not a shape", AnnotationHandles.For(note).Count == 0);
+
+        VertexGrips();
+    }
+
+    /// <summary>
+    /// Shapes placed corner by corner are corrected corner by corner. The frame
+    /// grips move every point at once, which for a room traced round its walls
+    /// means redrawing it to fix the one corner that missed.
+    /// </summary>
+    private static void VertexGrips()
+    {
+        Section("Marks — the grips on a shape's own corners");
+
+        var room = Of(AnnotationKind.Polygon, 2f, (100, 100), (300, 100), (300, 260), (100, 260));
+        var grips = AnnotationHandles.For(room);
+
+        Check("a traced shape is gripped by its corners and turned by its knob", grips.Count == 5);
+        Check("one grip per corner, in the order they were placed",
+            grips.Take(4).Select((g, i) => g.Grip.Which == MarkHandle.Vertex && g.Grip.Index == i).All(ok => ok));
+
+        Check("a click on a corner finds that corner",
+            AnnotationHandles.At(room, new Vector2(299, 262), 6f) is { Which: MarkHandle.Vertex, Index: 2 });
+
+        var fixedUp = AnnotationHandles.Drag(room, new MarkGrip(MarkHandle.Vertex, 2), new Vector2(340, 300));
+        CheckClose("dragging it moves that corner", fixedUp.Points[2].X, 340, 0.01);
+        Check("and leaves the others where they were",
+            Vector2.Distance(fixedUp.Points[0], room.Points[0]) < 0.01f
+            && Vector2.Distance(fixedUp.Points[1], room.Points[1]) < 0.01f
+            && Vector2.Distance(fixedUp.Points[3], room.Points[3]) < 0.01f);
+
+        // The grips are seen where the mark is seen, so on a turned shape the
+        // pointer has to come back out of the turn before it becomes a corner.
+        var turnedRoom = room.WithRotation(30f);
+        var seen = AnnotationHandles.For(turnedRoom)[1].At;
+        var again = AnnotationHandles.Drag(turnedRoom, new MarkGrip(MarkHandle.Vertex, 1), seen);
+        Check("dragging a corner of a turned shape to where it already is leaves it there",
+            Vector2.Distance(again.Points[1], turnedRoom.Points[1]) < 0.05f,
+            $"moved {Vector2.Distance(again.Points[1], turnedRoom.Points[1]):0.###} pt");
+
+        // A stroke has hundreds of points; a grip on each would be a wall of
+        // squares over the drawing, so freehand keeps its frame.
+        var stroke = Ink((10, 10), (20, 20), (30, 12), (40, 30), (50, 18));
+        Check("freehand is gripped by its frame, not by its points",
+            !AnnotationHandles.HasVertexGrips(stroke));
+
+        // And a measurement is edited the same way — which is the whole reason
+        // this exists: a room measured one corner short is fixed, not redrawn.
+        var scale = new SheetScale(0.05, MeasureUnit.Metre);
+        var measured = new Annotation(
+            AnnotationKind.Distance,
+            [new Vector2(0, 0), new Vector2(100, 0)],
+            AnnotationStyle.Default,
+            scale: scale);
+
+        var stretched = AnnotationHandles.Drag(measured, new MarkGrip(MarkHandle.Vertex, 1), new Vector2(200, 0));
+        Check("a measurement dragged by an end keeps its calibration", stretched.Scale is not null);
+        Check("and says the new length", stretched.Text != measured.Text && stretched.Text.StartsWith("10"),
+            $"{measured.Text} → {stretched.Text}");
 
         // A highlight belongs to the words it covers. It can be taken back, but
         // not moved off them, stretched past them or recoloured into a lie.

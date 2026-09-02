@@ -2504,6 +2504,16 @@ public sealed partial class MainPage : Page
 
     private void OnAngleToolClicked(object sender, RoutedEventArgs e) => SetTool(ViewerTool.Angle);
 
+    private void OnSnapClicked(object sender, RoutedEventArgs e)
+    {
+        if (ActiveViewer is not { } viewer) return;
+
+        viewer.SnapToInk = SnapToolButton.IsChecked == true;
+        Hint(viewer.SnapToInk
+            ? "Los puntos se pegan a las líneas del plano."
+            : "Los puntos van donde sueltes, sin pegarse a nada.");
+    }
+
     private void OnClearScaleClicked(object sender, RoutedEventArgs e)
     {
         if (ActiveViewer is not { } viewer) return;
@@ -2642,6 +2652,46 @@ public sealed partial class MainPage : Page
         DistanceToolButton.IsEnabled = interactive && calibrated;
         PerimeterToolButton.IsEnabled = interactive && calibrated;
         AreaToolButton.IsEnabled = interactive && calibrated;
+
+        SnapToolButton.IsEnabled = interactive;
+        SnapToolButton.IsChecked = viewer?.SnapToInk ?? true;
+
+        string detail = interactive && viewer?.SelectedAnnotation is { } chosen ? Detail(chosen) : string.Empty;
+        MeasureDetailText.Text = detail;
+        MeasureDetailSection.Visibility = detail.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Everything the chosen measurement can say, which is more than its label
+    /// does. A room measured for its area is asked for its perimeter next, and
+    /// one measured round its walls is asked what it encloses.
+    /// </summary>
+    private static string Detail(Annotation mark)
+    {
+        if (!Measures.Is(mark.Kind)) return string.Empty;
+
+        if (mark.Kind == AnnotationKind.Angle)
+        {
+            return mark.Text.Length > 0 ? $"Ángulo {mark.Text}" : string.Empty;
+        }
+
+        if (mark.Scale is not { } scale) return string.Empty;
+
+        double around = AnnotationGeometry.TotalLength(mark.Points, closed: mark.Kind != AnnotationKind.Distance);
+
+        return mark.Kind switch
+        {
+            AnnotationKind.Distance => $"Distancia {scale.FormatLength(around)}",
+
+            AnnotationKind.Area =>
+                $"Área {scale.FormatArea(AnnotationGeometry.PolygonArea(mark.Points))}"
+                + $" · perímetro {scale.FormatLength(around)}",
+
+            // A closed run of segments encloses something whether or not that
+            // is what it was drawn for.
+            _ => $"Perímetro {scale.FormatLength(around)}"
+                 + $" · encierra {scale.FormatArea(AnnotationGeometry.PolygonArea(mark.Points))}",
+        };
     }
 
     /// <summary>The unit of the last calibration; a set of drawings is in one unit throughout.</summary>
@@ -3045,7 +3095,13 @@ public sealed partial class MainPage : Page
         TextToolPanel.Visibility = textTool ? Visibility.Visible : Visibility.Collapsed;
         MarkToolPanel.Visibility = markTool ? Visibility.Visible : Visibility.Collapsed;
         ComparePanel.Visibility = comparing ? Visibility.Visible : Visibility.Collapsed;
-        MeasurePanel.Visibility = calibrating || tool.Measures() ? Visibility.Visible : Visibility.Collapsed;
+        // The measuring panel also comes up for a measurement picked with the
+        // selection tool: what it says about the mark in hand is the reason to
+        // pick one up.
+        bool measuring = calibrating || tool.Measures()
+            || (viewer?.SelectedAnnotation is { } picked && Measures.Is(picked.Kind));
+
+        MeasurePanel.Visibility = measuring ? Visibility.Visible : Visibility.Collapsed;
 
         bool hasSelection = viewer?.HasSelection ?? false;
         CopySelectionButton.IsEnabled = hasSelection;

@@ -360,6 +360,16 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private static readonly Color ChangeRingCurrent = Color.FromArgb(230, 255, 122, 0);
 
+    /// <summary>
+    /// The ring round a point that was pulled onto the drawing. Green, and not
+    /// the selection's blue or the change's orange: it is a different kind of
+    /// statement — this is where the point actually is — and it appears while
+    /// the reader is looking straight at it.
+    /// </summary>
+    private static readonly Color SnapRing = Color.FromArgb(235, 30, 160, 90);
+
+    private const float SnapRingDips = 6f;
+
     private static readonly Color SearchFill = Color.FromArgb(105, 255, 214, 0);
 
     private static readonly Color SearchCurrentFill = Color.FromArgb(150, 255, 122, 0);
@@ -481,7 +491,7 @@ public sealed partial class PdfTiledViewer : UserControl
     private Vector2 _moveAnchorSheet;
 
     /// <summary>The grip being pulled, if the drag started on one.</summary>
-    private MarkHandle _handle = MarkHandle.None;
+    private MarkGrip _handle = MarkGrip.None;
 
     /// <summary>
     /// Vertices placed so far, for the shapes that are built click by click,
@@ -987,6 +997,7 @@ public sealed partial class PdfTiledViewer : UserControl
             }
 
             _cache.Clear();
+            ForgetSnapPixels();
             _inFlight.Clear();
 
             // The composed tiles were rasterized at the other setting too, and
@@ -1047,6 +1058,7 @@ public sealed partial class PdfTiledViewer : UserControl
         StopZoomGlide();
         StopComparing();
         _cache.Clear();
+        ForgetSnapPixels();
         _inFlight.Clear();
         _textLayers.Clear();
         _textLru.Clear();
@@ -1479,6 +1491,109 @@ public sealed partial class PdfTiledViewer : UserControl
     /// <summary>Raised when a calibration drag ends long enough to be worth asking about.</summary>
     public event EventHandler<CalibrationDrag>? CalibrationDragged;
 
+    /// <summary>
+    /// Whether a measurement is pulled onto the drawing's own lines. On by
+    /// default: measuring by eye at 30 % zoom is how a room comes out a
+    /// centimetre short, and the reader who wants a point in mid-air can say
+    /// so.
+    /// </summary>
+    public bool SnapToInk { get; set; } = true;
+
+    /// <summary>
+    /// How far the pointer may be from a line and still be pulled onto it, in
+    /// dips. About four millimetres on screen: near enough that it only catches
+    /// what was aimed at, far enough that it catches it.
+    /// </summary>
+    private const float SnapReachDips = 14f;
+
+    /// <summary>
+    /// Tiles kept as pixels for snapping. Sixteen of them is a screenful at a
+    /// reading zoom, which is the only place a measurement is being taken.
+    /// </summary>
+    private const int MostSnapTiles = 16;
+
+    private readonly Dictionary<TileKey, byte[]> _snapPixels = new();
+    private readonly List<TileKey> _snapOrder = new();
+
+    /// <summary>Where the last point was pulled to, for drawing the ring that says it was.</summary>
+    private Vector2? _snappedAt;
+
+    private void KeepForSnapping(TileKey key, TileBitmapData tile)
+    {
+        if (_snapPixels.ContainsKey(key)) return;
+
+        _snapPixels[key] = tile.Bgra;
+        _snapOrder.Add(key);
+
+        while (_snapOrder.Count > MostSnapTiles)
+        {
+            _snapPixels.Remove(_snapOrder[0]);
+            _snapOrder.RemoveAt(0);
+        }
+    }
+
+    private void ForgetSnapPixels()
+    {
+        _snapPixels.Clear();
+        _snapOrder.Clear();
+        _snappedAt = null;
+    }
+
+    /// <summary>
+    /// The point a measurement should actually take, pulled onto the drawing
+    /// when there is a line within reach.
+    ///
+    /// It looks at the tile under the point — the very picture on screen — so
+    /// it is as precise as the zoom is and no slower than a dictionary lookup.
+    /// A point over a tile that has not arrived yet is left alone, which is the
+    /// same answer as no ink.
+    /// </summary>
+    private Vector2 Snapped(PageBox page, Vector2 sheetPoint)
+    {
+        _snappedAt = null;
+        if (!SnapToInk || !_tool.IsMeasurement()) return sheetPoint;
+
+        var origin = OriginOf(page.Index);
+        if (origin.IsBlank) return sheetPoint;
+
+        var sheet = SheetSize(page.Index, new PdfPageSize(page.WidthPt, page.HeightPt));
+        int rotation = RotationOf(page.Index);
+        var local = SheetTurn.ToDisplay(sheetPoint, sheet.WidthPt, sheet.HeightPt, rotation);
+
+        double dpiScale = Canvas.Dpi / 96.0;
+        int level = ZoomLevels.LevelForScale(_scale * dpiScale);
+        double levelScale = ZoomLevels.ScaleForLevel(level);
+        double tilePt = ZoomLevels.TileSize / levelScale;
+        if (tilePt <= 0) return sheetPoint;
+
+        int col = (int)Math.Floor(local.X / tilePt);
+        int row = (int)Math.Floor(local.Y / tilePt);
+
+        var key = new TileKey(origin.PageIndex, level, col, row, rotation, origin.DocumentId);
+        if (!_snapPixels.TryGetValue(key, out var pixels)) return sheetPoint;
+
+        var inTile = new Vector2(
+            (float)((local.X - (col * tilePt)) * levelScale),
+            (float)((local.Y - (row * tilePt)) * levelScale));
+
+        // The reach is given on screen and searched in the tile's own pixels,
+        // which are a different size whenever the zoom sits between two levels.
+        int reach = Math.Max(2, (int)Math.Round(SnapReachDips / Math.Max(_scale, 0.01) * levelScale));
+
+        if (InkSnap.Snap(pixels, ZoomLevels.TileSize, ZoomLevels.TileSize, inTile, reach) is not { } found)
+        {
+            return sheetPoint;
+        }
+
+        var pulled = new Vector2(
+            (float)((col * tilePt) + (found.X / levelScale)),
+            (float)((row * tilePt) + (found.Y / levelScale)));
+
+        var snapped = SheetTurn.ToSheet(pulled, sheet.WidthPt, sheet.HeightPt, rotation);
+        _snappedAt = snapped;
+        return snapped;
+    }
+
     /// <summary>What a sheet is drawn to, or null while it has never been calibrated.</summary>
     public SheetScale? ScaleOf(int pageIndex) => _annotations.ScaleOf(pageIndex);
 
@@ -1594,6 +1709,7 @@ public sealed partial class PdfTiledViewer : UserControl
         _documentId = info.DocumentId;
         _documentGeneration++;
         _cache.Clear();
+        ForgetSnapPixels();
         _inFlight.Clear();
         _textLayers.Clear();
         _textLru.Clear();
@@ -1693,6 +1809,7 @@ public sealed partial class PdfTiledViewer : UserControl
         // alive doing it.
         StopZoomGlide();
         _cache.Clear();
+        ForgetSnapPixels();
         _inFlight.Clear();
         _compareCache.Clear();
         _compareInFlight.Clear();
@@ -1716,6 +1833,7 @@ public sealed partial class PdfTiledViewer : UserControl
         StopZoomGlide();
         StopComparing();
         _cache.Clear();
+        ForgetSnapPixels();
         _inFlight.Clear();
         _textLayers.Clear();
         _textLru.Clear();
@@ -2411,8 +2529,11 @@ public sealed partial class PdfTiledViewer : UserControl
         _isDrawing = true;
         _draftPage = page.Index;
         _draft.Clear();
-        _draft.Add(sheetPoint);
-        _rubber = sheetPoint;
+
+        // A measurement starts on the drawing, not next to it.
+        var start = Snapped(page, sheetPoint);
+        _draft.Add(start);
+        _rubber = start;
         Canvas.Invalidate();
     }
 
@@ -2429,7 +2550,7 @@ public sealed partial class PdfTiledViewer : UserControl
         if (_selected is { } current && _selectedPage == page.Index)
         {
             var grip = AnnotationHandles.At(current, sheetPoint, slop * 2.5f, HandleOffsetPt);
-            if (grip != MarkHandle.None)
+            if (grip.Exists)
             {
                 _handle = grip;
                 _movingFrom = current;
@@ -2602,7 +2723,7 @@ public sealed partial class PdfTiledViewer : UserControl
             return;
         }
 
-        if (_handle != MarkHandle.None && e.Pointer.PointerId == _gesturePointerId)
+        if (_handle.Exists && e.Pointer.PointerId == _gesturePointerId)
         {
             DragHandle(position, e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift));
             return;
@@ -2617,7 +2738,7 @@ public sealed partial class PdfTiledViewer : UserControl
         // The segment that follows the cursor while a shape is being built.
         if (_placingVertices && PageBoxOf(_draftPage) is { } vertexPage)
         {
-            _rubber = SheetPointClamped(vertexPage, position);
+            _rubber = Snapped(vertexPage, SheetPointClamped(vertexPage, position));
             Canvas.Invalidate();
             return;
         }
@@ -2699,13 +2820,13 @@ public sealed partial class PdfTiledViewer : UserControl
             return;
         }
 
-        if (_handle != MarkHandle.None)
+        if (_handle.Exists)
         {
             if (_movingFrom is { } before && _selected is { } after && _selectedPage >= 0)
             {
                 _annotations.Replace(_selectedPage, before, after);
             }
-            _handle = MarkHandle.None;
+            _handle = MarkGrip.None;
             _movingFrom = null;
             Canvas.ReleasePointerCapture(e.Pointer);
             ViewChanged?.Invoke(this, EventArgs.Empty);
@@ -2817,7 +2938,7 @@ public sealed partial class PdfTiledViewer : UserControl
     {
         if (PageBoxOf(_draftPage) is not { } page) return;
 
-        var sheetPoint = SheetPointClamped(page, position);
+        var sheetPoint = Snapped(page, SheetPointClamped(page, position));
 
         // A pen reports far more samples than the drawing needs; the ones that
         // land on top of each other are dropped here rather than kept and
@@ -2868,7 +2989,7 @@ public sealed partial class PdfTiledViewer : UserControl
     {
         if (PageBoxOf(_draftPage) is not { } page) return;
 
-        var sheetPoint = SheetPointClamped(page, position);
+        var sheetPoint = Snapped(page, SheetPointClamped(page, position));
 
         // Two clicks in the same spot end the shape, which is what a reader
         // does without being told.
@@ -2928,7 +3049,7 @@ public sealed partial class PdfTiledViewer : UserControl
 
         var sheetPoint = SheetPointClamped(page, position);
 
-        var changed = _handle == MarkHandle.Rotate
+        var changed = _handle.Which == MarkHandle.Rotate
             ? original.WithRotation(snap
                 ? AnnotationHandles.Snap(AnnotationHandles.RotationFor(original, sheetPoint))
                 : AnnotationHandles.RotationFor(original, sheetPoint))
@@ -3024,7 +3145,7 @@ public sealed partial class PdfTiledViewer : UserControl
         _isDrawing = false;
         _placingVertices = false;
         _vertices.Clear();
-        _handle = MarkHandle.None;
+        _handle = MarkGrip.None;
         _movingFrom = null;
         _draft.Clear();
         _draftPage = -1;
@@ -3607,6 +3728,17 @@ public sealed partial class PdfTiledViewer : UserControl
         {
             AnnotationRenderer.Draw(ds, preview, placement);
         }
+
+        // The ring that says the point went where the drawing is, not where the
+        // pointer was. Without it a snap is invisible, and a measurement that
+        // silently moved the reader's click is the one thing a measuring tool
+        // must not do.
+        if (_snappedAt is { } pulled && _tool.IsMeasurement() && page.Index == _draftPage)
+        {
+            var at = placement.ToScreen(pulled);
+            ds.DrawCircle(at, SnapRingDips, SnapRing, 1.6f);
+            ds.DrawCircle(at, 1.5f, SnapRing, 1.6f);
+        }
     }
 
     /// <summary>The page with a given index, as it is laid out right now.</summary>
@@ -3747,6 +3879,15 @@ public sealed partial class PdfTiledViewer : UserControl
                     DirectXPixelFormat.B8G8R8A8UIntNormalized,
                     Canvas.Dpi);
                 (overlay is null ? _cache : _compareCache).Add(key, bitmap);
+
+                // The same pixels, kept on this side of the graphics card, so a
+                // measurement can be pulled onto the drawing without asking
+                // PDFium anything: on a dense A0 that question costs a second
+                // and this costs a lookup. Only the plain tiles — a comparison
+                // is coloured by what changed, which is not what a reader is
+                // aiming at.
+                if (overlay is null) KeepForSnapping(key, tile);
+
                 Canvas.Invalidate();
             }
         }

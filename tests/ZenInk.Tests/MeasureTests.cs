@@ -24,6 +24,88 @@ public static class MeasureTests
         Geometry();
         Marks();
         Sheets();
+        Snapping();
+    }
+
+    /// <summary>
+    /// Pulling a measurement onto the drawing's own lines. It works on the
+    /// pixels of the tile under the pointer, so these are rasters: white paper
+    /// with black lines on it, which is what a plan is.
+    /// </summary>
+    private static void Snapping()
+    {
+        Section("Medir — pegarse al dibujo");
+
+        const int W = 64, H = 64;
+
+        // A wall running down the middle.
+        var wall = Paper(W, H);
+        for (int y = 0; y < H; y++) Ink(wall, W, 32, y);
+
+        Check("a point beside a line is pulled onto it",
+            InkSnap.Nearest(wall, W, H, new Vector2(28, 20), 8) is { } onto
+            && Math.Abs(onto.X - 32) < 0.01f && Math.Abs(onto.Y - 20) < 0.01f);
+
+        Check("and a point on bare paper is left where it is",
+            InkSnap.Nearest(Paper(W, H), W, H, new Vector2(10, 10), 8) is null);
+
+        Check("a line further than the reach does not pull",
+            InkSnap.Nearest(wall, W, H, new Vector2(10, 20), 8) is null);
+
+        // Two walls meeting: the corner at (20, 40), one arm going right and
+        // one going up.
+        var corner = Paper(W, H);
+        for (int x = 20; x < 60; x++) Ink(corner, W, x, 40);
+        for (int y = 8; y <= 40; y++) Ink(corner, W, 20, y);
+
+        Check("a click near a corner lands on the corner, not on a wall",
+            InkSnap.Snap(corner, W, H, new Vector2(24, 36), 10) is { } vertex
+            && Vector2.Distance(vertex, new Vector2(20, 40)) < 2f,
+            $"{InkSnap.Snap(corner, W, H, new Vector2(24, 36), 10)}");
+
+        // And the same drawing, clicked halfway along one of the walls: there
+        // is no corner there, so it must not invent one.
+        Check("a click along a wall stays on the wall",
+            InkSnap.Snap(corner, W, H, new Vector2(45, 37), 6) is { } along
+            && Math.Abs(along.Y - 40) < 0.01f && Math.Abs(along.X - 45) < 2f,
+            $"{InkSnap.Snap(corner, W, H, new Vector2(45, 37), 6)}");
+
+        // A diagonal spreads along both axes exactly as a corner does, and the
+        // corner of its box is a point on bare paper. Snapping there would put
+        // the end of a measurement where the drawing has nothing.
+        var diagonal = Paper(W, H);
+        for (int i = 0; i < 48; i++) Ink(diagonal, W, 8 + i, 8 + i);
+
+        Check("a point beside a diagonal lands on the nearest bit of it, not along it",
+            InkSnap.Snap(diagonal, W, H, new Vector2(30, 34), 12) is { } onLine
+            && Math.Abs(onLine.X - onLine.Y) < 1.5f
+            && Vector2.Distance(onLine, new Vector2(30, 34)) < 4f,
+            $"{InkSnap.Snap(diagonal, W, H, new Vector2(30, 34), 12)}");
+
+        // Pale hatching is not a line: a plan is full of it, and snapping to it
+        // would take the measurement off the wall it was aimed at.
+        var hatched = Paper(W, H);
+        for (int y = 0; y < H; y++) Grey(hatched, W, 24, y, 200);
+        for (int y = 0; y < H; y++) Ink(hatched, W, 40, y);
+
+        Check("hatching is not ink to snap to",
+            InkSnap.Nearest(hatched, W, H, new Vector2(30, 20), 12) is { } skipped
+            && Math.Abs(skipped.X - 40) < 0.01f);
+    }
+
+    private static byte[] Paper(int width, int height)
+    {
+        var bgra = new byte[width * height * 4];
+        Array.Fill(bgra, (byte)255);
+        return bgra;
+    }
+
+    private static void Ink(byte[] bgra, int width, int x, int y) => Grey(bgra, width, x, y, 0);
+
+    private static void Grey(byte[] bgra, int width, int x, int y, byte tone)
+    {
+        int at = ((y * width) + x) * 4;
+        bgra[at] = bgra[at + 1] = bgra[at + 2] = tone;
     }
 
     private static void Calibration()

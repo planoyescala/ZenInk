@@ -1190,6 +1190,27 @@
                             Opacity="0.7"
                             TextAlignment="Center" />
 
+                        <ToggleButton
+                            x:Name="SnapToolButton"
+                            Click="OnSnapClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Pegar los puntos a las líneas del plano">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <!--
+                                    Un punto sobre el cruce de dos líneas: eso
+                                    es lo que hace, y a 18 px se lee sin
+                                    nombrarlo.
+                                -->
+                                <controls:ToolIcon
+                                    Style="{StaticResource BarIconStyle}"
+                                    Accent="{ThemeResource IconMeasureBrush}"
+                                    AccentData="M10 7.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 1 0 0-4.8Z"
+                                    Data="M3 10h14 M10 3v14" />
+                                <TextBlock Text="Ajustar" />
+                            </StackPanel>
+                        </ToggleButton>
+
                         <Rectangle Style="{StaticResource ToolbarSeparatorStyle}" />
 
                         <ToggleButton
@@ -1955,6 +1976,25 @@
                             Padding="16,20"
                             Spacing="16"
                             Visibility="Collapsed">
+                            <!--
+                                Lo que la marca elegida mide, con lo que no cabe
+                                en la hoja: un área trae su perímetro, y un
+                                perímetro cerrado trae lo que encierra. Es lo
+                                que se pregunta justo después, y ponerlo sobre
+                                el plano sería tapar el dibujo con dos cifras
+                                donde se pidió una.
+                            -->
+                            <StackPanel x:Name="MeasureDetailSection" Spacing="4" Visibility="Collapsed">
+                                <TextBlock
+                                    FontSize="12"
+                                    Opacity="0.7"
+                                    Text="Esta medida" />
+                                <TextBlock
+                                    x:Name="MeasureDetailText"
+                                    FontSize="14"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+
                             <StackPanel Spacing="4">
                                 <TextBlock
                                     FontSize="12"

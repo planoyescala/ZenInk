@@ -225,11 +225,11 @@ internal static class AnnotationRenderer
             ds.DrawGeometry(outline, SelectionColor, 1.2f, SelectionStroke);
         }
 
-        foreach (var (which, at) in AnnotationHandles.For(mark, rotateOffsetPt))
+        foreach (var (grip, at) in AnnotationHandles.For(mark, rotateOffsetPt))
         {
             var screen = placement.ToScreen(at);
 
-            if (which == MarkHandle.Rotate)
+            if (grip.Which == MarkHandle.Rotate)
             {
                 // A stalk from the top edge, so the knob reads as belonging to
                 // the mark rather than floating over the drawing.
@@ -242,6 +242,18 @@ internal static class AnnotationRenderer
                 continue;
             }
 
+            // A corner of the shape itself is a diamond, and a corner of the
+            // frame a square. They do two different things — one moves a point,
+            // the other stretches everything — and a reader should not have to
+            // drag one to find out which.
+            if (grip.Which == MarkHandle.Vertex)
+            {
+                using var diamond = Diamond(ds, screen, HandleSizeDips / 2f + 1f);
+                ds.FillGeometry(diamond, HandleFill);
+                ds.DrawGeometry(diamond, SelectionColor, 1.4f);
+                continue;
+            }
+
             var handle = new Rect(
                 screen.X - HandleSizeDips / 2f,
                 screen.Y - HandleSizeDips / 2f,
@@ -251,6 +263,18 @@ internal static class AnnotationRenderer
             ds.FillRectangle(handle, HandleFill);
             ds.DrawRectangle(handle, SelectionColor, 1.4f);
         }
+    }
+
+    /// <summary>A square on its corner, for the grips that move one point of a shape.</summary>
+    private static CanvasGeometry Diamond(CanvasDrawingSession ds, Vector2 at, float radius)
+    {
+        using var builder = new CanvasPathBuilder(ds);
+        builder.BeginFigure(new Vector2(at.X, at.Y - radius));
+        builder.AddLine(new Vector2(at.X + radius, at.Y));
+        builder.AddLine(new Vector2(at.X, at.Y + radius));
+        builder.AddLine(new Vector2(at.X - radius, at.Y));
+        builder.EndFigure(CanvasFigureLoop.Closed);
+        return CanvasGeometry.CreatePath(builder);
     }
 
     /// <summary>Builds a Win2D path from the engine's outline, placed on the surface.</summary>
