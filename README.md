@@ -4,6 +4,10 @@ Visor y editor de PDF/planos para Windows 11, unificando visor de alto rendimien
 (estilo Bluebeam/Drawboard), anotación con lápiz, gestión de páginas y captura de
 pantalla integrada en una sola herramienta.
 
+ZenInk es **software libre**, y es una pieza del proyecto **ZenBIM** de
+*plano y escala*: se publica bajo la
+[GNU General Public License v3.0 o posterior](LICENSE).
+
 ## Alcance
 
 1. **Visor de planos de alto rendimiento** — renderizado por tiles sobre PDFium,
@@ -142,3 +146,26 @@ normal es que el usuario marque una distancia conocida. Una medición es una
 anotación: se guarda con el documento y se vuelve a dibujar, así que conviene
 que entre después del hito 2 y no antes, para no montar dos veces la capa que
 persiste sobre el plano.
+
+## Licencia
+
+ZenInk es parte del proyecto **ZenBIM**, de *plano y escala*, y es software
+libre: puedes redistribuirlo y modificarlo bajo los términos de la **GNU
+General Public License** publicada por la Free Software Foundation, en su
+**versión 3 o cualquier posterior**. El texto íntegro está en [`LICENSE`](LICENSE).
+
+    Copyright (c) 2026 plano y escala.
+
+Se distribuye con la esperanza de que sea útil, pero **sin garantía alguna**;
+ni siquiera la garantía implícita de comerciabilidad o de idoneidad para un
+propósito concreto. Ver la Licencia para los detalles.
+
+Cada fichero de código lleva su propia cabecera con este mismo aviso, que es lo
+que pide la GPL para que la licencia viaje con el código aunque un fichero se
+copie suelto.
+
+**Lo que aporta cada dependencia y bajo qué licencia** está en
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md), con los textos completos en
+`licenses/`. En corto: PDFium es BSD-3, PDFiumCore es Apache-2.0, y el Windows
+App SDK y Win2D vienen bajo términos de licencia de Microsoft — son la
+plataforma sobre la que corre la app, no parte de ella.

@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!--
+    <copyright file="MainPage.xaml" company="plano y escala">
+    Copyright (c) 2026 plano y escala.
+
+    ZenInk, part of ZenBIM, is free software: you can redistribute it and/or
+    modify it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+    </copyright>
+-->
 <Page
     x:Class="ZenInk_App.MainPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -700,6 +710,20 @@
                                         x:Name="DefaultPdfItem"
                                         Click="OnDefaultPdfClicked"
                                         Text="Abrir los PDF con ZenInk…" />
+
+                                    <MenuFlyoutSeparator />
+
+                                    <!--
+                                        Quién hace el programa y bajo qué licencia se
+                                        puede copiar. La GPL pide que eso se pueda leer
+                                        desde el propio programa, no solo en el
+                                        repositorio: quien instala el MSIX no ve más que
+                                        esta ventana.
+                                    -->
+                                    <MenuFlyoutItem
+                                        x:Name="AboutItem"
+                                        Click="OnAboutClicked"
+                                        Text="Acerca de ZenInk…" />
                                 </MenuFlyout>
                             </Button.Flyout>
                         </Button>

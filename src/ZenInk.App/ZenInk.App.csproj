@@ -17,9 +17,9 @@
     <Product>ZenInk</Product>
     <Company>plano y escala</Company>
     <Authors>plano y escala</Authors>
-    <Copyright>© plano y escala</Copyright>
+    <Copyright>© 2026 plano y escala. Software libre bajo GPL-3.0-or-later.</Copyright>
     <AssemblyTitle>ZenInk</AssemblyTitle>
-    <Description>Visor y editor de planos PDF</Description>
+    <Description>Visor y editor de planos PDF. Parte del proyecto ZenBIM de plano y escala.</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -33,6 +33,15 @@
     -->
     <Content Include="Assets\*.png" />
     <Content Include="Assets\AppIcon.ico" />
+
+    <!--
+      La licencia y los avisos de terceros entran en el paquete, no solo en el
+      repositorio: la GPL pide que la copia viaje con el binario, y para quien
+      instala el MSIX el binario es todo lo que hay.
+    -->
+    <Content Include="..\..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\licenses\*.txt" Link="licenses\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

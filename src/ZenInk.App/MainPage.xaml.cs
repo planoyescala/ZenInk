@@ -1,3 +1,15 @@
+//-----------------------------------------------------------------------------------------
+// <copyright file="MainPage.xaml.cs" company="plano y escala">
+// Copyright (c) 2026 plano y escala.
+//
+// ZenInk, part of ZenBIM, is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+// </copyright>
+// <author>plano y escala</author>
+//-----------------------------------------------------------------------------------------
+
 using System.Globalization;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.UI.Xaml;
@@ -141,6 +153,78 @@ public sealed partial class MainPage : Page
         ThemeSystemItem.IsChecked = AppTheme.Current == ElementTheme.Default;
         ThemeLightItem.IsChecked = AppTheme.Current == ElementTheme.Light;
         ThemeDarkItem.IsChecked = AppTheme.Current == ElementTheme.Dark;
+    }
+
+    // --- acerca de --------------------------------------------------------
+
+    /// <summary>
+    /// What the program is, who makes it, and under what licence it may be
+    /// copied.
+    ///
+    /// The version is asked of the package rather than written here: an MSIX
+    /// carries its own, and a number typed into a dialog is one that goes stale
+    /// the first time the manifest moves.
+    /// </summary>
+    private async void OnAboutClicked(object sender, RoutedEventArgs e)
+    {
+        var v = Windows.ApplicationModel.Package.Current.Id.Version;
+        string version = $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
+
+        var body = new StackPanel { Spacing = 10, Width = 420 };
+
+        body.Children.Add(new TextBlock
+        {
+            Text = $"Versión {version}",
+            Opacity = 0.7,
+        });
+
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = "Visor y editor de planos PDF. Parte del proyecto ZenBIM, "
+                 + "de plano y escala.",
+        });
+
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text = "© 2026 plano y escala.\n\n"
+                 + "ZenInk es software libre: puedes redistribuirlo y modificarlo bajo "
+                 + "los términos de la GNU General Public License publicada por la Free "
+                 + "Software Foundation, en su versión 3 o cualquier posterior.\n\n"
+                 + "Se distribuye con la esperanza de que sea útil, pero SIN GARANTÍA "
+                 + "ALGUNA; ni siquiera la garantía implícita de comerciabilidad o de "
+                 + "idoneidad para un propósito concreto. Ver la Licencia para más "
+                 + "detalles.",
+        });
+
+        body.Children.Add(new HyperlinkButton
+        {
+            Content = "Leer la licencia completa (GPL-3.0)",
+            NavigateUri = new Uri("https://www.gnu.org/licenses/gpl-3.0.html"),
+            Padding = new Thickness(0),
+        });
+
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.7,
+            Text = "El texto de la licencia y los avisos de terceros viajan dentro del "
+                 + "programa, junto al ejecutable.\n\n"
+                 + "ZenInk dibuja los planos con PDFium (BSD-3-Clause) a través de "
+                 + "PDFiumCore (Apache-2.0), sobre WinUI 3 y Win2D.",
+        });
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "ZenInk",
+            Content = body,
+            CloseButtonText = "Cerrar",
+        };
+
+        AppTheme.Dress(dialog);
+        await Dialogs.ShowAsync(dialog);
     }
 
     /// <summary>

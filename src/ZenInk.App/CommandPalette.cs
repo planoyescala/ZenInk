@@ -1,3 +1,15 @@
+//-----------------------------------------------------------------------------------------
+// <copyright file="CommandPalette.cs" company="plano y escala">
+// Copyright (c) 2026 plano y escala.
+//
+// ZenInk, part of ZenBIM, is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+// </copyright>
+// <author>plano y escala</author>
+//-----------------------------------------------------------------------------------------
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -86,6 +98,9 @@ public sealed partial class MainPage
             new("Tema del sistema", "", "apariencia claro oscuro", () => OnThemeSystemClicked(this, empty)),
             new("Tema claro", "", "apariencia blanco", () => OnThemeLightClicked(this, empty)),
             new("Tema oscuro", "", "apariencia negro", () => OnThemeDarkClicked(this, empty)),
+
+            new("Acerca de ZenInk", "", "versión licencia gpl software libre zenbim plano y escala créditos",
+                () => OnAboutClicked(this, empty)),
         };
 
         // The marking tools, by name. Since they moved into the ribbon they
