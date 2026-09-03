@@ -74,6 +74,11 @@ public sealed partial class MainPage : Page
         InitializeComponent();
         SyncThemeMenu();
         UpdateChrome();
+
+        // Fixed for the life of the process, so it is written once and not on
+        // every refresh of the start page.
+        AboutLineText.Text = $"ZenInk {PackageVersion} · software libre (GPL-3.0) · parte de ZenBIM";
+
         Loaded += OnLoaded;
     }
 
@@ -158,23 +163,31 @@ public sealed partial class MainPage : Page
     // --- acerca de --------------------------------------------------------
 
     /// <summary>
-    /// What the program is, who makes it, and under what licence it may be
-    /// copied.
-    ///
-    /// The version is asked of the package rather than written here: an MSIX
+    /// The version, asked of the package rather than written by hand: an MSIX
     /// carries its own, and a number typed into a dialog is one that goes stale
     /// the first time the manifest moves.
     /// </summary>
+    private static string PackageVersion
+    {
+        get
+        {
+            var v = Windows.ApplicationModel.Package.Current.Id.Version;
+            return $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
+        }
+    }
+
+    /// <summary>
+    /// What the program is, who makes it, and under what licence it may be
+    /// copied. Reached from the preferences menu, from the command palette, and
+    /// from the line at the foot of the start page.
+    /// </summary>
     private async void OnAboutClicked(object sender, RoutedEventArgs e)
     {
-        var v = Windows.ApplicationModel.Package.Current.Id.Version;
-        string version = $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
-
         var body = new StackPanel { Spacing = 10, Width = 420 };
 
         body.Children.Add(new TextBlock
         {
-            Text = $"Versión {version}",
+            Text = $"Versión {PackageVersion}",
             Opacity = 0.7,
         });
 

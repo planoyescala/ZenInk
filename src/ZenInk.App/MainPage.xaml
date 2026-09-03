@@ -1517,6 +1517,31 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
+
+                        <!--
+                            Quién hace esto y bajo qué licencia se puede copiar,
+                            al pie y en pequeño. Aquí y no en la cinta: cuando no
+                            hay plano abierto el ojo ya está en esta pantalla, y
+                            un botón en la fila de comandos le quitaría ancho a
+                            los que se usan cada minuto para decir algo que se lee
+                            una vez. El texto lo pone el código, que es quien sabe
+                            la versión del paquete.
+                        -->
+                        <Button
+                            x:Name="AboutLineButton"
+                            Margin="0,18,0,0"
+                            Padding="8,4"
+                            HorizontalAlignment="Center"
+                            AutomationProperties.Name="Acerca de ZenInk"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="OnAboutClicked"
+                            CornerRadius="6">
+                            <TextBlock
+                                x:Name="AboutLineText"
+                                FontSize="12"
+                                Opacity="0.45" />
+                        </Button>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
