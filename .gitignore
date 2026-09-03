@@ -30,3 +30,6 @@ BundleArtifacts/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# El paquete instalable y su certificado: se generan, no se versionan.
+dist/

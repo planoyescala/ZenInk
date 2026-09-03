@@ -24,8 +24,10 @@ namespace ZenInk_App;
 /// <summary>
 /// The offer to open PDFs with ZenInk.
 ///
-/// The package manifest declares that ZenInk handles <c>.pdf</c>, which puts it
-/// in "Abrir con" and in the Windows list of default applications. It does not
+/// ZenInk declares that it handles <c>.pdf</c> — by package manifest when it is
+/// installed as an MSIX, and by registry when it is installed by the Inno Setup
+/// installer. Either way it lands in "Abrir con" and in the Windows list of
+/// default applications, which is what makes the offer worth making. It does not
 /// make it the default: since Windows 10 that choice is the reader's alone and
 /// is signed per user, so nothing a program writes will take. What is left is
 /// to notice that we are not the default, say so once, and open the page where
@@ -49,8 +51,9 @@ public static class DefaultPdfApp
 
     /// <summary>
     /// Asks, if there is anything to ask. Silent when ZenInk already opens
-    /// PDFs, when the reader has said no before, or when this copy is running
-    /// without a package and is therefore not registered as a handler at all.
+    /// PDFs, when the reader has said no before, or when this copy is not
+    /// registered as a handler — neither by package nor by registry — and so
+    /// has no entry in the settings page to send anyone to.
     /// </summary>
     public static async Task OfferAsync(XamlRoot? root)
     {
@@ -61,7 +64,7 @@ public static class DefaultPdfApp
         Handler current = CurrentHandler();
         bool ours = PdfAssociation.IsOurs(current.AppId, current.Executable, OurAppId(), Environment.ProcessPath);
 
-        if (!PdfAssociation.ShouldOffer(IsPackaged(), ours, Declined())) return;
+        if (!PdfAssociation.ShouldOffer(IsPackaged() || RegisteredAsHandler(), ours, Declined())) return;
 
         var explanation = new TextBlock
         {
@@ -117,7 +120,49 @@ public static class DefaultPdfApp
         await Launcher.LaunchUriAsync(new Uri("ms-settings:defaultapps"));
     }
 
-    /// <summary>Whether this copy could be a registered handler at all.</summary>
+    /// <summary>
+    /// The ProgId the Inno Setup installer writes. Spelled here and in
+    /// <c>instalador\ZenInk.iss</c>: change one and the other has to follow.
+    /// </summary>
+    private const string ProgId = "ZenInk.pdf";
+
+    /// <summary>
+    /// Whether an unpackaged copy is registered as a PDF handler, which is what
+    /// the installer's registry entries do. Asked about this very executable —
+    /// a leftover ProgId from an installation that was removed, or from another
+    /// copy somewhere else, must not make this one claim to be in the list.
+    /// </summary>
+    private static bool RegisteredAsHandler()
+    {
+        string? ours = Environment.ProcessPath;
+        if (ours is null) return false;
+
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                $@"Software\Classes\{ProgId}\shell\open\command");
+
+            if (key?.GetValue(null) is not string command) return false;
+
+            // The command is «"…\ZenInk.App.exe" "%1"»: what is wanted is the
+            // first quoted piece.
+            string[] parts = command.Split('"', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return false;
+
+            return string.Equals(
+                System.IO.Path.GetFullPath(parts[0].Trim()),
+                System.IO.Path.GetFullPath(ours),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            // A registry that will not answer, or a path that will not resolve:
+            // not offering is the quiet side of the mistake.
+            return false;
+        }
+    }
+
+    /// <summary>Whether this copy runs with package identity.</summary>
     public static bool IsPackaged()
     {
         int length = 0;
@@ -128,32 +173,9 @@ public static class DefaultPdfApp
         return GetCurrentPackageFullName(ref length, null) != 15700;
     }
 
-    private static bool Declined()
-    {
-        try
-        {
-            return ApplicationData.Current.LocalSettings.Values[DeclinedKey] is true;
-        }
-        catch (Exception)
-        {
-            // No store means no record of a refusal, and asking once is the
-            // safe side of that.
-            return false;
-        }
-    }
+    private static bool Declined() => LocalSettings.Get(DeclinedKey) == bool.TrueString;
 
-    private static void Decline()
-    {
-        try
-        {
-            ApplicationData.Current.LocalSettings.Values[DeclinedKey] = true;
-        }
-        catch (Exception)
-        {
-            // Losing the preference means asking again next time, which is a
-            // nuisance. Crashing on a settings write is not.
-        }
-    }
+    private static void Decline() => LocalSettings.Set(DeclinedKey, bool.TrueString);
 
     /// <summary>
     /// How the shell knows this application. Absent without a package, and

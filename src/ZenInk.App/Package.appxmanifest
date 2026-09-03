@@ -8,8 +8,17 @@
   xmlns:systemai="http://schemas.microsoft.com/appx/manifest/systemai/windows10"
   IgnorableNamespaces="uap rescap systemai">
 
+  <!--
+    El nombre de identidad no se ve, pero es con lo que Windows distingue una
+    aplicación de otra: cambiarlo la convierte en otra, con su asociación de
+    PDF y sus ajustes en blanco. Se deja de ser el GUID de la plantilla ahora,
+    antes de que haya una segunda máquina donde deshacerlo cueste el doble.
+
+    El `Publisher` tiene que coincidir letra por letra con el sujeto del
+    certificado que firme el paquete, o la instalación se cae sin decir por qué.
+  -->
   <Identity
-    Name="A4591607-E02F-4E53-8EEA-B13F1FB2EC71"
+    Name="planoyescala.ZenInk"
     Publisher="CN=plano y escala"
     Version="1.0.0.0" />
 

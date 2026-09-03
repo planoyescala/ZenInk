@@ -101,9 +101,13 @@ public static class PdfAssociationTests
     {
         Section("PdfAssociation — whether to ask");
 
-        Check("packaged, not the default, never asked", PdfAssociation.ShouldOffer(true, false, false));
+        Check("registered, not the default, never asked", PdfAssociation.ShouldOffer(true, false, false));
         Check("already the default: nothing to ask", !PdfAssociation.ShouldOffer(true, true, false));
         Check("said no once: not asked again", !PdfAssociation.ShouldOffer(true, false, true));
-        Check("unpackaged: not registered, so not offered", !PdfAssociation.ShouldOffer(false, false, false));
+
+        // Registered by the registry rather than by a package manifest is
+        // still registered: an installed copy has an entry in the Windows list
+        // to point at, and used to be left silent for asking the wrong question.
+        Check("not registered at all: nothing to point at", !PdfAssociation.ShouldOffer(false, false, false));
     }
 }

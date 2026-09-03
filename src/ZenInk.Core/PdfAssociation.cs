@@ -49,14 +49,19 @@ public static class PdfAssociation
     /// <summary>
     /// Whether to offer to make ZenInk the default.
     ///
-    /// Not without package identity: the association is declared by the package
-    /// manifest, so a copy running unpackaged is not registered as a handler
-    /// and the settings page would have nothing to offer. Sending a reader
-    /// there to look for an entry that is not in the list is worse than saying
-    /// nothing.
+    /// Not unless this copy is registered as a handler: the settings page would
+    /// have nothing to offer, and sending a reader there to look for an entry
+    /// that is not in the list is worse than saying nothing.
+    ///
+    /// Registered is not the same as packaged, and that is the whole point of
+    /// the parameter. A package declares the association in its manifest; an
+    /// installation made by the Inno Setup installer declares it in the
+    /// registry. Both end up in the same Windows list, so both have something
+    /// to offer — and asking about the package instead was what left a
+    /// perfectly registered copy silent.
     /// </summary>
-    public static bool ShouldOffer(bool packaged, bool isDefault, bool declined) =>
-        packaged && !isDefault && !declined;
+    public static bool ShouldOffer(bool registered, bool isDefault, bool declined) =>
+        registered && !isDefault && !declined;
 
     /// <summary>
     /// The drawings named by a launch, taken from its arguments.

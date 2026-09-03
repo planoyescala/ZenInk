@@ -5,6 +5,12 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>ZenInk_App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!--
+      El icono dentro del propio .exe. Empaquetado lo pone el manifiesto, pero
+      en una instalación suelta esto es lo único que tienen el Explorador, el
+      acceso directo y Alt+Tab.
+    -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant())</RuntimeIdentifier>
     <PublishProfile Condition="Exists('Properties\PublishProfiles\win-$(Platform).pubxml')">win-$(Platform).pubxml</PublishProfile>
@@ -31,8 +37,14 @@
       que usa la barra de tareas al 150 %, y Windows lo suplía ampliando el
       de 24.
     -->
-    <Content Include="Assets\*.png" />
-    <Content Include="Assets\AppIcon.ico" />
+    <!--
+      Copiados junto al ejecutable, y no solo metidos en el paquete: una
+      instalación suelta —la que hace el instalador de Inno Setup— resuelve
+      `ms-appx:///Assets/…` contra la carpeta del .exe, y sin ellos la marca de
+      la tira de pestañas desaparece sin dar ningún error.
+    -->
+    <Content Include="Assets\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" />
 
     <!--
       La licencia y los avisos de terceros entran en el paquete, no solo en el

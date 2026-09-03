@@ -62,28 +62,7 @@ public static class TimestampSetting
         set => Write(LtvKey, value ? bool.TrueString : bool.FalseString);
     }
 
-    private static string? Read(string key)
-    {
-        try
-        {
-            return ApplicationData.Current.LocalSettings.Values[key] as string;
-        }
-        catch
-        {
-            // An unreadable setting is not worth failing a signature over.
-            return null;
-        }
-    }
+    private static string? Read(string key) => LocalSettings.Get(key);
 
-    private static void Write(string key, string value)
-    {
-        try
-        {
-            ApplicationData.Current.LocalSettings.Values[key] = value;
-        }
-        catch
-        {
-            // Losing the preference is survivable; crashing while signing is not.
-        }
-    }
+    private static void Write(string key, string value) => LocalSettings.Set(key, value);
 }

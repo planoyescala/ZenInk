@@ -25,7 +25,14 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
 
         ExtendsContentIntoTitleBar = true;
-        AppWindow.SetIcon("Assets/AppIcon.ico");
+
+        // Por ruta completa, no relativa. Empaquetado daba igual —una ruta
+        // relativa se resuelve contra la carpeta del paquete—, pero en una
+        // instalación suelta se resuelve contra el directorio de trabajo, que
+        // al abrir un plano desde el Explorador es la carpeta del plano. Ahí no
+        // hay ningún icono, y el error es silencioso: la ventana se queda con
+        // el icono genérico de Windows en la barra de tareas.
+        AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico"));
 
         RootFrame.Navigate(typeof(MainPage));
     }

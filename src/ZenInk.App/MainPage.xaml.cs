@@ -171,8 +171,17 @@ public sealed partial class MainPage : Page
     {
         get
         {
-            var v = Windows.ApplicationModel.Package.Current.Id.Version;
-            return $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
+            // Asked before it is used: without a package there is nothing to
+            // ask, and Package.Current answers that with an exception.
+            if (DefaultPdfApp.IsPackaged())
+            {
+                var v = Windows.ApplicationModel.Package.Current.Id.Version;
+                return $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
+            }
+
+            // Installed from the Inno Setup installer: the assembly carries the
+            // same number, put there by the project.
+            return typeof(MainPage).Assembly.GetName().Version?.ToString() ?? "1.0.0.0";
         }
     }
 

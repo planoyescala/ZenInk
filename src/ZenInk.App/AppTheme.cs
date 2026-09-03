@@ -100,33 +100,10 @@ public static class AppTheme
         titleBar.ButtonPressedForegroundColor = foreground;
     }
 
-    private static ElementTheme Load()
-    {
-        try
-        {
-            object? stored = ApplicationData.Current.LocalSettings.Values[SettingKey];
-            if (stored is string name && Enum.TryParse(name, out ElementTheme theme))
-            {
-                return theme;
-            }
-        }
-        catch
-        {
-            // An unreadable setting is not worth failing startup over.
-        }
+    private static ElementTheme Load() =>
+        Enum.TryParse(LocalSettings.Get(SettingKey), out ElementTheme theme)
+            ? theme
+            : ElementTheme.Default;
 
-        return ElementTheme.Default;
-    }
-
-    private static void Save(ElementTheme theme)
-    {
-        try
-        {
-            ApplicationData.Current.LocalSettings.Values[SettingKey] = theme.ToString();
-        }
-        catch
-        {
-            // Losing the preference is survivable; crashing on a settings write is not.
-        }
-    }
+    private static void Save(ElementTheme theme) => LocalSettings.Set(SettingKey, theme.ToString());
 }
