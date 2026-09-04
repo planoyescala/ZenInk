@@ -25,12 +25,18 @@ AppCopyright=© 2026 {#MyAppPublisher} — GPLv3
 ; --- ESTÉTICA Y BIENVENIDA ---
 WizardStyle=modern
 
-; La marca de plano y escala, no la de ZenInk: este icono es el del asistente
-; —el que sale en la barra de tareas mientras instala y en la carpeta de
-; descargas—, y ahí quien firma es quien hace el programa. El icono de ZenInk lo
-; lleva el propio ejecutable, que es donde significa algo.
-; Copiado al repositorio a propósito: es el mismo dibujo que usa el instalador
-; de ZenBIM, pero depender de la carpeta de otro proyecto se rompe solo.
+; La marca de plano y escala, no la de ZenInk, y ahora también en el banner: el
+; asistente es el que hace el programa hablando, no el programa. El icono de
+; ZenInk lo lleva el propio ejecutable, que es donde significa algo — y donde
+; el usuario lo va a buscar después.
+; Es el mismo dibujo que el instalador de ZenBIM, a propósito: dos programas de
+; la misma casa se instalan igual, y quien ya instaló uno reconoce el segundo.
+; Copiado al repositorio también a propósito: depender de la carpeta de otro
+; proyecto se rompe solo.
+;
+; El banner sangra por los cuatro lados y no lleva ni título ni pie. Lo que
+; dicen las palabras ya está escrito al lado, en la página de bienvenida; una
+; imagen que lo repite en pequeño solo compite con ella.
 SetupIconFile={#AssetsDir}\PlanoYEscala.ico
 
 WizardImageFile={#AssetsDir}\Banner.png
@@ -74,6 +80,22 @@ VersionInfoVersion={#MyAppVersion}
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=ZenInk Installer (Open Source)
 VersionInfoCopyright=© 2026 {#MyAppPublisher} - Licensed under GPLv3
+
+; --- FIRMA ---
+; Sin firma, Windows no enseña el programa: enseña la pantalla azul de
+; SmartScreen y lo llama «de editor desconocido». Y como no hay certificado al
+; que colgar la reputación, esta se cuelga del propio archivo, así que cada
+; compilación vuelve a empezar de cero por buena que fuera la anterior.
+;
+; Con quién se firma no vive aquí —una clave no se versiona—: `Publicar.ps1`
+; pasa la orden entera con /Szenink=… y define Firmar. Sin ella esto compila
+; igual y sale un instalador sin firmar, que es lo que había hasta ahora.
+#ifdef Firmar
+SignTool=zenink
+; El desinstalador también. Lo genera el instalador, se queda en el ordenador y
+; también se ejecuta; firmar solo lo que se descarga deja sin firmar lo que dura.
+SignedUninstaller=yes
+#endif
 
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"

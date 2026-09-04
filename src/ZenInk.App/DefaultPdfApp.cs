@@ -64,14 +64,14 @@ public static class DefaultPdfApp
         Handler current = CurrentHandler();
         bool ours = PdfAssociation.IsOurs(current.AppId, current.Executable, OurAppId(), Environment.ProcessPath);
 
-        if (!PdfAssociation.ShouldOffer(IsPackaged() || RegisteredAsHandler(), ours, Declined())) return;
+        if (!PdfAssociation.ShouldOffer(IsRegistered(), ours, Declined())) return;
 
         var explanation = new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
             Text = current.FriendlyName is { Length: > 0 } name
-                ? $"Ahora los PDF se abren con {name}. Windows solo permite cambiarlo desde sus ajustes, así que ZenInk no puede hacerlo por su cuenta: se abrirá la página de aplicaciones predeterminadas, y ahí ZenInk aparece ya en la lista."
-                : "Windows solo permite cambiar esto desde sus ajustes, así que ZenInk no puede hacerlo por su cuenta: se abrirá la página de aplicaciones predeterminadas, y ahí ZenInk aparece ya en la lista.",
+                ? $"Ahora los PDF se abren con {name}. Este cambio Windows lo reserva a quien usa el ordenador, así que ZenInk no puede hacerlo solo: se abre su ficha en los ajustes, con un botón «Establecer como predeterminado» para los .pdf."
+                : "Este cambio Windows lo reserva a quien usa el ordenador, así que ZenInk no puede hacerlo solo: se abre la ficha de ZenInk en los ajustes, con un botón «Establecer como predeterminado» para los .pdf.",
         };
 
         var never = new CheckBox { Content = "No volver a preguntar", Margin = new Thickness(0, 16, 0, 0) };
@@ -104,27 +104,66 @@ public static class DefaultPdfApp
     }
 
     /// <summary>
-    /// Opens the Windows page where the default is chosen, at ZenInk's own
-    /// entry when the version at hand knows how to go there.
+    /// Opens the Windows page where the default is chosen — ZenInk's own page
+    /// whenever this copy can be named there, which is a button rather than a
+    /// hunt through the list of every program on the machine.
+    ///
+    /// No fallback if the launch fails. There is nothing left to fall back to:
+    /// the address is built from what this copy actually is, and a shell that
+    /// will not open ms-settings will not open the plain page either.
     /// </summary>
-    public static async Task OpenSettingsAsync()
-    {
-        string? appId = OurAppId();
-
-        if (appId is { Length: > 0 } &&
-            await Launcher.LaunchUriAsync(new Uri($"ms-settings:defaultapps?registeredAUMID={Uri.EscapeDataString(appId)}")))
-        {
-            return;
-        }
-
-        await Launcher.LaunchUriAsync(new Uri("ms-settings:defaultapps"));
-    }
+    public static async Task OpenSettingsAsync() =>
+        await Launcher.LaunchUriAsync(new Uri(PdfAssociation.SettingsUri(OurAppId(), RegisteredName())));
 
     /// <summary>
     /// The ProgId the Inno Setup installer writes. Spelled here and in
     /// <c>instalador\ZenInk.iss</c>: change one and the other has to follow.
     /// </summary>
     private const string ProgId = "ZenInk.pdf";
+
+    /// <summary>
+    /// The name under <c>RegisteredApplications</c>, spelled the same way in
+    /// <c>instalador\ZenInk.iss</c>. Change one and the other has to follow, or
+    /// the settings page opens on nothing.
+    /// </summary>
+    private const string RegisteredApplication = "ZenInk";
+
+    /// <summary>
+    /// The name the installer wrote into <c>Software\RegisteredApplications</c>,
+    /// or null when this copy is not there.
+    ///
+    /// It is that entry, and not the ProgId, that puts ZenInk in the Windows
+    /// list of applications and gives it a page of its own — so it is also the
+    /// only thing that makes the short address worth trying. Asked for rather
+    /// than assumed: the association task in the installer is optional, and a
+    /// copy installed with it unticked would otherwise be sent to a page that
+    /// does not exist.
+    /// </summary>
+    private static string? RegisteredName()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\RegisteredApplications");
+
+            return key?.GetValue(RegisteredApplication) is string ? RegisteredApplication : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Whether Windows knows this copy opens PDFs — by package manifest or by
+    /// the installer's registry entries.
+    ///
+    /// Public because the menu asks the same question: an entry that offers to
+    /// change the default is worth showing exactly when there is a page to
+    /// send anyone to. It used to ask whether the copy was packaged, which hid
+    /// the entry on every installed copy — the same wrong question that once
+    /// kept the dialog quiet.
+    /// </summary>
+    public static bool IsRegistered() => IsPackaged() || RegisteredAsHandler();
 
     /// <summary>
     /// Whether an unpackaged copy is registered as a PDF handler, which is what

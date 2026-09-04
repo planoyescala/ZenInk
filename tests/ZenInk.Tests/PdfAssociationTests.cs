@@ -22,7 +22,52 @@ public static class PdfAssociationTests
     {
         Recognising();
         Offering();
+        Sending();
         Arguments();
+    }
+
+    private static void Sending()
+    {
+        Section("PdfAssociation — where the reader is sent to change it");
+
+        const string aumid = "planoyescala.ZenInk_8wekyb3d8bbwe!App";
+
+        // The short addresses are the whole point: they land on the
+        // application's own page, where Windows 11 puts one button per type it
+        // declares. The bare page is the list of every program on the machine.
+        Check(
+            "a package is named by its model id",
+            PdfAssociation.SettingsUri(aumid, null).StartsWith("ms-settings:defaultapps?registeredAUMID="));
+
+        Check(
+            "an installed copy is named by its registered name",
+            PdfAssociation.SettingsUri(null, "ZenInk") == "ms-settings:defaultapps?registeredAppUser=ZenInk");
+
+        // Both at once cannot happen today, but the order is not arbitrary: the
+        // model id is what the association actually stores for a package.
+        Check(
+            "the model id wins when there is one",
+            PdfAssociation.SettingsUri(aumid, "ZenInk").Contains("registeredAUMID"));
+
+        Check(
+            "with nothing to name, the plain page is all there is",
+            PdfAssociation.SettingsUri(null, null) == "ms-settings:defaultapps");
+
+        Check(
+            "and blankness is nothing to name either",
+            PdfAssociation.SettingsUri("   ", "") == "ms-settings:defaultapps");
+
+        // A name goes into a query string, so what is legal in the registry has
+        // to survive the trip. Firefox registers itself as
+        // «Firefox-308046B0AF4A39CB»; others have spaces.
+        Check(
+            "a name with a space is escaped, not broken",
+            PdfAssociation.SettingsUri(null, "Windows Photo Viewer")
+                == "ms-settings:defaultapps?registeredAppUser=Windows%20Photo%20Viewer");
+
+        Check(
+            "a hyphen is left alone",
+            PdfAssociation.SettingsUri(null, "Firefox-308046B0AF4A39CB").EndsWith("=Firefox-308046B0AF4A39CB"));
     }
 
     private static void Arguments()

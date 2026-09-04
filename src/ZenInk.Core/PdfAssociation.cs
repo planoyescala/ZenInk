@@ -64,6 +64,42 @@ public static class PdfAssociation
         registered && !isDefault && !declined;
 
     /// <summary>
+    /// Where to send the reader to change the default.
+    ///
+    /// The plain settings page is the worst of the three and used to be the
+    /// only one an installed copy ever got: it opens the list of every program
+    /// on the machine, where finding ZenInk and then finding <c>.pdf</c> under
+    /// it is a job for somebody who already knows how Windows works. Naming the
+    /// application in the address lands on its own page instead, and Windows 11
+    /// puts a single «Establecer como predeterminado» button there for each
+    /// type the application declares. One button is the whole difference.
+    ///
+    /// Which name to use depends on how this copy was installed, and they are
+    /// not interchangeable — the shell looks each one up in a different place.
+    /// A package is known by its model id. An installation made by the Inno
+    /// Setup installer is known by the name it wrote into
+    /// <c>Software\RegisteredApplications</c>, which is also what puts it in
+    /// the list in the first place. With neither, there is nothing to name and
+    /// the bare page is all that is left.
+    /// </summary>
+    public static string SettingsUri(string? appUserModelId, string? registeredName)
+    {
+        const string page = "ms-settings:defaultapps";
+
+        if (!string.IsNullOrWhiteSpace(appUserModelId))
+        {
+            return $"{page}?registeredAUMID={Uri.EscapeDataString(appUserModelId.Trim())}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(registeredName))
+        {
+            return $"{page}?registeredAppUser={Uri.EscapeDataString(registeredName.Trim())}";
+        }
+
+        return page;
+    }
+
+    /// <summary>
     /// The drawings named by a launch, taken from its arguments.
     ///
     /// This is how a packaged full-trust application is told what to open: the

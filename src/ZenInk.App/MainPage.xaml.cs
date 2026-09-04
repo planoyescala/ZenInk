@@ -100,9 +100,11 @@ public sealed partial class MainPage : Page
 
         _started = true;
 
-        // Without a package there is no file association and no settings entry
-        // to send anyone to, so the menu does not offer one either.
-        DefaultPdfItem.Visibility = DefaultPdfApp.IsPackaged() ? Visibility.Visible : Visibility.Collapsed;
+        // Offered whenever Windows knows this copy opens PDFs, by package or by
+        // the installer's registry entries. Asking about the package alone hid
+        // the entry on every copy the installer had put there — which is every
+        // copy that is not a developer's.
+        DefaultPdfItem.Visibility = DefaultPdfApp.IsRegistered() ? Visibility.Visible : Visibility.Collapsed;
 
         App.Current.FilesActivated += OnFilesActivated;
         await OpenAllAsync(App.Current.LaunchFiles);
