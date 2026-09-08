@@ -2724,7 +2724,14 @@ public sealed partial class PdfTiledViewer : UserControl
 
         if (zoom)
         {
-            ZoomAt(point.Position, delta > 0 ? ZoomStep : 1.0 / ZoomStep);
+            // By how much the wheel turned, not merely which way. A notch is
+            // 120, but a high-resolution wheel or a precision touchpad reports
+            // the same physical turn as a burst of much smaller deltas — and a
+            // whole step for each of them is a zoom that lurches away from
+            // under the reader, on exactly the machines whose wheel is the
+            // finer one. Raising the step to the fraction turned leaves a plain
+            // wheel where it was and turns the burst back into one glide.
+            ZoomAt(point.Position, Math.Pow(ZoomStep, notches));
         }
         else if (shift)
         {
