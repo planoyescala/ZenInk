@@ -358,6 +358,18 @@ public static class PdfAnnotations
             }
             else if (mark.Kind == AnnotationKind.FreeText)
             {
+                // The ground first, because PDFium builds the appearance in the
+                // order the objects were appended: a box added after the words
+                // is a box on top of them.
+                //
+                // Filled and not stroked. A written mark has no line of its own
+                // — TakesWidth says so — and stroking the box here would put a
+                // border round every label that ever gets a background.
+                if (mark.Style.Fill is not null)
+                {
+                    AddShapeObject(annotation, outline, mark.Style, stroke: false);
+                }
+
                 AddWrittenText(document, annotation, mark, transform);
             }
             else if (subtype == SubtypeStamp)
@@ -407,7 +419,11 @@ public static class PdfAnnotations
     /// is given. Checked end to end: the ink underneath still reads through a
     /// filled box.
     /// </summary>
-    private static void AddShapeObject(FpdfAnnotationT annotation, IReadOnlyList<PathStep> outline, AnnotationStyle style)
+    private static void AddShapeObject(
+        FpdfAnnotationT annotation,
+        IReadOnlyList<PathStep> outline,
+        AnnotationStyle style,
+        bool stroke = true)
     {
         if (outline.Count == 0) return;
 
@@ -422,9 +438,13 @@ public static class PdfAnnotations
                 fpdf_edit.FPDFPageObjSetFillColor(built, fill.R, fill.G, fill.B, style.FillAlpha);
             }
 
-            fpdf_edit.FPDFPageObjSetStrokeColor(built, style.Color.R, style.Color.G, style.Color.B, 255);
-            fpdf_edit.FPDFPageObjSetStrokeWidth(built, style.WidthPt);
-            fpdf_edit.FPDFPathSetDrawMode(built, style.Fill is null ? FillModeNone : FillModeWinding, 1);
+            if (stroke)
+            {
+                fpdf_edit.FPDFPageObjSetStrokeColor(built, style.Color.R, style.Color.G, style.Color.B, 255);
+                fpdf_edit.FPDFPageObjSetStrokeWidth(built, style.WidthPt);
+            }
+
+            fpdf_edit.FPDFPathSetDrawMode(built, style.Fill is null ? FillModeNone : FillModeWinding, stroke ? 1 : 0);
 
             fpdf_annot.FPDFAnnotAppendObject(annotation, built);
             path = null;

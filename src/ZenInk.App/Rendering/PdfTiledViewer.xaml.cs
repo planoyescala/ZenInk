@@ -753,17 +753,240 @@ public sealed partial class PdfTiledViewer : UserControl
             : AnnotationStyle.Default;
     }
 
-    /// <summary>Rewrites the selected comment's text, as the panel is typed into.</summary>
+    /// <summary>
+    /// Rewrites the selected mark's words, letter by letter, as either writer
+    /// is typed into — the box on the sheet or the panel.
+    ///
+    /// Live, so the history does not fill up with one step per keystroke. The
+    /// mark as it stood before the first letter is kept here, and
+    /// <see cref="CommitText"/> turns the whole run into one thing to take
+    /// back. That is the same bargain a drag makes; typing just has no pointer
+    /// coming up to say when it is over.
+    /// </summary>
     public void SetSelectedText(string text)
     {
         if (_selected is not { } selected || _selectedPage < 0) return;
         if (selected.Text == text) return;
 
+        _textFrom ??= selected;
+        _textFromPage = _selectedPage;
+
         var edited = selected.WithText(text);
-        _annotations.Replace(_selectedPage, selected, edited);
+        _annotations.ReplaceLive(_selectedPage, selected, edited);
         _selected = edited;
+
+        // The mark grew or shrank by a letter, so the box being typed into has
+        // to follow it: written words size their own frame.
+        if (_writing is not null && _writing.Id == edited.Id)
+        {
+            _writing = edited;
+            PositionWriter();
+        }
+
         Canvas.Invalidate();
         ViewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Closes off a run of typing as one step in the history.
+    ///
+    /// Called when the caret leaves the words: the box on the sheet closing,
+    /// the panel losing focus, another mark being picked up. Harmless when
+    /// nothing was typed, and it refuses to record across two different marks —
+    /// a step whose two halves are not the same mark is not a change to it.
+    /// </summary>
+    public void CommitText()
+    {
+        if (_textFrom is not { } before) return;
+
+        int page = _textFromPage;
+        _textFrom = null;
+        _textFromPage = -1;
+
+        if (page < 0 || _selected is not { } after || after.Id != before.Id) return;
+
+        _annotations.RememberEdit(page, before, after);
+    }
+
+    // --- escribir sobre la propia hoja ------------------------------------
+
+    /// <summary>
+    /// True while a label is being typed on the sheet.
+    ///
+    /// The chrome asks, because the tool letters are accelerators: they fire on
+    /// the window before the key reaches whatever has the caret. There is
+    /// already a guard for that which asks the focus manager whether a text box
+    /// holds it, and it does not catch this box — the letter still got through,
+    /// changed the tool, dropped the selection and closed the very box it was
+    /// being typed into. Asking the viewer what it is doing needs no such
+    /// answer to be right.
+    /// </summary>
+    public bool IsWriting => _writing is not null;
+
+    /// <summary>The written mark the on-sheet box is open on, if any.</summary>
+    private Annotation? _writing;
+
+    private int _writingPage = -1;
+
+    /// <summary>
+    /// The mark as it stood before the first letter of the run being typed, and
+    /// the sheet it is on. Shared by both writers, because both go through
+    /// <see cref="SetSelectedText"/>.
+    /// </summary>
+    private Annotation? _textFrom;
+
+    private int _textFromPage = -1;
+
+    /// <summary>
+    /// Opens the box for typing straight onto the sheet, over the written mark
+    /// that is selected.
+    ///
+    /// Written text only. A comment is a marker whose words live in the panel —
+    /// that is what makes it a comment and not a label — and a box over the pin
+    /// would cover the very drawing it points at.
+    /// </summary>
+    public void BeginWriting()
+    {
+        if (_selected is not { Kind: AnnotationKind.FreeText } mark || _selectedPage < 0) return;
+
+        _writing = mark;
+        _writingPage = _selectedPage;
+
+        // Put in before the box is shown, so the TextChanged that raises finds
+        // the same words already on the mark and writes nothing back.
+        if (WriteBox.Text != mark.Text) WriteBox.Text = mark.Text;
+
+        Show(true);
+        PositionWriter();
+
+        // Straight away, from inside the press that placed the mark — the same
+        // point at which a comment hands the caret to the panel, which has
+        // always worked.
+        WriteBox.Focus(FocusState.Programmatic);
+        WriteBox.SelectAll();
+
+        // And again once the layout has settled, in case the first attempt was
+        // made before the box had been measured. It costs nothing when the
+        // caret is already here, and what it buys is worth having: a caret that
+        // lands nowhere means the letters reach the window as tool shortcuts,
+        // and the tool they choose drops the selection and shuts the very box
+        // they were meant for.
+        DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () =>
+            {
+                if (_writing is null || WriteBox.FocusState is not FocusState.Unfocused) return;
+
+                WriteBox.Focus(FocusState.Programmatic);
+                WriteBox.SelectAll();
+            });
+    }
+
+    /// <summary>
+    /// Shows or hides the box without taking it out of the tree.
+    ///
+    /// Collapsing it would be the obvious way and it is the wrong one: a
+    /// control that is not laid out cannot be given the caret, and Focus says
+    /// so by quietly returning false rather than failing. Kept realised and
+    /// merely transparent, it is ready the instant it is asked for. Idle it is
+    /// also out of the tab order and deaf to the pointer, so an invisible text
+    /// box cannot catch anything meant for the drawing.
+    /// </summary>
+    private void Show(bool writing)
+    {
+        WriteBox.Opacity = writing ? 1 : 0;
+        WriteBox.IsHitTestVisible = writing;
+        WriteBox.IsTabStop = writing;
+
+        if (!writing)
+        {
+            // Parked off the canvas so a stray caret cannot blink over the
+            // sheet, and narrow so it never widens the layout.
+            WriteBox.Margin = new Thickness(-4000, -4000, 0, 0);
+        }
+    }
+
+    /// <summary>
+    /// Puts the box over the words it is writing, at the size they will be
+    /// drawn at.
+    ///
+    /// Driven from <see cref="ClampOrigin"/>, which every scroll, zoom and
+    /// resize goes through: the box has to travel with the sheet, or it hangs
+    /// in the air over a drawing that has moved out from under it.
+    /// </summary>
+    private void PositionWriter()
+    {
+        if (_writing is not { } mark || _writingPage < 0) return;
+
+        if (PageBoxOf(_writingPage) is not { } page)
+        {
+            // The sheet has been scrolled out of the view, so there is nothing
+            // left to sit over. The words are not lost: the mark holds them.
+            Show(false);
+            return;
+        }
+
+        Show(true);
+
+        var box = PlacementOf(page).ToScreen(mark.FrameBox);
+
+        WriteBox.Margin = new Thickness(box.X, box.Y, 0, 0);
+        WriteBox.MinWidth = Math.Max(52, box.Width);
+
+        // A label can be turned, so the box it is typed in turns with it.
+        //
+        // About its own top-left corner, which is the mark's anchor and the
+        // very point the words are rotated about when they are drawn. Degrees
+        // pass straight through: both this and the engine turn clockwise in a
+        // y-down space, so there is no sign to get wrong.
+        WriteBox.RenderTransform = mark.RotationDeg == 0f
+            ? null
+            : new Microsoft.UI.Xaml.Media.RotateTransform { Angle = mark.RotationDeg };
+
+        // Clamped at both ends: far out, an unclamped size rounds to nothing
+        // and the caret disappears; far in, it would be a control taller than
+        // the window.
+        WriteBox.FontSize = Math.Clamp(mark.Style.FontSizePt * _scale, 8, 96);
+    }
+
+    /// <summary>
+    /// Shuts the box and records the typing as one step.
+    ///
+    /// Not driven by the focus leaving it, which is what the first attempt did
+    /// and why the box shut itself the instant it opened: the canvas takes the
+    /// focus on the very press that places the mark, so the box was made
+    /// visible, handed the caret, and closed again before a key could reach it.
+    /// It closes on the things a reader actually does instead — Escape, a press
+    /// somewhere else on the sheet, or picking up another mark.
+    /// </summary>
+    private void EndWriting()
+    {
+        if (_writing is null) return;
+
+        _writing = null;
+        _writingPage = -1;
+        Show(false);
+
+        CommitText();
+        Canvas.Invalidate();
+    }
+
+    private void OnWriteBoxTextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_writing is null) return;
+
+        SetSelectedText(WriteBox.Text);
+    }
+
+    private void OnWriteBoxKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        // Escape finishes the label. Return does not: a written mark is several
+        // lines as often as one, and this box is where those get typed.
+        if (e.Key != VirtualKey.Escape) return;
+
+        e.Handled = true;
+        EndWriting();
+        Canvas.Focus(FocusState.Programmatic);
     }
 
     /// <summary>
@@ -828,6 +1051,11 @@ public sealed partial class PdfTiledViewer : UserControl
 
     private void ClearAnnotationSelection()
     {
+        // Before the selection goes: shutting the box records what was typed,
+        // and it reads the selection to know what to record it against.
+        EndWriting();
+        CommitText();
+
         _selected = null;
         _selectedPage = -1;
     }
@@ -1512,6 +1740,49 @@ public sealed partial class PdfTiledViewer : UserControl
     public bool SnapToInk { get; set; } = true;
 
     /// <summary>
+    /// Whether a measuring gesture is held to the horizontal or the vertical.
+    /// Off by default: it is the reader who knows whether what they are about
+    /// to measure is square, and a lock nobody asked for is a wrong number
+    /// nobody questions.
+    /// </summary>
+    public bool AxisLock { get; set; }
+
+    /// <summary>
+    /// Whether the next measuring point is held to an axis right now — the
+    /// button, with Shift meaning the opposite of whatever it says.
+    ///
+    /// Shift is what a hand reaches for when the lock is on and this one line
+    /// runs at an angle, and what it reaches for when the lock is off and this
+    /// one line has to be square. Inverting rather than forcing is what makes
+    /// it work both ways round.
+    ///
+    /// Never for an angle: an angle held to the axes can only ever read a
+    /// right angle or a straight one, which is not a measurement, it is the
+    /// tool refusing to answer.
+    /// </summary>
+    private bool AxisHeld(bool shift) =>
+        _tool.IsMeasurement() && _tool != ViewerTool.Angle && (AxisLock ^ shift);
+
+    /// <summary>
+    /// The point a measuring gesture really takes, once both helps have had
+    /// their say.
+    ///
+    /// The axis comes last, after the pull onto the ink. The other order looks
+    /// equivalent and is not: snapping a point that was already square moves it
+    /// off square again, and then the lock is a promise the drawing does not
+    /// keep. This way the locked coordinate is exact and the free one is still
+    /// free to land on a line.
+    /// </summary>
+    private Vector2 Placed(PageBox page, Point position, Vector2? anchor, bool shift)
+    {
+        var point = Snapped(page, SheetPointClamped(page, position));
+
+        return anchor is { } from && AxisHeld(shift)
+            ? AnnotationGeometry.OnAxis(from, point)
+            : point;
+    }
+
+    /// <summary>
     /// How far the pointer may be from a line and still be pulled onto it, in
     /// dips. About four millimetres on screen: near enough that it only catches
     /// what was aimed at, far enough that it catches it.
@@ -2015,6 +2286,7 @@ public sealed partial class PdfTiledViewer : UserControl
 
         _origin = ClampedOrigin(_origin, Canvas.ActualWidth / _scale, Canvas.ActualHeight / _scale);
         SyncScrollBars();
+        PositionWriter();
     }
 
     /// <summary>
@@ -2477,6 +2749,13 @@ public sealed partial class PdfTiledViewer : UserControl
 
         Canvas.Focus(Microsoft.UI.Xaml.FocusState.Pointer);
 
+        // A press on the sheet finishes whatever label was being typed. This
+        // press cannot be inside the box — that is a control of its own and
+        // takes its own pointer events — so reaching here means the reader has
+        // gone somewhere else, which is what ends a label. Placing the next one
+        // still works: this closes the old before the tool opens the new.
+        EndWriting();
+
         // Middle-drag always pans, whichever tool is active — so the zoom
         // rectangle can stay selected while you still move around freely.
         // The highlighter works on text, not on the sheet: it takes the same
@@ -2560,7 +2839,20 @@ public sealed partial class PdfTiledViewer : UserControl
             _selected = typed;
             _selectedPage = page.Index;
             Canvas.Invalidate();
-            TextWanted?.Invoke(this, EventArgs.Empty);
+
+            // A label is typed where it will be read; a comment is typed in the
+            // panel, because its marker is a pin with no room for words. Either
+            // way the caret has to land somewhere, or the reader clicks, sees a
+            // mark appear, and the keys they press go nowhere.
+            if (_tool == ViewerTool.FreeText)
+            {
+                BeginWriting();
+            }
+            else
+            {
+                TextWanted?.Invoke(this, EventArgs.Empty);
+            }
+
             ViewChanged?.Invoke(this, EventArgs.Empty);
             return;
         }
@@ -2759,7 +3051,7 @@ public sealed partial class PdfTiledViewer : UserControl
 
         if (_isDrawing && e.Pointer.PointerId == _gesturePointerId)
         {
-            ExtendMark(position);
+            ExtendMark(position, e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift));
             return;
         }
 
@@ -2778,7 +3070,11 @@ public sealed partial class PdfTiledViewer : UserControl
         // The segment that follows the cursor while a shape is being built.
         if (_placingVertices && PageBoxOf(_draftPage) is { } vertexPage)
         {
-            _rubber = Snapped(vertexPage, SheetPointClamped(vertexPage, position));
+            _rubber = Placed(
+                vertexPage,
+                position,
+                _vertices.Count > 0 ? _vertices[^1] : null,
+                e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift));
             Canvas.Invalidate();
             return;
         }
@@ -2875,7 +3171,7 @@ public sealed partial class PdfTiledViewer : UserControl
 
         if (_placingVertices)
         {
-            PlaceVertex(e.GetCurrentPoint(Canvas).Position);
+            PlaceVertex(e.GetCurrentPoint(Canvas).Position, e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift));
             Canvas.ReleasePointerCapture(e.Pointer);
             return;
         }
@@ -2894,7 +3190,7 @@ public sealed partial class PdfTiledViewer : UserControl
                 return;
             }
 
-            ExtendMark(released);
+            ExtendMark(released, e.KeyModifiers.HasFlag(VirtualKeyModifiers.Shift));
             FinishMark();
             Canvas.ReleasePointerCapture(e.Pointer);
             return;
@@ -2974,11 +3270,14 @@ public sealed partial class PdfTiledViewer : UserControl
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private void ExtendMark(Point position)
+    private void ExtendMark(Point position, bool shift)
     {
         if (PageBoxOf(_draftPage) is not { } page) return;
 
-        var sheetPoint = Snapped(page, SheetPointClamped(page, position));
+        // Held to the first point of the drag, not to the previous sample: a
+        // measurement is the line from where it started to where it ends, and
+        // only the first point is the one that will survive into the mark.
+        var sheetPoint = Placed(page, position, _draft.Count > 0 ? _draft[0] : null, shift);
 
         // A pen reports far more samples than the drawing needs; the ones that
         // land on top of each other are dropped here rather than kept and
@@ -2996,7 +3295,14 @@ public sealed partial class PdfTiledViewer : UserControl
     /// </summary>
     private void OnCanvasDoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
     {
-        if (!_placingVertices) return;
+        // A written mark is opened again by double clicking it, which is what a
+        // hand does without being told — and the only way back into one that
+        // was typed and left.
+        if (!_placingVertices)
+        {
+            if (_selected is { Kind: AnnotationKind.FreeText }) BeginWriting();
+            return;
+        }
 
         FinishVertices();
         e.Handled = true;
@@ -3025,11 +3331,14 @@ public sealed partial class PdfTiledViewer : UserControl
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private void PlaceVertex(Point position)
+    private void PlaceVertex(Point position, bool shift)
     {
         if (PageBoxOf(_draftPage) is not { } page) return;
 
-        var sheetPoint = Snapped(page, SheetPointClamped(page, position));
+        // Each vertex is held to the one before it, so a run of segments comes
+        // out as a staircase rather than everything on one line through the
+        // first corner.
+        var sheetPoint = Placed(page, position, _vertices.Count > 0 ? _vertices[^1] : null, shift);
 
         // Two clicks in the same spot end the shape, which is what a reader
         // does without being told.

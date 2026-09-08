@@ -68,6 +68,31 @@ public static class AnnotationGeometry
     }
 
     /// <summary>The angle from one point to another, in degrees clockwise from the x axis.</summary>
+    /// <summary>
+    /// A point pulled onto the horizontal or the vertical through an anchor,
+    /// whichever one the movement is already closer to.
+    ///
+    /// Almost everything worth measuring on a plan is orthogonal, and a drag of
+    /// two hundred pixels that ends three off the horizontal reads a length that
+    /// is wrong in the last figure and looks perfectly right. This is what a
+    /// drafting program calls ortho, and it behaves like one: it does not ask
+    /// which axis, it takes the one being drawn along.
+    ///
+    /// In sheet space, so horizontal is horizontal as the reader sees it — a
+    /// turned sheet turns this with it, which is the whole reason it is not
+    /// done in the page's own coordinates.
+    /// </summary>
+    public static Vector2 OnAxis(Vector2 anchor, Vector2 point)
+    {
+        var away = point - anchor;
+
+        // A tie goes to the horizontal. It takes an exact diagonal to get one,
+        // and on a drawing the horizontal is the run that gets measured.
+        return MathF.Abs(away.X) >= MathF.Abs(away.Y)
+            ? new Vector2(point.X, anchor.Y)
+            : new Vector2(anchor.X, point.Y);
+    }
+
     public static float AngleDeg(Vector2 from, Vector2 to)
     {
         var offset = to - from;

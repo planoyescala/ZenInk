@@ -2902,6 +2902,16 @@ public sealed partial class MainPage : Page
             : "Los puntos van donde sueltes, sin pegarse a nada.");
     }
 
+    private void OnOrthoClicked(object sender, RoutedEventArgs e)
+    {
+        if (ActiveViewer is not { } viewer) return;
+
+        viewer.AxisLock = OrthoToolButton.IsChecked == true;
+        Hint(viewer.AxisLock
+            ? "Las medidas salen horizontales o verticales. Mayús para una suelta en diagonal."
+            : "Las medidas van donde las lleves. Mayús para una suelta a escuadra.");
+    }
+
     private void OnClearScaleClicked(object sender, RoutedEventArgs e)
     {
         if (ActiveViewer is not { } viewer) return;
@@ -3044,6 +3054,12 @@ public sealed partial class MainPage : Page
         SnapToolButton.IsEnabled = interactive;
         SnapToolButton.IsChecked = viewer?.SnapToInk ?? true;
 
+        // Not tied to the sheet being calibrated, unlike the tools themselves:
+        // an angle is measurable on any sheet, and holding a gesture square is
+        // worth having before there is a number on the end of it.
+        OrthoToolButton.IsEnabled = interactive;
+        OrthoToolButton.IsChecked = viewer?.AxisLock ?? false;
+
         string detail = interactive && viewer?.SelectedAnnotation is { } chosen ? Detail(chosen) : string.Empty;
         MeasureDetailText.Text = detail;
         MeasureDetailSection.Visibility = detail.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -3131,7 +3147,7 @@ public sealed partial class MainPage : Page
     {
         if (_syncingPanel || ActiveViewer is not { } viewer) return;
 
-        viewer.AnnotationStyle = viewer.AnnotationStyle with { WidthPt = (float)e.NewValue };
+        viewer.AnnotationStyle = viewer.AnnotationStyle with { WidthPt = StrokeWidths.At((int)e.NewValue) };
         UpdateChrome();
     }
 
@@ -3168,6 +3184,13 @@ public sealed partial class MainPage : Page
         viewer.AnnotationStyle = viewer.AnnotationStyle with { FillOpacity = (float)(e.NewValue / 100.0) };
         UpdateChrome();
     }
+
+    /// <summary>
+    /// The caret has left the panel, so the run of typing becomes one step in
+    /// the history rather than one per letter. The viewer keeps the two halves;
+    /// this only says when the run is over.
+    /// </summary>
+    private void OnNoteTextLostFocus(object sender, RoutedEventArgs e) => ActiveViewer?.CommitText();
 
     private void OnNoteTextChanged(object sender, TextChangedEventArgs e)
     {
@@ -3242,6 +3265,13 @@ public sealed partial class MainPage : Page
         {
             return;
         }
+
+        // And not while a label is being typed on the sheet itself. The focus
+        // manager does not report that box the way it reports the panel's, so
+        // the guard above lets the letter through — and the tool it chose drops
+        // the selection, which closes the box the letter was meant for. The
+        // viewer knows what it is doing without being asked about focus.
+        if (ActiveViewer is { IsWriting: true }) return;
 
         if (ActiveViewer is not { PageCount: > 0 } || _busyMessage is not null) return;
 
@@ -3584,7 +3614,10 @@ public sealed partial class MainPage : Page
             WidthSection.Visibility = changeable && Annotation.TakesWidth(kind)
                 ? Visibility.Visible
                 : Visibility.Collapsed;
-            WidthSlider.Value = style.WidthPt;
+            // El tope sale de la escalera, no de una cifra escrita en el XAML:
+            // añadir una parada no puede dejar el riel corto.
+            WidthSlider.Maximum = StrokeWidths.Stops.Count - 1;
+            WidthSlider.Value = StrokeWidths.IndexOf(style.WidthPt);
             WidthValueText.Text = $"{style.WidthPt:0.##} pt";
 
             FontSizeSection.Visibility = changeable && Annotation.TakesFontSize(kind)
@@ -3641,7 +3674,8 @@ public sealed partial class MainPage : Page
                 {
                     ViewerTool.SelectAnnotation => $"Haz clic en una marca para cogerla. {Sheet(onSheet)}",
                     ViewerTool.Note => $"Haz clic en la página para dejar un comentario. {Sheet(onSheet)}",
-                    ViewerTool.FreeText => $"Haz clic en la página y escribe en el panel. {Sheet(onSheet)}",
+                    ViewerTool.FreeText =>
+                        $"Haz clic en la página y escribe ahí mismo; Esc lo cierra. {Sheet(onSheet)}",
                     ViewerTool.Ink => $"Dibuja con el lápiz o el ratón. La otra punta del lápiz borra. {Sheet(onSheet)}",
                     ViewerTool.Highlight => $"Arrastra sobre el texto para resaltarlo. {Sheet(onSheet)}",
                     ViewerTool.Cloud => $"Arrastra un recuadro, o haz clic en cada vértice. {Sheet(onSheet)}",

@@ -882,7 +882,7 @@
                             Click="OnFreeTextToolClicked"
                             IsEnabled="False"
                             Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Texto — clic en la página y se escribe al lado (T)">
+                            ToolTipService.ToolTip="Texto — clic en la página y se escribe ahí mismo (T)">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--  Una A sobre una línea de base: el texto que se queda en el plano.  -->
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4.6 13.4 9 3.6h2L15.4 13.4 M6.6 10.2h6.8 M3.6 16.6h12.8" />
@@ -1232,6 +1232,28 @@
                                     AccentData="M10 7.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 1 0 0-4.8Z"
                                     Data="M3 10h14 M10 3v14" />
                                 <TextBlock Text="Ajustar" />
+                            </StackPanel>
+                        </ToggleButton>
+
+                        <ToggleButton
+                            x:Name="OrthoToolButton"
+                            Click="OnOrthoClicked"
+                            IsEnabled="False"
+                            Style="{StaticResource SlimToggleStyle}"
+                            ToolTipService.ToolTip="Medir solo en horizontal o en vertical (Mayús hace lo contrario)">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <!--
+                                    El signo de escuadra de toda la vida: el
+                                    ángulo y el cuadradito en su vértice. Dice
+                                    «a escuadra» sin depender de la palabra, y
+                                    no se confunde con la cruz de Ajustar.
+                                -->
+                                <controls:ToolIcon
+                                    Style="{StaticResource BarIconStyle}"
+                                    Accent="{ThemeResource IconMeasureBrush}"
+                                    AccentData="M4.5 12.5h3v3h-3Z"
+                                    Data="M4.5 3.5v12h12" />
+                                <TextBlock Text="Ortogonal" />
                             </StackPanel>
                         </ToggleButton>
 
@@ -1856,13 +1878,23 @@
                                         FontSize="12"
                                         Opacity="0.5" />
                                 </StackPanel>
+                                <!--
+                                    Recorre posiciones de la escalera de
+                                    StrokeWidths, no puntos. Un recorrido lineal
+                                    de 0,5 a 48 pt dejaría todos los grosores de
+                                    diario en la primera décima parte del riel;
+                                    así cada parada es un número redondo y el
+                                    extremo fino sigue teniendo el mismo pulso
+                                    que antes. El máximo se pone desde el código
+                                    para que la escalera se pueda alargar en un
+                                    solo sitio.
+                                -->
                                 <Slider
                                     x:Name="WidthSlider"
-                                    Maximum="8"
-                                    Minimum="0.5"
-                                    StepFrequency="0.25"
-                                    TickFrequency="0.25"
-                                    Value="2"
+                                    IsThumbToolTipEnabled="False"
+                                    Minimum="0"
+                                    StepFrequency="1"
+                                    TickFrequency="1"
                                     ValueChanged="OnWidthChanged" />
                             </StackPanel>
 
@@ -1901,6 +1933,7 @@
                                     Height="120"
                                     AcceptsReturn="True"
                                     PlaceholderText="Qué hay que revisar"
+                                    LostFocus="OnNoteTextLostFocus"
                                     TextChanged="OnNoteTextChanged"
                                     TextWrapping="Wrap" />
                             </StackPanel>

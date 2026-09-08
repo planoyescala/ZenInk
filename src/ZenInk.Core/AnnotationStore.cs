@@ -261,6 +261,23 @@ public sealed class AnnotationStore
     }
 
     /// <summary>
+    /// Records one step for a change that is already in place — the other half
+    /// of <see cref="ReplaceLive"/>.
+    ///
+    /// A drag knows when it ends, because the pointer comes up. Typing does
+    /// not: every letter is a change, and recording each one buries whatever
+    /// the reader did before the label under thirty steps of it. So the letters
+    /// go in live and the whole word is remembered once, when the caret leaves.
+    /// </summary>
+    public void RememberEdit(int pageIndex, Annotation before, Annotation after)
+    {
+        if (ReferenceEquals(before, after) || before.Text == after.Text) return;
+
+        Remember(new Edit(pageIndex, before, after), remember: true);
+    }
+
+
+    /// <summary>
     /// Takes the sheets somewhere else, and takes their marks with them.
     ///
     /// A sheet that is copied gets a copy of its marks, with fresh ids: they

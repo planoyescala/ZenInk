@@ -65,6 +65,34 @@
             PointerCanceled="OnPointerReleased"
             DoubleTapped="OnCanvasDoubleTapped" />
 
+        <!--
+            El cuadro para escribir directamente sobre la hoja. Flota en la
+            misma celda que el lienzo y se coloca por su margen: darle una fila
+            propia movería el dibujo justo cuando el lector va a escribir.
+
+            Conserva su aspecto de cuadro de texto de Windows a propósito. Se
+            podría teñir del color de la marca, pero la plantilla del control
+            repinta fondo y texto al enfocarlo, así que solo se parecería a
+            medias — y un editor que casi imita al resultado se lee como un
+            fallo. Lo que sí hereda es el tipo y el cuerpo, que es lo que dice
+            cuánto sitio va a ocupar el rótulo.
+        -->
+        <TextBox
+            x:Name="WriteBox"
+            Grid.Row="0"
+            Grid.Column="0"
+            MinWidth="52"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            AcceptsReturn="True"
+            FontFamily="Arial"
+            KeyDown="OnWriteBoxKeyDown"
+            TextChanged="OnWriteBoxTextChanged"
+            TextWrapping="NoWrap"
+            IsHitTestVisible="False"
+            IsTabStop="False"
+            Opacity="0" />
+
         <primitives:ScrollBar
             x:Name="VerticalScroll"
             Grid.Row="0"

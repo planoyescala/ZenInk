@@ -37,6 +37,57 @@ public static class MeasureTests
         Marks();
         Sheets();
         Snapping();
+        Squaring();
+    }
+
+    /// <summary>
+    /// Holding a measurement to the horizontal or the vertical.
+    ///
+    /// The interesting part is not the arithmetic, it is that the axis is
+    /// chosen rather than asked for: a reader dragging along a wall should not
+    /// have to say which wall it is.
+    /// </summary>
+    private static void Squaring()
+    {
+        Section("Measuring — held square");
+
+        var from = new Vector2(100, 100);
+
+        // Mostly across: the drag keeps the length it drew and loses the drift.
+        var across = AnnotationGeometry.OnAxis(from, new Vector2(300, 112));
+        Check("a drag along a wall comes out horizontal", across == new Vector2(300, 100));
+
+        // Mostly down: the same, the other way round.
+        var down = AnnotationGeometry.OnAxis(from, new Vector2(88, 400));
+        Check("a drag down a wall comes out vertical", down == new Vector2(100, 400));
+
+        // Which axis is decided by the movement, so it survives being drawn
+        // backwards — a wall measured right to left is the same wall.
+        var back = AnnotationGeometry.OnAxis(from, new Vector2(-150, 94));
+        Check("drawn backwards it is still the horizontal", back == new Vector2(-150, 100));
+
+        // The length that ends up on the sheet is the one along the axis, not
+        // the one the hand drew. That difference is the whole point: a drag
+        // 200 long and 12 off reads 200,36 free and 200 square.
+        Check(
+            "the number that comes out is the run, not the hypotenuse",
+            Math.Abs(AnnotationGeometry.TotalLength([from, across]) - 200) < 0.0001);
+
+        // An exact diagonal has no nearer axis. It has to pick one and keep
+        // picking the same one, or a mark would flicker between them.
+        var tie = AnnotationGeometry.OnAxis(from, new Vector2(200, 200));
+        Check("an exact diagonal settles on the horizontal", tie == new Vector2(200, 100));
+        Check("and settles there every time", AnnotationGeometry.OnAxis(from, new Vector2(200, 200)) == tie);
+
+        // Standing still is not a direction. It must not jump to an axis, or
+        // the first sample of a drag would fly off before the hand moved.
+        Check("a point on the anchor stays on it", AnnotationGeometry.OnAxis(from, from) == from);
+
+        // Each vertex hangs off the one before it, which is what makes a run of
+        // segments a staircase instead of a single line through the first
+        // corner. This is the shape of a room measured round its walls.
+        var corner = AnnotationGeometry.OnAxis(new Vector2(300, 100), new Vector2(292, 260));
+        Check("the next vertex squares off the previous one", corner == new Vector2(300, 260));
     }
 
     /// <summary>

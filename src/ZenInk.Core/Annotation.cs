@@ -228,7 +228,13 @@ public sealed class Annotation
     /// <summary>True for the kinds that can carry a fill at all.</summary>
     public static bool TakesFill(AnnotationKind kind) =>
         kind is AnnotationKind.Rectangle or AnnotationKind.Ellipse
-            or AnnotationKind.Polygon or AnnotationKind.Cloud or AnnotationKind.Area;
+            or AnnotationKind.Polygon or AnnotationKind.Cloud or AnnotationKind.Area
+            // Written words enclose an area too — the box they sit in — and on
+            // a drawing that ground is not decoration: black type over the
+            // hatching of a wall is type nobody can read. It is the same
+            // control as a shape's fill and it means the same thing, so it is
+            // the same control.
+            or AnnotationKind.FreeText;
 
     /// <summary>
     /// True for the kinds drawn with a line of their own. A highlight is a wash

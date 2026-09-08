@@ -110,7 +110,7 @@ internal static class AnnotationRenderer
 
         if (mark.Kind == AnnotationKind.FreeText)
         {
-            DrawWritten(ds, mark, placement, colour);
+            DrawWritten(ds, mark, placement, colour, monochrome);
             return;
         }
 
@@ -429,10 +429,22 @@ internal static class AnnotationRenderer
     /// every reader has without anything being embedded.
     /// </summary>
     private static void DrawWritten(
-        CanvasDrawingSession ds, Annotation mark, SheetPlacement placement, Color colour)
+        CanvasDrawingSession ds, Annotation mark, SheetPlacement placement, Color colour, bool monochrome)
     {
         var anchor = mark.Points[0];
         float size = mark.Style.FontSizePt * placement.Scale;
+
+        // The ground the words sit on, under everything else. Drawn from the
+        // same box the outline reports, so what is painted here, what goes in
+        // the file and what the reader clicks on are one rectangle and not
+        // three that have to be kept agreeing.
+        if (mark.Style.Fill is { } ground)
+        {
+            var tone = Tone(ground, monochrome);
+            ds.FillRectangle(
+                placement.ToScreen(mark.FrameBox),
+                Color.FromArgb(mark.Style.FillAlpha, tone.R, tone.G, tone.B));
+        }
 
         // A mark with nothing typed into it yet still has to be visible, or the
         // reader has clicked and apparently nothing happened.

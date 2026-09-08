@@ -41,6 +41,7 @@ public static class AnnotationTests
         Appearance();
         Outlines();
         WrittenMarks();
+        Widths();
         Clouds();
         FillAndTurn();
         Resizing();
@@ -317,6 +318,100 @@ public static class AnnotationTests
         Check("but not stretched", !AnnotationHandles.CanResize(one));
         Check("so it carries the knob and nothing else",
             AnnotationHandles.For(one) is [({ Which: MarkHandle.Rotate }, _)]);
+
+        // A label needs a ground under it as much as any shape does: black type
+        // over the hatching of a wall is type nobody can read. It is the same
+        // control as a shape's fill, so it is the same question.
+        Check("written words take a fill", Annotation.TakesFill(AnnotationKind.FreeText));
+
+        var onGround = one.WithStyle(
+            new AnnotationStyle(AnnotationColor.Red, 2f, new AnnotationColor(255, 214, 0), 0.35f, 20f));
+
+        // What the fill covers is the box the outline already describes, so the
+        // canvas, the file and the click all mean one rectangle.
+        Check("the ground is the box the words sit in", onGround.FrameBox == one.FrameBox);
+        Check("and giving it one does not move the words", onGround.Points[0] == one.Points[0]);
+
+        // The fill is a colour and an opacity, and the opacity is what keeps the
+        // drawing readable through it: an opaque label hides the very detail it
+        // is pointing at.
+        Check("the ground carries its own opacity", onGround.Style.FillAlpha is > 0 and < 255);
+        Check("and taking it away leaves the words alone", onGround.WithStyle(one.Style).Style.Fill is null);
+    }
+
+    /// <summary>
+    /// The ladder of line widths: fine where the choice is delicate, and long
+    /// enough to mark an A0 so it reads across a table.
+    /// </summary>
+    private static void Widths()
+    {
+        Section("Marks — how thick a line may be drawn");
+
+        var stops = StrokeWidths.Stops;
+
+        Check("there is a ladder to climb", stops.Count > 8);
+
+        bool ascending = true;
+        for (int i = 1; i < stops.Count; i++)
+        {
+            if (stops[i] > stops[i - 1]) continue;
+
+            ascending = false;
+            break;
+        }
+        Check("every stop is thicker than the one below", ascending);
+
+        // The thick end is the whole point of the ladder. Forty-eight points is
+        // about seventeen millimetres of ink, which is a marker pen on an A0.
+        Check("it reaches a width that shows on a big sheet", StrokeWidths.Thickest >= 40f);
+        Check("and still starts hairline-thin", StrokeWidths.Thinnest <= 0.5f);
+
+        // Nothing that was drawable before may become undrawable: a mark made
+        // at the old maximum has to come back onto the slider where it was,
+        // not one stop off it.
+        Check("the old maximum is still a stop", stops.Contains(8f));
+        Check("and so is the default a mark is made with", stops.Contains(AnnotationStyle.Default.WidthPt));
+
+        for (int i = 0; i < stops.Count; i++)
+        {
+            if (StrokeWidths.IndexOf(stops[i]) == i && Math.Abs(StrokeWidths.At(i) - stops[i]) < 0.001f) continue;
+
+            Check($"stop {i} does not survive the round trip", false);
+            break;
+        }
+        Check("a stop goes to the slider and comes back unchanged", true);
+
+        // Reading a width that is not on the ladder — an older file, another
+        // program, a number typed into a PDF by hand — takes the nearest stop.
+        // Rounding down instead would walk every reopened drawing thinner.
+        Check("a width between stops takes the nearer one", StrokeWidths.At(StrokeWidths.IndexOf(2.6f)) == 3f);
+        Check("and the nearer one downwards just as readily", StrokeWidths.At(StrokeWidths.IndexOf(2.2f)) == 2f);
+
+        // A slider hands over whatever position it is on, including while it is
+        // still being built, so both ends have to be safe.
+        Check("off the bottom is the thinnest", StrokeWidths.At(-5) == StrokeWidths.Thinnest);
+        Check("off the top is the thickest", StrokeWidths.At(999) == StrokeWidths.Thickest);
+        Check("something absurd still lands on the ladder", StrokeWidths.At(StrokeWidths.IndexOf(9999f)) == StrokeWidths.Thickest);
+
+        // What hangs off the width has to grow with it, or a thick mark comes
+        // out as a fat line with a pinhead on the end.
+        Check(
+            "an arrow head grows with its line",
+            AnnotationGeometry.ArrowHeadLength(StrokeWidths.Thickest)
+                > AnnotationGeometry.ArrowHeadLength(StrokeWidths.Thinnest) * 10);
+
+        // And the box the mark claims has to grow too, or a thick line is
+        // clipped by its own rectangle in every other reader.
+        var thin = new Annotation(
+            AnnotationKind.Line,
+            [new Vector2(100, 100), new Vector2(300, 100)],
+            new AnnotationStyle(AnnotationColor.Red, StrokeWidths.Thinnest));
+        var fat = thin.WithStyle(new AnnotationStyle(AnnotationColor.Red, StrokeWidths.Thickest));
+
+        Check("a thick line claims a taller box", fat.Bounds.Height > thin.Bounds.Height + 40f,
+            $"{thin.Bounds.Height:0.#} then {fat.Bounds.Height:0.#}");
+        Check("and is caught further from its middle", fat.HitTest(new Vector2(200, 100 + 20f)));
+        Check("where the thin one is not", !thin.HitTest(new Vector2(200, 100 + 20f)));
     }
 
     private static void Clouds()
