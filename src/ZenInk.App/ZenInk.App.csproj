@@ -101,7 +101,23 @@
   <PropertyGroup>
     <PublishReadyToRun Condition="'$(Configuration)' == 'Debug'">False</PublishReadyToRun>
     <PublishReadyToRun Condition="'$(Configuration)' != 'Debug'">True</PublishReadyToRun>
-    <PublishTrimmed Condition="'$(Configuration)' == 'Debug'">False</PublishTrimmed>
-    <PublishTrimmed Condition="'$(Configuration)' != 'Debug'">True</PublishTrimmed>
+
+    <!--
+      Nunca recortado, y esto no es una preferencia de tamaño.
+
+      Es lo que traía la plantilla, activado en Release. El resultado arranca:
+      la ventana sale, la cinta se dibuja y todo parece bien — y al abrir un
+      plano contesta «Object reference not set to an instance of an object».
+      El recortador se lleva lo que solo se carga por reflexión, que en esta
+      app es medio Windows App SDK y la interoperación con PDFium, y no hay
+      manera de que lo sepa mirando el código.
+      Comprobado a mano: 273 archivos y 160 MB recortado, que no abre un PDF;
+      440 y 289 MB sin recortar, que sí.
+
+      Y publicar sobre una carpeta que ya tiene la otra variante deja las dos
+      mezcladas — se cae antes de la ventana, con un TypeLoadException sobre
+      ComInterfaceEntry. Si se cambia esto alguna vez, borrar `publish` antes.
+    -->
+    <PublishTrimmed>False</PublishTrimmed>
   </PropertyGroup>
 </Project>
