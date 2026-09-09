@@ -1,6 +1,10 @@
 # ZenInk ✒️
 
-<img src="src/ZenInk.App/Assets/Square150x150Logo.scale-200.png" alt="ZenInk logo" width="140">
+<p>
+  <img src="src/ZenInk.App/Assets/Square150x150Logo.scale-200.png" alt="ZenInk logo" width="130" align="middle">
+  &nbsp;&nbsp;&nbsp;
+  <img src="design/instalador/Small.png" alt="plano y escala" width="95" align="middle">
+</p>
 
 **A viewer and editor for PDF drawings on Windows 11 — annotate, compare revisions, measure to scale and sign.**
 Developed by **plano y escala**.
@@ -19,7 +23,7 @@ Developed by **plano y escala**.
 
 **ZenInk** is built for one job: reviewing large construction drawings without fighting the tool.
 
-A BIM manager opens an A0 sheet with forty thousand vector objects, moves around it, marks it up, compares it against last month's issue and sends it back. Everything in ZenInk is shaped around that: the sheet is drawn in tiles so panning stays smooth, the marks are real PDF annotations that any other reader can see, and nothing is written over your file until what was written has been read back and checked.
+Architects, engineers and everyone else who works from drawings open sheets that a general-purpose PDF reader was never meant to handle: an A0 plan carrying tens of thousands of vector objects, opened to be moved around, marked up, measured, compared against last month's issue and sent back. Everything in ZenInk is shaped around that: the sheet is drawn in tiles so panning stays smooth, the marks are real PDF annotations that any other reader can see, and nothing is written over your file until what was written has been read back and checked.
 
 It is part of the **ZenBIM** project, and it is **free software** under the GPLv3.
 
