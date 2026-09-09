@@ -1,171 +1,100 @@
-# ZenInk
+# ZenInk ✒️
 
-Visor y editor de PDF/planos para Windows 11, unificando visor de alto rendimiento
-(estilo Bluebeam/Drawboard), anotación con lápiz, gestión de páginas y captura de
-pantalla integrada en una sola herramienta.
+<img src="src/ZenInk.App/Assets/Square150x150Logo.scale-200.png" alt="ZenInk logo" width="140">
 
-ZenInk es **software libre**, y es una pieza del proyecto **ZenBIM** de
-*plano y escala*: se publica bajo la
-[GNU General Public License v3.0 o posterior](LICENSE).
+**A viewer and editor for PDF drawings on Windows 11 — annotate, compare revisions, measure to scale and sign.**
+Developed by **plano y escala**.
 
-## Alcance
+![License](https://img.shields.io/badge/license-GPLv3-blue.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%201809+%20·%20x64-lightgrey.svg)
+![Built with](https://img.shields.io/badge/.NET%2010-WinUI%203%20·%20PDFium-512BD4.svg)
+![Status](https://img.shields.io/badge/status-beta%20v0.0.1-orange.svg)
+![Languages](https://img.shields.io/badge/UI-English%20|%20Español-green.svg)
 
-1. **Visor de planos de alto rendimiento** — renderizado por tiles sobre PDFium,
-   fluido con planos grandes (A0).
-2. **Anotaciones** — formas, nubes de revisión, resaltado de texto, texto,
-   comentarios y lápiz, con aplanado.
-3. **Gestión de páginas** — añadir, quitar, unir.
-4. **Captura de pantalla integrada** — recortar y pegar como imagen en el documento.
+[![Download Installer](https://img.shields.io/badge/⬇_Download_Installer-Releases-blue?style=for-the-badge&logo=windows)](https://github.com/planoyescala/ZenInk/releases)
 
-Fuera de alcance: comparación y superposición de revisiones de planos.
+---
 
-ZenInk se declara como programa que abre PDF: aparece en «Abrir con» y en la
-lista de aplicaciones predeterminadas de Windows, y ofrece una vez —con un
-«no volver a preguntar»— llevarte a la página donde se elige. Ponerlo como
-predeterminado es cosa del usuario: desde Windows 10, ningún programa puede
-hacerlo por su cuenta. Los planos que se abran así van a pestañas de la misma
-ventana, no a una ventana cada uno.
+## 📋 Description
 
-La medición calibrada estaba fuera de alcance en el planteamiento inicial y
-**se ha vuelto a incluir**; está en "Pendiente".
+**ZenInk** is built for one job: reviewing large construction drawings without fighting the tool.
 
-## Stack
+A BIM manager opens an A0 sheet with forty thousand vector objects, moves around it, marks it up, compares it against last month's issue and sends it back. Everything in ZenInk is shaped around that: the sheet is drawn in tiles so panning stays smooth, the marks are real PDF annotations that any other reader can see, and nothing is written over your file until what was written has been read back and checked.
 
-- **Renderizado PDF y anotaciones**: [PDFium](https://pdfium.googlesource.com/pdfium/)
-  (BSD-3-Clause) vía [PDFiumCore](https://github.com/bblanchon/PDFiumCore) (Apache-2.0)
-- **Firma**: `System.Security.Cryptography.Pkcs` (MIT, de Microsoft) para el
-  CMS/CAdES; el diccionario de firma y la actualización incremental los escribe
-  ZenInk
-- **UI y dibujo**: WinUI 3 (.NET 10) con Win2D
+It is part of the **ZenBIM** project, and it is **free software** under the GPLv3.
 
-Las anotaciones no necesitaron ninguna dependencia nueva: PDFium escribe las
-anotaciones, los objetos de trazado con su transparencia, los objetos de texto y
-el aplanado.
+## ✨ Features (v0.0.1)
 
-**PDFsharp se probó y se descartó** para la firma y para el hito 3: reescribe el
-archivo entero, así que una segunda firma invalida la primera. El hito 3 acabó
-sin necesitarlo —PDFium mueve, importa y borra páginas—, así que no se usa en
-ninguna parte.
+* **🗂️ A viewer made for big sheets:** tiled rendering over PDFium, continuous or page-by-page, one or two pages across, with the zoom gliding rather than jumping.
+* **✏️ Annotations:** lines, arrows, polylines, rectangles, ellipses, polygons, revision clouds, text written on the sheet itself, notes, freehand pen and text highlighting — with colour, fill, opacity and line weight, and flattening when the review is closed.
+* **📐 Measuring to scale:** calibrate a sheet by dragging over a dimension you know, then measure distance, perimeter, area and angle. The number is computed from the points and the scale, never typed in, and the scale travels with the sheet.
+* **🔍 Revision comparison:** lay another issue of the same drawing over this one and step through what changed. The comparison is composed inside the tiles, so you can pan, zoom, capture and print it exactly as you see it.
+* **📄 Sheet management:** reorder, rotate, duplicate, remove, insert sheets from another PDF, insert blanks, extract to a new file and split the document — with the PDF's own outline alongside.
+* **✒️ Digital signature:** PAdES signatures with the certificate you already have in Windows, written as an incremental update so an earlier signature stays valid. Optional RFC 3161 timestamp and long-term validation data. There is also a plain stamp, which says plainly that it is *not* a signature.
+* **📷 Region capture:** drag a box and the drawing lands on the clipboard at 200 dpi, ready to paste into an email.
+* **🔎 Find, 🖨️ print and ⌨️ a command palette:** search across the document, print at a chosen scale — including poster mode across several sheets — and reach any tool by typing Ctrl+K.
+* **🌗 Light and dark, 🌍 English and Spanish:** ZenInk follows the language and theme Windows is set to, and both can be overridden in Preferences.
 
-Todas las dependencias son gratuitas y libres para uso comercial/cerrado. Ver
-`THIRD-PARTY-NOTICES.md` para atribuciones de terceros empaquetadas en los binarios
-nativos de PDFium (FreeType, ICU, libjpeg-turbo, lcms2).
+---
 
-## Estructura
+## 💾 Download & Installation
 
-```
-src/
-  ZenInk.App/       # App WinUI 3: interfaz, visor y impresión
-  ZenInk.Core/      # Motor sin interfaz: PDFium, tiles, texto, geometría de papel
-tests/
-  ZenInk.Tests/     # Comprobaciones del motor de renderizado
-tools/              # Fuera de la solución: planos de prueba, capturas e iconos
-design/             # El maestro del logo; de ahí sale todo el juego de iconos
-```
+1. **Download the installer** from the [Releases page](https://github.com/planoyescala/ZenInk/releases).
+2. **Run it.** It installs into your user folder and **does not ask for administrator rights**, which matters on a company computer.
+3. Open a PDF with it — ZenInk offers itself under *Open with*, and can be made the default from the Windows settings page it takes you to.
 
-Los iconos **no se editan a mano**: se regeneran con
-`dotnet run --project tools/ZenInk.Icons`, que escribe los 82 assets del
-paquete desde `design/LogoZenInk.png`. Ver `tools/README.md`.
+**Requirements:** Windows 10 version 1809 or later, 64-bit. Nothing else: .NET and the Windows App SDK travel inside the installer.
 
-## Pruebas
+> **⚠️ The installer is not code-signed yet.** Windows SmartScreen will show a blue screen calling it an *unknown publisher*. Click **More info → Run anyway**. Signing is a decision for a later version, and the machinery for it is already in the build.
+
+> **⚠️ This is a beta.** It works, and some of it does not yet. While the beta lasts, work on a copy of anything you cannot lose. ZenInk never writes over your drawing without reading back what it wrote, and always asks before flattening or signing — but a beta is a beta.
+
+---
+
+## 🔏 About the signature
+
+ZenInk is **not a qualified trust service provider**. It signs with a certificate that is already installed on your computer — the Spanish FNMT one, for instance — and whether the resulting signature is valid, and what it is worth in front of anybody, depends on that certificate and on the authority behind it, not on ZenInk.
+
+The **stamp** tool needs no certificate and is not a signature: it puts a box on the drawing saying who looked at it, it leaves no cryptographic evidence, and the program says so before placing it — and refuses to write *"digitally signed by"* over nothing.
+
+---
+
+## 🛠️ Building from source
 
 ```bash
-dotnet run --project tests/ZenInk.Tests -c Release
+dotnet build src/ZenInk.App/ZenInk.App.csproj -c Debug   # the application
+dotnet run --project tests/ZenInk.Tests -c Release       # 831 checks over the engine
 ```
 
-Comprueban el motor sin abrir ninguna ventana, contra PDFs sintéticos generados
-en el momento: orientación bajo las cuatro rotaciones de página, que cada tile
-coincide píxel a píxel con el render de página completa, que las cajas de texto
-siguen a la tinta dibujada, el apilado de hojas a una y a dos columnas, el
-plegado de mayúsculas y acentos del buscador, que girar una hoja mueve tinta y
-texto a la vez, que el giro llega al archivo al guardarlo, qué trozo de plano
-cae en cada folio al imprimir —incluido repartir un A0 en varias hojas sin
-huecos— y que un documento no puede alterar a otro al cerrarse o fallar.
+The engine — PDFium, tiles, text, the geometry of paper and of the marks — lives in `src/ZenInk.Core` and has no dependency on any user interface, so everything that can be checked without opening a window is checked in the suite. `src/ZenInk.App` is the WinUI 3 application and the viewer.
 
-Y sobre las anotaciones: que una marca vuelve del archivo donde estaba y como
-estaba —geometría, color, giro, relleno, acentos y saltos de línea—, que una
-marca escrita sobre una hoja que el archivo ya gira cae en el mismo sitio, que
-girar la hoja al guardar mueve la marca con el dibujo, que un relleno deja leer
-el plano por debajo, que las marcas propias no se dibujan dos veces, que las
-anotaciones de otro programa no se tocan, que aplanar las convierte en dibujo
-sin perder la página, y la geometría de todo ello: nubes, tiradores, giro sobre
-el propio centro y qué coge un clic.
+## 🤖 How it was built
 
-## Hitos
+Written by one person with **Claude** doing most of the typing, over a couple of months. That is worth saying out loud rather than hiding: the commit messages are long on purpose and explain *why* each decision was taken — including the ones that were wrong first — and the engine carries 831 checks, so that the parts nobody can judge by looking at a window are held down by something.
 
-- [x] **Hito 1**: abrir un PDF/plano grande y renderizarlo por tiles con zoom/pan
-      fluido. Incluye modos de vista (ancho / página / tamaño real, a una o dos
-      páginas, continuo u hoja a hoja), zoom por ventana, navegación por
-      teclado, giro de hojas con guardado en el PDF, buscador con Ctrl+F, abrir
-      arrastrando, e **impresión** con escala real, márgenes, calidad, grises y
-      reparto de un plano grande en varias hojas.
-- [x] **Hito 2**: anotaciones. Línea, flecha, polilínea, rectángulo, elipse,
-      polígono, nube de revisión, resaltado de texto, texto sobre el plano,
-      comentario y lápiz, más una herramienta para coger las marcas hechas.
-      Color, grosor, relleno con opacidad propia, tamaño de letra, giro y
-      estirado por tiradores, deshacer/rehacer y borrado con la otra punta del
-      lápiz. Se guardan en el PDF como anotaciones estándar —se ven en Acrobat
-      o Bluebeam—, se reabren para seguir editándolas, se imprimen en vector, y
-      se pueden **aplanar** para que nadie las cambie.
-- [x] **Firma digital**: firmar con certificado —el de la FNMT— produciendo
-      firmas PAdES (`ETSI.CAdES.detached`) que se **añaden** al archivo sin
-      reescribirlo, de modo que una firma que ya venía en el documento sigue
-      valiendo y la nueva se apila encima. Sello visible con encabezado,
-      nombre, DNI, fecha y motivo, colocado dibujando un rectángulo y movible
-      antes de escribir nada. Importar certificados por el asistente de
-      Windows. Por defecto firma en una copia `… signed.pdf`.
-- [x] **Hito 3**: gestión de páginas. Mover, quitar, duplicar y girar hojas
-      desde el panel lateral —arrastrando, con botones, o diciendo a qué hoja
-      van—, insertar hojas de otros PDF (varios archivos de una vez, ordenados
-      por nombre) y hojas en blanco, extraer una selección a un PDF nuevo y
-      dividir el juego en varios. Todo queda pendiente hasta guardar, y entra
-      en el mismo deshacer que las marcas. Además, el **índice de marcadores**
-      del PDF en su propia pestaña del panel.
-- [ ] Hito 4: captura de pantalla integrada.
-- [ ] Comparar revisiones.
+---
 
-## Pendiente
+## ☕ Support
 
-**Comparar dos revisiones — después del hito 4.** Superponer la revisión nueva
-sobre la vieja y enseñar qué ha cambiado: lo que sobra en un color, lo que
-falta en otro. Un BIM Manager no lee un plano, lee *qué ha cambiado* entre la
-revisión J y la K, y hoy eso se hace a ojo o pagando Bluebeam.
+If **ZenInk** saves you an afternoon and you want to support free tools for the community, consider buying us a coffee!
 
-Lo difícil ya está hecho: los tiles, las transformaciones por hoja y el dibujo
-sobre el lienzo. Queda alinear las dos hojas —que pueden diferir en tamaño de
-papel o en giro— y componer la diferencia. Va después del hito 4 porque la
-captura integrada da la forma de exportar el resultado, que es la mitad del
-valor: la comparación se enseña en una reunión.
+<a href="https://www.buymeacoffee.com/planoyescala" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="40" width="145">
+</a>
 
-**Medición sobre el plano.** Distancias, áreas, perímetros y ángulos, con la
-escala calibrada por hoja. Revierte la exclusión del planteamiento inicial.
+---
 
-Cada hoja se calibra por separado — dos hojas del mismo set pueden ir a escalas
-distintas, y el PDF rara vez trae la suya de forma fiable, así que el camino
-normal es que el usuario marque una distancia conocida. Una medición es una
-anotación: se guarda con el documento y se vuelve a dibujar, así que conviene
-que entre después del hito 2 y no antes, para no montar dos veces la capa que
-persiste sobre el plano.
+## ⚖️ License
 
-## Licencia
+**ZenInk** is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License v3.0 or later (GPLv3+)**. See [`LICENSE`](LICENSE).
 
-ZenInk es parte del proyecto **ZenBIM**, de *plano y escala*, y es software
-libre: puedes redistribuirlo y modificarlo bajo los términos de la **GNU
-General Public License** publicada por la Free Software Foundation, en su
-**versión 3 o cualquier posterior**. El texto íntegro está en [`LICENSE`](LICENSE).
+It draws with [PDFium](https://pdfium.googlesource.com/pdfium/) (BSD-3-Clause) through [PDFiumCore](https://github.com/Dtronix/PDFiumCore) (Apache-2.0), on WinUI 3 and Win2D. Every third-party component that travels inside the program is listed in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md), with its full licence text under [`licenses/`](licenses).
 
-    Copyright (c) 2026 plano y escala.
+We believe in open knowledge. If you use this code to build something great, you must share it alike.
 
-Se distribuye con la esperanza de que sea útil, pero **sin garantía alguna**;
-ni siquiera la garantía implícita de comerciabilidad o de idoneidad para un
-propósito concreto. Ver la Licencia para los detalles.
+*Copyright © 2026 **plano y escala**.*
 
-Cada fichero de código lleva su propia cabecera con este mismo aviso, que es lo
-que pide la GPL para que la licencia viaje con el código aunque un fichero se
-copie suelto.
-
-**Lo que aporta cada dependencia y bajo qué licencia** está en
-[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md), con los textos completos en
-`licenses/`. En corto: PDFium es BSD-3, PDFiumCore es Apache-2.0, y el Windows
-App SDK y Win2D vienen bajo términos de licencia de Microsoft — son la
-plataforma sobre la que corre la app, no parte de ella.
+---
+<p align="center">
+  <i>Built with ❤️ and C# for people who read drawings.</i>
+</p>
