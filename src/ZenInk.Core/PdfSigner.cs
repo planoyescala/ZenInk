@@ -133,7 +133,14 @@ public sealed class CertificateSigner(
         while (filled < buffer.Length)
         {
             int read = covered.Read(buffer, filled, buffer.Length - filled);
-            if (read <= 0) throw new IOException($"El rango a firmar se cortó en {filled} de {buffer.Length} bytes.");
+            if (read <= 0)
+            {
+                throw new IOException(CoreText.Say(
+                    "CoreSignRangeCutShort",
+                    "The range to sign was cut short at {0} of {1} bytes.",
+                    filled,
+                    buffer.Length));
+            }
             filled += read;
         }
         return buffer;

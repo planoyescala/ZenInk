@@ -30,7 +30,7 @@ public partial class App : Application
 
     public new static App Current => (App)Application.Current;
 
-    public Window MainWindow => _window ?? throw new InvalidOperationException("La ventana principal aún no se ha creado.");
+    public Window MainWindow => _window ?? throw new InvalidOperationException("The main window does not exist yet.");
 
     /// <summary>The main window, or null before it exists — for startup-time callers.</summary>
     public Window? MainWindowOrNull => _window;
@@ -53,6 +53,17 @@ public partial class App : Application
     /// </summary>
     public App()
     {
+        // Before the first line of XAML is parsed: x:Uid is resolved as a page
+        // is loaded, and a page that is already up never asks again.
+        AppLanguage.Apply();
+
+        // The engine speaks through the app's resources or not at all — see
+        // CoreText. Null back means "no translation for this one", and the
+        // English written at the call site stands.
+        CoreText.Translator = (key, parts) => parts.Length == 0
+            ? Loc.Find(key)
+            : Loc.Find(key) is { } pattern ? string.Format(pattern, parts) : null;
+
         InitializeComponent();
     }
 

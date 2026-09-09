@@ -142,11 +142,11 @@
 
                 <TextBox
                     x:Name="FindInput"
+                    x:Uid="FindInput"
                     Width="196"
                     VerticalAlignment="Center"
                     BorderThickness="0"
                     KeyDown="OnFindInputKeyDown"
-                    PlaceholderText="Buscar en el documento"
                     TextChanged="OnFindTextChanged" />
 
                 <TextBlock
@@ -160,16 +160,16 @@
 
                 <ToggleButton
                     x:Name="FindMatchCase"
+                    x:Uid="FindMatchCase"
                     Click="OnFindOptionChanged"
-                    Style="{StaticResource FindToggleStyle}"
-                    ToolTipService.ToolTip="Distinguir mayúsculas y acentos">
+                    Style="{StaticResource FindToggleStyle}">
                     <TextBlock FontSize="12" Text="Aa" />
                 </ToggleButton>
                 <ToggleButton
                     x:Name="FindWholeWord"
+                    x:Uid="FindWholeWord"
                     Click="OnFindOptionChanged"
-                    Style="{StaticResource FindToggleStyle}"
-                    ToolTipService.ToolTip="Solo palabras completas">
+                    Style="{StaticResource FindToggleStyle}">
                     <TextBlock FontSize="12" Text="ab" TextDecorations="Underline" />
                 </ToggleButton>
 
@@ -182,23 +182,23 @@
 
                 <Button
                     x:Name="FindPreviousButton"
+                    x:Uid="FindPreviousButton"
                     Click="OnFindPreviousClicked"
-                    Style="{StaticResource FindButtonStyle}"
-                    ToolTipService.ToolTip="Anterior (Mayús+Intro)">
+                    Style="{StaticResource FindButtonStyle}">
                     <controls:ToolIcon Style="{StaticResource FindIconStyle}" Data="M4.6 10.2 L8 6.8 L11.4 10.2" />
                 </Button>
                 <Button
                     x:Name="FindNextButton"
+                    x:Uid="FindNextButton"
                     Click="OnFindNextClicked"
-                    Style="{StaticResource FindButtonStyle}"
-                    ToolTipService.ToolTip="Siguiente (Intro)">
+                    Style="{StaticResource FindButtonStyle}">
                     <controls:ToolIcon Style="{StaticResource FindIconStyle}" Data="M4.6 6.8 L8 10.2 L11.4 6.8" />
                 </Button>
                 <Button
                     x:Name="FindCloseButton"
+                    x:Uid="FindCloseButton"
                     Click="OnFindCloseClicked"
-                    Style="{StaticResource FindButtonStyle}"
-                    ToolTipService.ToolTip="Cerrar (Esc)">
+                    Style="{StaticResource FindButtonStyle}">
                     <controls:ToolIcon Style="{StaticResource FindIconStyle}" Data="M5 5 L11 11 M11 5 L5 11" />
                 </Button>
             </StackPanel>

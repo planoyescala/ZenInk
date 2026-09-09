@@ -118,7 +118,10 @@ public static class PdfSignatures
             }
             if (found[^1] is { DigestMatches: false } bad)
             {
-                throw new InvalidDataException($"La firma recién escrita no cuadra: {bad.Problem ?? "no verifica"}.");
+                throw new InvalidDataException(CoreText.Say(
+                    "CoreSignatureDoesNotAddUp",
+                    "The signature just written does not add up: {0}.",
+                    bad.Problem ?? CoreText.Say("CoreSignatureNoVerify", "it does not verify")));
             }
         }
         catch
@@ -222,7 +225,9 @@ public static class PdfSignatures
             if (after.Any(signature => !signature.DigestMatches))
             {
                 throw new InvalidDataException(
-                    "Al añadir los datos de validación la firma dejó de cuadrar.");
+                    CoreText.Say(
+                        "CoreValidationBrokeSignature",
+                        "Adding the validation data left the signature not adding up."));
             }
         }
         catch

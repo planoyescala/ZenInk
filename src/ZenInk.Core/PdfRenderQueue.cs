@@ -58,8 +58,8 @@ public sealed record PdfSaveOutcome(PdfDocumentInfo Document, string? Error)
 /// </summary>
 public sealed class PdfPasswordRequiredException(string path, bool wasTried)
     : Exception(wasTried
-        ? "La contraseña no abre este PDF."
-        : "Este PDF está protegido con contraseña.")
+        ? CoreText.Say("CorePasswordWrong", "That password does not open this PDF.")
+        : CoreText.Say("CorePasswordNeeded", "This PDF is protected with a password."))
 {
     public string Path { get; } = path;
 
@@ -1060,7 +1060,8 @@ public sealed class PdfRenderQueue : IDisposable
     {
         if (!_documents.TryGetValue(documentId, out var document))
         {
-            throw new InvalidOperationException($"El documento {documentId} ya no está abierto.");
+            throw new InvalidOperationException(
+                CoreText.Say("CoreDocumentClosed", "Document {0} is no longer open.", documentId));
         }
 
         return new PdfDocumentInfo(documentId, ReadPageSizes(document.Handle));
@@ -1139,7 +1140,10 @@ public sealed class PdfRenderQueue : IDisposable
                         : [];
 
                     var page = fpdfview.FPDF_LoadPage(handle, i)
-                        ?? throw new InvalidOperationException($"No se pudo cargar la página {i} para guardarla.");
+                        ?? throw new InvalidOperationException(CoreText.Say(
+                            "CorePageNotLoadedForSaving",
+                            "Page {0} could not be loaded to save it.",
+                            i));
                     try
                     {
                         // Only touch a page's annotations if there is something
@@ -1171,7 +1175,10 @@ public sealed class PdfRenderQueue : IDisposable
                             // drawing they were on is still there.
                             if (fpdf_flatten.FPDFPageFlatten(page, FlattenForDisplay) == FlattenFail)
                             {
-                                throw new InvalidOperationException($"No se pudieron aplanar las marcas de la página {i + 1}.");
+                                throw new InvalidOperationException(CoreText.Say(
+                                    "CoreFlattenFailed",
+                                    "The marks on page {0} could not be flattened.",
+                                    i + 1));
                             }
 
                             names = [];
@@ -1301,7 +1308,11 @@ public sealed class PdfRenderQueue : IDisposable
                 if (fpdf_ppo.FPDF_ImportPagesByIndex(working, donor, ref page, 1, at) == 0)
                 {
                     string file = Path.GetFileName(plan.Sources[slot.Source].Path);
-                    throw new InvalidOperationException($"No se pudo traer la hoja {slot.PageIndex + 1} de «{file}».");
+                    throw new InvalidOperationException(CoreText.Say(
+                        "CoreSheetNotBrought",
+                        "Sheet {0} of “{1}” could not be brought over.",
+                        slot.PageIndex + 1,
+                        file));
                 }
             }
 
@@ -1351,7 +1362,10 @@ public sealed class PdfRenderQueue : IDisposable
         var origin = plan.Sources[source];
         var handle = fpdfview.FPDF_LoadDocument(origin.Path, source == 0 ? password ?? origin.Password : origin.Password)
             ?? throw new InvalidOperationException(
-                $"No se pudo leer «{Path.GetFileName(origin.Path)}» para traer sus hojas.");
+                CoreText.Say(
+                    "CoreOriginNotRead",
+                    "“{0}” could not be read to bring its sheets over.",
+                    Path.GetFileName(origin.Path)));
 
         donors[source] = handle;
         opened.Add(handle);
@@ -1535,7 +1549,8 @@ public sealed class PdfRenderQueue : IDisposable
     {
         if (!_documents.TryGetValue(documentId, out var document))
         {
-            throw new InvalidOperationException($"El documento {documentId} ya no está abierto.");
+            throw new InvalidOperationException(
+                CoreText.Say("CoreDocumentClosed", "Document {0} is no longer open.", documentId));
         }
 
         if (document.Pages.TryGetValue(pageIndex, out var cached))
@@ -1548,7 +1563,8 @@ public sealed class PdfRenderQueue : IDisposable
         var page = fpdfview.FPDF_LoadPage(document.Handle, pageIndex);
         if (page is null)
         {
-            throw new InvalidOperationException($"No se pudo cargar la página {pageIndex}.");
+            throw new InvalidOperationException(
+                CoreText.Say("CorePageNotLoaded", "Page {0} could not be loaded.", pageIndex));
         }
 
         if (_thinLineDocuments.Contains(documentId))
@@ -1748,7 +1764,8 @@ public sealed class PdfRenderQueue : IDisposable
         var page = LoadPageCore(documentId, pageIndex);
 
         var bitmap = fpdfview.FPDFBitmapCreateEx(width, height, (int)FPDFBitmapFormat.BGRA, IntPtr.Zero, width * 4)
-            ?? throw new InvalidOperationException("No se pudo crear el bitmap de la comparación.");
+            ?? throw new InvalidOperationException(CoreText.Say(
+                "CoreCompareBitmap", "The bitmap for the comparison could not be made."));
 
         try
         {
@@ -1865,7 +1882,8 @@ public sealed class PdfRenderQueue : IDisposable
         var (scaledWidth, scaledHeight) = RotatedRenderSize(page, request.ScaleX, request.ScaleY, request.Rotation);
 
         var bitmap = fpdfview.FPDFBitmapCreateEx(width, height, (int)FPDFBitmapFormat.BGRA, IntPtr.Zero, width * 4)
-            ?? throw new InvalidOperationException("No se pudo crear el bitmap de impresión.");
+            ?? throw new InvalidOperationException(CoreText.Say(
+                "CorePrintBitmap", "The bitmap for printing could not be made."));
 
         try
         {

@@ -73,11 +73,12 @@ public sealed partial class MainPage : Page
     {
         InitializeComponent();
         SyncThemeMenu();
+        SyncLanguageMenu();
         UpdateChrome();
 
         // Fixed for the life of the process, so it is written once and not on
         // every refresh of the start page.
-        AboutLineText.Text = $"ZenInk {PackageVersion} · software libre (GPL-3.0) · parte de ZenBIM";
+        AboutLineText.Text = Loc.Format("AboutLine", PackageVersion);
 
         Loaded += OnLoaded;
     }
@@ -162,6 +163,52 @@ public sealed partial class MainPage : Page
         ThemeDarkItem.IsChecked = AppTheme.Current == ElementTheme.Dark;
     }
 
+    private async void OnLanguageSystemClicked(object sender, RoutedEventArgs e) => await SetLanguageAsync(string.Empty);
+
+    private async void OnLanguageSpanishClicked(object sender, RoutedEventArgs e) => await SetLanguageAsync("es-ES");
+
+    private async void OnLanguageEnglishClicked(object sender, RoutedEventArgs e) => await SetLanguageAsync("en-US");
+
+    /// <summary>
+    /// Remembers the language and says when it will be spoken.
+    ///
+    /// Not now: the ribbon, the panels and every tooltip resolved their words
+    /// as they were parsed, and there is no asking a page that is already up to
+    /// do it again. Rebuilding the window instead would drop the open drawings
+    /// with their unsaved marks, which is a far worse trade than reading one
+    /// sentence.
+    /// </summary>
+    private async Task SetLanguageAsync(string tag)
+    {
+        if (AppLanguage.Chosen == tag)
+        {
+            SyncLanguageMenu();
+            return;
+        }
+
+        AppLanguage.Choose(tag);
+        SyncLanguageMenu();
+
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = Loc.Get("LanguageChangedTitle"),
+            Content = Loc.Get("LanguageChangedBody"),
+            CloseButtonText = Loc.Get("Understood"),
+        };
+
+        AppTheme.Dress(dialog);
+        await Dialogs.ShowAsync(dialog);
+    }
+
+    private void SyncLanguageMenu()
+    {
+        string chosen = AppLanguage.Chosen;
+        LanguageSystemItem.IsChecked = chosen.Length == 0;
+        LanguageSpanishItem.IsChecked = chosen == "es-ES";
+        LanguageEnglishItem.IsChecked = chosen == "en-US";
+    }
+
     // --- acerca de --------------------------------------------------------
 
     /// <summary>
@@ -198,33 +245,25 @@ public sealed partial class MainPage : Page
 
         body.Children.Add(new TextBlock
         {
-            Text = $"Versión {PackageVersion}",
+            Text = Loc.Format("AboutVersion", PackageVersion),
             Opacity = 0.7,
         });
 
         body.Children.Add(new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
-            Text = "Visor y editor de planos PDF. Parte del proyecto ZenBIM, "
-                 + "de plano y escala.",
+            Text = Loc.Get("AboutWhatItIs"),
         });
 
         body.Children.Add(new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
-            Text = "© 2026 plano y escala.\n\n"
-                 + "ZenInk es software libre: puedes redistribuirlo y modificarlo bajo "
-                 + "los términos de la GNU General Public License publicada por la Free "
-                 + "Software Foundation, en su versión 3 o cualquier posterior.\n\n"
-                 + "Se distribuye con la esperanza de que sea útil, pero SIN GARANTÍA "
-                 + "ALGUNA; ni siquiera la garantía implícita de comerciabilidad o de "
-                 + "idoneidad para un propósito concreto. Ver la Licencia para más "
-                 + "detalles.",
+            Text = Loc.Get("AboutLicence"),
         });
 
         body.Children.Add(new HyperlinkButton
         {
-            Content = "Leer la licencia completa (GPL-3.0)",
+            Content = Loc.Get("AboutReadLicence"),
             NavigateUri = new Uri("https://www.gnu.org/licenses/gpl-3.0.html"),
             Padding = new Thickness(0),
         });
@@ -233,10 +272,7 @@ public sealed partial class MainPage : Page
         {
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.7,
-            Text = "El texto de la licencia y los avisos de terceros viajan dentro del "
-                 + "programa, junto al ejecutable.\n\n"
-                 + "ZenInk dibuja los planos con PDFium (BSD-3-Clause) a través de "
-                 + "PDFiumCore (Apache-2.0), sobre WinUI 3 y Win2D.",
+            Text = Loc.Get("AboutThirdParty"),
         });
 
         var dialog = new ContentDialog
@@ -244,7 +280,7 @@ public sealed partial class MainPage : Page
             XamlRoot = XamlRoot,
             Title = "ZenInk",
             Content = body,
-            CloseButtonText = "Cerrar",
+            CloseButtonText = Loc.Get("BtnClose"),
         };
 
         AppTheme.Dress(dialog);
@@ -315,7 +351,7 @@ public sealed partial class MainPage : Page
         {
             RecentFlyout.Items.Add(new MenuFlyoutItem
             {
-                Text = "Todavía no has abierto ningún documento",
+                Text = Loc.Get("RecentEmpty"),
                 IsEnabled = false,
             });
             return;
@@ -331,7 +367,7 @@ public sealed partial class MainPage : Page
 
         RecentFlyout.Items.Add(new MenuFlyoutSeparator());
 
-        var clear = new MenuFlyoutItem { Text = "Vaciar la lista" };
+        var clear = new MenuFlyoutItem { Text = Loc.Get("RecentClear") };
         clear.Click += (_, _) =>
         {
             SetRecent([]);
@@ -365,7 +401,7 @@ public sealed partial class MainPage : Page
         if (!e.DataView.Contains(StandardDataFormats.StorageItems)) return;
 
         e.AcceptedOperation = DataPackageOperation.Copy;
-        e.DragUIOverride.Caption = "Abrir en ZenInk";
+        e.DragUIOverride.Caption = Loc.Get("DropCaption");
         e.DragUIOverride.IsGlyphVisible = false;
         e.Handled = true;
     }
@@ -390,7 +426,7 @@ public sealed partial class MainPage : Page
         }
         catch (Exception ex)
         {
-            await ShowMessageAsync("No se pudo abrir lo que se ha soltado", ex.Message);
+            await ShowMessageAsync(Loc.Get("MsgDropFailed"), ex.Message);
         }
         finally
         {
@@ -427,25 +463,23 @@ public sealed partial class MainPage : Page
 
     private async Task<string?> AskForPasswordAsync(string displayName, bool wasWrong)
     {
-        var box = new PasswordBox { PlaceholderText = "Contraseña" };
+        var box = new PasswordBox { PlaceholderText = Loc.Get("FieldPassword") };
 
         var body = new StackPanel { Spacing = 10, Width = 380 };
         body.Children.Add(new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
-            Text = wasWrong
-                ? $"Esa contraseña no abre «{displayName}». Prueba otra vez."
-                : $"«{displayName}» está protegido con contraseña.",
+            Text = Loc.Format(wasWrong ? "PasswordWrong" : "PasswordNeeded", displayName),
         });
         body.Children.Add(box);
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Este PDF está protegido",
+            Title = Loc.Get("DlgProtected"),
             Content = body,
-            PrimaryButtonText = "Abrir",
-            CloseButtonText = "Cancelar",
+            PrimaryButtonText = Loc.Get("BtnOpen"),
+            CloseButtonText = Loc.Get("BtnCancel"),
             DefaultButton = ContentDialogButton.Primary,
         };
 
@@ -591,7 +625,7 @@ public sealed partial class MainPage : Page
     }
 
     private async Task ShowErrorAsync(string fileName, Exception ex) =>
-        await ShowMessageAsync("No se pudo abrir el documento", $"{fileName}\n\n{ex.Message}");
+        await ShowMessageAsync(Loc.Get("MsgOpenFailed"), $"{fileName}\n\n{ex.Message}");
 
     private async Task ShowMessageAsync(string title, string message)
     {
@@ -600,7 +634,7 @@ public sealed partial class MainPage : Page
             XamlRoot = XamlRoot,
             Title = title,
             Content = message,
-            CloseButtonText = "Cerrar",
+            CloseButtonText = Loc.Get("BtnClose"),
         };
 
         AppTheme.Dress(dialog);
@@ -624,11 +658,11 @@ public sealed partial class MainPage : Page
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Hay cambios sin guardar",
-            Content = $"{tab.Header} tiene cambios que no se han escrito en el PDF.",
-            PrimaryButtonText = "Guardar y cerrar",
-            SecondaryButtonText = "Cerrar sin guardar",
-            CloseButtonText = "Cancelar",
+            Title = Loc.Get("DlgUnsaved"),
+            Content = Loc.Format("UnsavedInTab", tab.Header),
+            PrimaryButtonText = Loc.Get("BtnSaveAndClose"),
+            SecondaryButtonText = Loc.Get("BtnCloseWithoutSaving"),
+            CloseButtonText = Loc.Get("BtnCancel"),
             DefaultButton = ContentDialogButton.Primary,
         };
 
@@ -639,12 +673,12 @@ public sealed partial class MainPage : Page
 
         if (answer == ContentDialogResult.Primary)
         {
-            using (BusyScope("Guardando…"))
+            using (BusyScope(Loc.Get("BusySaving")))
             {
                 string? error = await viewer.SaveChangesAsync();
                 if (error is not null)
                 {
-                    await ShowMessageAsync("No se pudo guardar el documento", error);
+                    await ShowMessageAsync(Loc.Get("MsgSaveFailed"), error);
                     return;
                 }
             }
@@ -831,19 +865,19 @@ public sealed partial class MainPage : Page
         int marks = viewer.Annotations.Count;
         string what = (viewer.HasUnsavedRotations, marks) switch
         {
-            (true, 0) => "Los giros que no se han guardado se perderán.",
-            (true, _) => $"Los giros y las {marks} marcas que no se han guardado se perderán.",
-            (false, 1) => "La marca que no se ha guardado se perderá.",
-            _ => $"Las {marks} marcas que no se han guardado se perderán.",
+            (true, 0) => Loc.Get("DiscardTurnsOnly"),
+            (true, _) => Loc.Format("DiscardTurnsAndMarks", marks),
+            (false, 1) => Loc.Get("DiscardOneMark"),
+            _ => Loc.Format("DiscardMarks", marks),
         };
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Descartar los cambios",
-            Content = $"{what}\n\nEl documento volverá a como está en el archivo.",
-            PrimaryButtonText = "Descartar",
-            CloseButtonText = "Cancelar",
+            Title = Loc.Get("DlgDiscard"),
+            Content = $"{what}\n\n{Loc.Get("DiscardBackToFile")}",
+            PrimaryButtonText = Loc.Get("BtnDiscard"),
+            CloseButtonText = Loc.Get("BtnCancel"),
             DefaultButton = ContentDialogButton.Close,
         };
 
@@ -873,12 +907,12 @@ public sealed partial class MainPage : Page
         if (ActiveViewer is not { } viewer || !viewer.HasUnsavedChanges) return;
         if (!await ConfirmRearrangementAsync(viewer)) return;
 
-        using (BusyScope("Guardando…"))
+        using (BusyScope(Loc.Get("BusySaving")))
         {
             string? error = await viewer.SaveChangesAsync();
             if (error is not null)
             {
-                await ShowMessageAsync("No se pudo guardar el documento", error);
+                await ShowMessageAsync(Loc.Get("MsgSaveFailed"), error);
             }
         }
 
@@ -958,19 +992,18 @@ public sealed partial class MainPage : Page
         {
             TextWrapping = TextWrapping.Wrap,
             Text = sheets.Count == 1
-                ? $"La hoja {sheets[0] + 1} de {viewer.PageCount} se llevará a donde digas."
-                : $"Las {sheets.Count} hojas marcadas se llevarán juntas, en su orden, "
-                  + $"empezando en la hoja que digas (1 a {last}).",
+                ? Loc.Format("MoveOneSheet", sheets[0] + 1, viewer.PageCount)
+                : Loc.Format("MoveManySheets", sheets.Count, last),
         });
-        body.Children.Add(Labelled("Llevarla a la hoja", position));
+        body.Children.Add(Labelled(Loc.Get("FieldMoveTo"), position));
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = sheets.Count == 1 ? "Mover la hoja" : "Mover las hojas",
+            Title = sheets.Count == 1 ? Loc.Get("DlgMoveSheet") : Loc.Get("DlgMoveSheets"),
             Content = body,
-            PrimaryButtonText = "Mover",
-            CloseButtonText = "Cancelar",
+            PrimaryButtonText = Loc.Get("BtnMove"),
+            CloseButtonText = Loc.Get("BtnCancel"),
             DefaultButton = ContentDialogButton.Primary,
         };
 
@@ -1006,7 +1039,7 @@ public sealed partial class MainPage : Page
         var read = new List<(StorageFile File, int PageCount, string? Password)>(files.Count);
         int locked = 0;
 
-        using (BusyScope(files.Count == 1 ? "Leyendo el PDF…" : $"Leyendo {files.Count} PDF…"))
+        using (BusyScope(files.Count == 1 ? Loc.Get("BusyReadingPdf") : Loc.Format("BusyReadingPdfs", files.Count)))
         {
             foreach (var file in files)
             {
@@ -1018,7 +1051,7 @@ public sealed partial class MainPage : Page
 
         if (read.Count == 0)
         {
-            if (locked > 0) await ShowMessageAsync("No se insertó nada", "No se pudo abrir ninguno de los PDF elegidos.");
+            if (locked > 0) await ShowMessageAsync(Loc.Get("MsgNothingInserted"), Loc.Get("MsgNoneOpened"));
             return;
         }
 
@@ -1047,18 +1080,24 @@ public sealed partial class MainPage : Page
 
         int sheets = batch.Sum(insertion => insertion.Pages.Count);
 
-        using (BusyScope("Insertando hojas…"))
+        using (BusyScope(Loc.Get("BusyInserting")))
         {
             try
             {
                 await viewer.InsertPagesAsync(destination, batch);
-                Hint(locked == 0
-                    ? $"{Sheets(sheets)} insertadas."
-                    : $"{Sheets(sheets)} insertadas; {locked} archivo(s) no se pudieron abrir.");
+
+                // Built as two whole sentences rather than glued out of pieces:
+                // a language that agrees its verb with the number cannot have
+                // «Una hoja insertadas».
+                string done = sheets == 1
+                    ? Loc.Get("InsertedOne")
+                    : Loc.Format("InsertedMany", sheets);
+
+                Hint(locked == 0 ? done : Loc.Format("InsertedAndLocked", done, locked));
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("No se pudieron insertar las hojas", ex.Message);
+                await ShowMessageAsync(Loc.Get("MsgInsertFailed"), ex.Message);
             }
         }
     }
@@ -1088,7 +1127,7 @@ public sealed partial class MainPage : Page
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync($"No se pudo leer «{file.Name}»", ex.Message);
+                await ShowMessageAsync(Loc.Format("MsgCouldNotRead", file.Name), ex.Message);
                 return null;
             }
         }
@@ -1107,8 +1146,8 @@ public sealed partial class MainPage : Page
         var asPicked = new List<(StorageFile File, int PageCount, string? Password)>(files);
 
         var order = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, SelectedIndex = 0 };
-        order.Items.Add("Por nombre de archivo");
-        order.Items.Add("En el orden en que los elegí");
+        order.Items.Add(Loc.Get("OrderByName"));
+        order.Items.Add(Loc.Get("OrderAsChosen"));
 
         var list = new ListView
         {
@@ -1131,19 +1170,19 @@ public sealed partial class MainPage : Page
         body.Children.Add(new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
-            Text = $"{files.Count} archivos, {Sheets(sheets).ToLowerInvariant()} en total. "
-                   + "Se pueden reordenar después en el panel de hojas.",
+            Text = Loc.Format("InsertSummary", files.Count, Sheets(sheets).ToLowerInvariant())
+                   + " " + Loc.Get("InsertReorderNote"),
         });
-        body.Children.Add(Labelled("Orden", order));
+        body.Children.Add(Labelled(Loc.Get("FieldOrder"), order));
         body.Children.Add(list);
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Insertar hojas",
+            Title = Loc.Get("DlgInsertSheets"),
             Content = body,
-            PrimaryButtonText = "Insertar",
-            CloseButtonText = "Cancelar",
+            PrimaryButtonText = Loc.Get("BtnInsert"),
+            CloseButtonText = Loc.Get("BtnCancel"),
             DefaultButton = ContentDialogButton.Primary,
         };
 
@@ -1153,17 +1192,19 @@ public sealed partial class MainPage : Page
         return order.SelectedIndex == 1 ? asPicked : byName;
 
         static string Describe((StorageFile File, int PageCount, string? Password) entry) =>
-            entry.PageCount == 1 ? entry.File.Name : $"{entry.File.Name}  ·  {entry.PageCount} hojas";
+            entry.PageCount == 1
+                ? entry.File.Name
+                : $"{entry.File.Name}  ·  {Loc.Format("ManySheets", entry.PageCount)}";
     }
 
     /// <summary>Which sheets of another file to bring, as a range. Empty means all of them.</summary>
     private async Task<IReadOnlyList<int>?> AskForSheetsAsync(string fileName, int pageCount)
     {
-        var box = new TextBox { PlaceholderText = $"Todas (1-{pageCount})" };
+        var box = new TextBox { PlaceholderText = Loc.Format("AllSheetsRange", pageCount) };
         var complaint = new TextBlock
         {
             Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
-            Text = "No se entiende. Por ejemplo: 1, 3, 5-8",
+            Text = Loc.Get("RangeNotUnderstood"),
             Visibility = Visibility.Collapsed,
         };
 
@@ -1171,18 +1212,19 @@ public sealed partial class MainPage : Page
         body.Children.Add(new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
-            Text = $"«{fileName}» tiene {(pageCount == 1 ? "una hoja" : $"{pageCount} hojas")}.",
+            Text = Loc.Format(
+                pageCount == 1 ? "FileHasOneSheet" : "FileHasManySheets", fileName, pageCount),
         });
-        body.Children.Add(Labelled("Qué hojas traer", box));
+        body.Children.Add(Labelled(Loc.Get("FieldWhichSheets"), box));
         body.Children.Add(complaint);
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Insertar hojas",
+            Title = Loc.Get("DlgInsertSheets"),
             Content = body,
-            PrimaryButtonText = "Insertar",
-            CloseButtonText = "Cancelar",
+            PrimaryButtonText = Loc.Get("BtnInsert"),
+            CloseButtonText = Loc.Get("BtnCancel"),
             DefaultButton = ContentDialogButton.Primary,
         };
 
@@ -1210,13 +1252,16 @@ public sealed partial class MainPage : Page
             : Papers[0].Size;
 
         var paper = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, SelectedIndex = 0 };
-        paper.Items.Add($"Como la hoja en pantalla — {Math.Round(size.WidthPt / 72 * 25.4)} × {Math.Round(size.HeightPt / 72 * 25.4)} mm");
+        paper.Items.Add(Loc.Format(
+            "PaperLikeSheet",
+            Math.Round(size.WidthPt / 72 * 25.4),
+            Math.Round(size.HeightPt / 72 * 25.4)));
         foreach (var (name, _) in Papers)
         {
             paper.Items.Add(name);
         }
 
-        var landscape = new CheckBox { Content = "Apaisada" };
+        var landscape = new CheckBox { Content = Loc.Get("FieldLandscape") };
         var count = new NumberBox
         {
             Value = 1,
@@ -1228,17 +1273,17 @@ public sealed partial class MainPage : Page
         };
 
         var body = new StackPanel { Spacing = 12, Width = 380 };
-        body.Children.Add(Labelled("Tamaño", paper));
+        body.Children.Add(Labelled(Loc.Get("FieldPaperSize"), paper));
         body.Children.Add(landscape);
-        body.Children.Add(Labelled("Cuántas", count));
+        body.Children.Add(Labelled(Loc.Get("FieldHowMany"), count));
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Insertar hojas en blanco",
+            Title = Loc.Get("DlgInsertBlank"),
             Content = body,
-            PrimaryButtonText = "Insertar",
-            CloseButtonText = "Cancelar",
+            PrimaryButtonText = Loc.Get("BtnInsert"),
+            CloseButtonText = Loc.Get("BtnCancel"),
             DefaultButton = ContentDialogButton.Primary,
         };
 
@@ -1260,8 +1305,8 @@ public sealed partial class MainPage : Page
 
         string stem = Path.GetFileNameWithoutExtension(source);
         var file = await PickPdfDestinationAsync(sheets.Count == 1
-            ? $"{stem} hoja {sheets[0] + 1}"
-            : $"{stem} {sheets.Count} hojas");
+            ? $"{stem} {Loc.Format("FileStemSheet", sheets[0] + 1)}"
+            : $"{stem} {Loc.Format("ManySheets", sheets.Count)}");
         if (file is null) return;
 
         // Writing over the document it is reading would pull the file out from
@@ -1269,21 +1314,21 @@ public sealed partial class MainPage : Page
         if (IsSamePath(file.Path, source))
         {
             await ShowMessageAsync(
-                "Ese es el documento abierto",
-                "Las hojas extraídas necesitan un archivo propio. Elige otro nombre.");
+                Loc.Get("MsgSameDocument"),
+                Loc.Get("MsgExtractNeedsOwnFile"));
             return;
         }
 
-        using (BusyScope("Extrayendo hojas…"))
+        using (BusyScope(Loc.Get("BusyExtracting")))
         {
             try
             {
                 await viewer.ExtractPagesAsync(sheets, file.Path);
-                Hint($"{Sheets(sheets.Count)} en «{file.Name}».");
+                Hint(Loc.Format("ExtractedInto", Sheets(sheets.Count), file.Name));
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("No se pudieron extraer las hojas", ex.Message);
+                await ShowMessageAsync(Loc.Get("MsgExtractFailed"), ex.Message);
             }
         }
     }
@@ -1311,18 +1356,17 @@ public sealed partial class MainPage : Page
         body.Children.Add(new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
-            Text = $"El documento tiene {viewer.PageCount} hojas. Se escribirán archivos nuevos; "
-                   + "este no se toca.",
+            Text = Loc.Format("SplitSummary", viewer.PageCount),
         });
-        body.Children.Add(Labelled("Hojas por archivo", every));
+        body.Children.Add(Labelled(Loc.Get("FieldSheetsPerFile"), every));
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Dividir el documento",
+            Title = Loc.Get("DlgSplit"),
             Content = body,
-            PrimaryButtonText = "Elegir carpeta…",
-            CloseButtonText = "Cancelar",
+            PrimaryButtonText = Loc.Get("BtnChooseFolder"),
+            CloseButtonText = Loc.Get("BtnCancel"),
             DefaultButton = ContentDialogButton.Primary,
         };
 
@@ -1342,7 +1386,7 @@ public sealed partial class MainPage : Page
         string stem = Path.GetFileNameWithoutExtension(source);
         int written = 0;
 
-        using (BusyScope("Dividiendo el documento…"))
+        using (BusyScope(Loc.Get("BusySplitting")))
         {
             try
             {
@@ -1359,16 +1403,17 @@ public sealed partial class MainPage : Page
                     written++;
                 }
 
-                Hint($"{written} archivos en «{folder.Name}».");
+                Hint(Loc.Format("SplitWritten", written, folder.Name));
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("No se pudo dividir el documento", ex.Message);
+                await ShowMessageAsync(Loc.Get("MsgSplitFailed"), ex.Message);
             }
         }
     }
 
-    private static string Sheets(int count) => count == 1 ? "Una hoja" : $"{count} hojas";
+    private static string Sheets(int count) =>
+        count == 1 ? Loc.Get("OneSheet") : Loc.Format("ManySheets", count);
 
     /// <summary>
     /// Says what just happened, in the status bar, and then gets out of the
@@ -1407,18 +1452,16 @@ public sealed partial class MainPage : Page
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Este documento está firmado",
+            Title = Loc.Get("DlgSigned"),
             Content = new TextBlock
             {
                 TextWrapping = TextWrapping.Wrap,
                 Text = signatures == 1
-                    ? "Cambiar las hojas de sitio deja sin validez la firma que trae el documento: "
-                      + "una firma cubre el archivo tal y como estaba. Se puede volver a firmar después."
-                    : $"Cambiar las hojas de sitio deja sin validez las {signatures} firmas que trae el documento: "
-                      + "una firma cubre el archivo tal y como estaba. Se puede volver a firmar después.",
+                    ? Loc.Get("MovingBreaksSignature")
+                    : Loc.Format("MovingBreaksSignatures", signatures),
             },
-            PrimaryButtonText = "Guardar igualmente",
-            CloseButtonText = "Cancelar",
+            PrimaryButtonText = Loc.Get("BtnSaveAnyway"),
+            CloseButtonText = Loc.Get("BtnCancel"),
             DefaultButton = ContentDialogButton.Close,
         };
 
@@ -1439,23 +1482,19 @@ public sealed partial class MainPage : Page
         int marks = viewer.Annotations.Count;
         string count = marks switch
         {
-            0 => "Las anotaciones del documento pasarán a formar parte del dibujo.",
-            1 => "La marca de este documento pasará a formar parte del dibujo.",
-            _ => $"Las {marks} marcas de este documento pasarán a formar parte del dibujo.",
+            0 => Loc.Get("FlattenNoMarks"),
+            1 => Loc.Get("FlattenOneMark"),
+            _ => Loc.Format("FlattenManyMarks", marks),
         };
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Aplanar las marcas",
-            Content = $"{count}\n\nDespués nadie podrá moverlas, cambiarlas ni borrarlas, "
-                + "ni en ZenInk ni en otro programa. También se aplanan las anotaciones "
-                + "que traía el archivo de otras herramientas.\n\nEsto no se puede deshacer: "
-                + "si aplanas sobre este archivo, no hay vuelta atrás. Aplanar en una copia "
-                + "deja este documento como está, con sus marcas todavía editables.",
-            PrimaryButtonText = "Aplanar y guardar",
-            SecondaryButtonText = "Aplanar en una copia…",
-            CloseButtonText = "Cancelar",
+            Title = Loc.Get("DlgFlatten"),
+            Content = $"{count}\n\n{Loc.Get("FlattenWarning")}",
+            PrimaryButtonText = Loc.Get("BtnFlattenSave"),
+            SecondaryButtonText = Loc.Get("BtnFlattenCopy"),
+            CloseButtonText = Loc.Get("BtnCancel"),
             // The way out is the default: pressing Enter without reading should
             // land on the choice that keeps a version with live marks, not on
             // the one that cannot be undone.
@@ -1467,12 +1506,12 @@ public sealed partial class MainPage : Page
         switch (await Dialogs.ShowAsync(dialog))
         {
             case ContentDialogResult.Primary:
-                using (BusyScope("Aplanando las marcas…"))
+                using (BusyScope(Loc.Get("BusyFlattening")))
                 {
                     string? error = await viewer.FlattenAsync();
                     if (error is not null)
                     {
-                        await ShowMessageAsync("No se pudieron aplanar las marcas", error);
+                        await ShowMessageAsync(Loc.Get("MsgFlattenFailed"), error);
                     }
                 }
                 break;
@@ -1496,7 +1535,8 @@ public sealed partial class MainPage : Page
     {
         if (viewer.SourcePath is not { } source) return;
 
-        var file = await PickPdfDestinationAsync($"{Path.GetFileNameWithoutExtension(source)} aplanado");
+        var file = await PickPdfDestinationAsync(
+            $"{Path.GetFileNameWithoutExtension(source)} {Loc.Get("FlattenedSuffix")}");
         if (file is null) return;
 
         if (IsSamePath(file.Path, source))
@@ -1504,12 +1544,12 @@ public sealed partial class MainPage : Page
             // Aiming the copy at the original is the flatten that cannot be
             // undone, and it should not happen by accident through this door.
             await ShowMessageAsync(
-                "Elige otro archivo",
-                "Ese es el documento que estás mirando. Para aplanarlo sobre sí mismo, usa «Aplanar y guardar».");
+                Loc.Get("MsgChooseAnotherFile"),
+                Loc.Get("MsgFlattenSameFile"));
             return;
         }
 
-        using (BusyScope("Aplanando en una copia…"))
+        using (BusyScope(Loc.Get("BusyFlatteningCopy")))
         {
             try
             {
@@ -1517,7 +1557,7 @@ public sealed partial class MainPage : Page
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("No se pudo aplanar en una copia", ex.Message);
+                await ShowMessageAsync(Loc.Get("MsgFlattenCopyFailed"), ex.Message);
             }
         }
     }
@@ -1553,7 +1593,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        using (BusyScope("Guardando…"))
+        using (BusyScope(Loc.Get("BusySaving")))
         {
             try
             {
@@ -1561,7 +1601,7 @@ public sealed partial class MainPage : Page
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("No se pudo guardar el documento", ex.Message);
+                await ShowMessageAsync(Loc.Get("MsgSaveFailed"), ex.Message);
             }
         }
 
@@ -1588,14 +1628,11 @@ public sealed partial class MainPage : Page
             var nothing = new ContentDialog
             {
                 XamlRoot = XamlRoot,
-                Title = "No hay ningún certificado",
-                Content = "Windows no encuentra ningún certificado con el que firmar. "
-                        + "Si tienes el tuyo en un archivo —el de la FNMT viene en un .pfx— "
-                        + "puedes instalarlo ahora: lo abre el asistente de Windows, que es "
-                        + "quien te pide la contraseña.",
-                PrimaryButtonText = "Importar un certificado…",
-                SecondaryButtonText = "Poner solo un sello",
-                CloseButtonText = "Cancelar",
+                Title = Loc.Get("DlgNoCertificate"),
+                Content = Loc.Get("NoCertificateBody"),
+                PrimaryButtonText = Loc.Get("BtnImportCertificate"),
+                SecondaryButtonText = Loc.Get("BtnStampOnly"),
+                CloseButtonText = Loc.Get("BtnCancel"),
                 DefaultButton = ContentDialogButton.Primary,
             };
             AppTheme.Dress(nothing);
@@ -1629,8 +1666,8 @@ public sealed partial class MainPage : Page
         };
 
         var issuer = new TextBlock { TextWrapping = TextWrapping.Wrap, Opacity = 0.75 };
-        var who = new TextBox { PlaceholderText = "Nombre y apellidos" };
-        var papers = new TextBox { PlaceholderText = "DNI" };
+        var who = new TextBox { PlaceholderText = Loc.Get("FieldFullName") };
+        var papers = new TextBox { PlaceholderText = Loc.Get("FieldIdNumber") };
 
         // The name and the identity number come out of the certificate, and stay
         // editable: what a certificate calls someone — surnames first, all in
@@ -1638,8 +1675,10 @@ public sealed partial class MainPage : Page
         void DescribeChosen()
         {
             var chosen = certificates[Math.Max(0, picker.SelectedIndex)];
-            issuer.Text = $"Emitido por {chosen.GetNameInfo(X509NameType.SimpleName, forIssuer: true)}"
-                        + $" · caduca el {chosen.NotAfter:dd/MM/yyyy}";
+            issuer.Text = Loc.Format(
+                "CertificateIssuer",
+                chosen.GetNameInfo(X509NameType.SimpleName, forIssuer: true),
+                chosen.NotAfter.ToString("d"));
 
             var (name, id) = IdentityIn(chosen);
             who.Text = name;
@@ -1651,11 +1690,11 @@ public sealed partial class MainPage : Page
 
         // Empty by default: a reason is a claim about why this was signed, and
         // one that was never typed is worse than none at all.
-        var reason = new TextBox { PlaceholderText = "Motivo de la firma" };
-        var heading = new TextBox { Text = "Firmado digitalmente por" };
-        var visible = new CheckBox { Content = "Ponerla a la vista sobre el documento", IsChecked = true };
-        var withDate = new CheckBox { Content = "Poner la fecha", IsChecked = true };
-        var importer = new HyperlinkButton { Content = "Importar o añadir un certificado…", Padding = new Thickness(0) };
+        var reason = new TextBox { PlaceholderText = Loc.Get("FieldSignReason") };
+        var heading = new TextBox { Text = Loc.Get("HeadingSignedBy") };
+        var visible = new CheckBox { Content = Loc.Get("FieldShowOnDocument"), IsChecked = true };
+        var withDate = new CheckBox { Content = Loc.Get("FieldWithDate"), IsChecked = true };
+        var importer = new HyperlinkButton { Content = Loc.Get("LinkImportCertificate"), Padding = new Thickness(0) };
 
         // The way out for a drawing that is being reviewed rather than issued.
         // It is offered here, beside the real thing, and named for what it is:
@@ -1663,7 +1702,7 @@ public sealed partial class MainPage : Page
         // put on the sheet proves nothing.
         var justStamp = new HyperlinkButton
         {
-            Content = "Poner solo un sello, sin firma digital…",
+            Content = Loc.Get("LinkStampInstead"),
             Padding = new Thickness(0),
         };
 
@@ -1673,7 +1712,7 @@ public sealed partial class MainPage : Page
         // for every drawing they sign.
         var timestamp = new CheckBox
         {
-            Content = "Sellar la hora con una autoridad (TSA)",
+            Content = Loc.Get("FieldTimestamp"),
             IsChecked = TimestampSetting.Wanted,
         };
 
@@ -1689,8 +1728,7 @@ public sealed partial class MainPage : Page
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.7,
             FontSize = 12,
-            Text = "Con sello, la firma sigue valiendo cuando el certificado caduque. "
-                 + "Sale a internet: viaja un resumen de la firma, ni el plano ni quién firma.",
+            Text = Loc.Get("TimestampNote"),
             Visibility = authority.Visibility,
         };
 
@@ -1699,7 +1737,7 @@ public sealed partial class MainPage : Page
         // without asking every authority in the chain about every certificate.
         var validation = new CheckBox
         {
-            Content = "Guardar los datos de validación en el archivo",
+            Content = Loc.Get("FieldValidationData"),
             IsChecked = TimestampSetting.KeepValidationData,
         };
 
@@ -1708,9 +1746,7 @@ public sealed partial class MainPage : Page
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.7,
             FontSize = 12,
-            Text = "Para poder comprobar la firma dentro de años sin preguntarle a nadie. "
-                 + "Pregunta ahora a las autoridades que nombra tu certificado; si no contestan, "
-                 + "la firma se hace igual y se queda sin ellos.",
+            Text = Loc.Get("ValidationDataNote"),
             Visibility = validation.IsChecked == true ? Visibility.Visible : Visibility.Collapsed,
         };
 
@@ -1795,7 +1831,7 @@ public sealed partial class MainPage : Page
             });
         }
 
-        body.Children.Add(new TextBlock { Text = "Firmar con" });
+        body.Children.Add(new TextBlock { Text = Loc.Get("SignWithLabel") });
         body.Children.Add(picker);
         body.Children.Add(issuer);
         body.Children.Add(importer);
@@ -1807,7 +1843,7 @@ public sealed partial class MainPage : Page
         body.Children.Add(validationWhy);
         body.Children.Add(visible);
 
-        stampFields.Children.Add(Labelled("Encabezado", heading));
+        stampFields.Children.Add(Labelled(Loc.Get("FieldHeading"), heading));
 
         // Name and identity number share a row: they are short, they belong
         // together, and the dialog is already as tall as a laptop screen holds.
@@ -1816,20 +1852,20 @@ public sealed partial class MainPage : Page
             ColumnSpacing = 10,
             ColumnDefinitions = { new ColumnDefinition(), new ColumnDefinition { Width = new GridLength(150) } },
         };
-        var namePair = Labelled("Nombre", who);
-        var idPair = Labelled("DNI", papers);
+        var namePair = Labelled(Loc.Get("FieldName"), who);
+        var idPair = Labelled(Loc.Get("FieldIdNumber"), papers);
         Grid.SetColumn(idPair, 1);
         identity.Children.Add(namePair);
         identity.Children.Add(idPair);
 
         stampFields.Children.Add(identity);
-        stampFields.Children.Add(Labelled("Motivo", reason));
+        stampFields.Children.Add(Labelled(Loc.Get("FieldReason"), reason));
         stampFields.Children.Add(withDate);
         stampFields.Children.Add(new TextBlock
         {
             Opacity = 0.75,
             Margin = new Thickness(0, 2, 0, 2),
-            Text = "Lo que dejes en blanco no aparece:",
+            Text = Loc.Get("StampBlankNote"),
         });
         stampFields.Children.Add(preview);
 
@@ -1844,8 +1880,7 @@ public sealed partial class MainPage : Page
             {
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 8, 0, 0),
-                Text = "Hay cambios sin guardar. Se guardarán antes de firmar: "
-                     + "una firma cubre el archivo, y lo que no esté escrito no queda firmado.",
+                Text = Loc.Get("SaveBeforeSigningNote"),
             });
         }
 
@@ -1858,8 +1893,7 @@ public sealed partial class MainPage : Page
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.75,
             Margin = new Thickness(0, 4, 0, 0),
-            Text = $"La copia: «{Path.GetFileName(SignedCopyPath(source))}», junto al original. "
-                 + "Después dibujarás dónde va la firma.",
+            Text = Loc.Format("SignedCopyNote", Path.GetFileName(SignedCopyPath(source))),
         });
 
         Redraw();
@@ -1867,11 +1901,11 @@ public sealed partial class MainPage : Page
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Firmar el documento",
+            Title = Loc.Get("DlgSignDocument"),
             Content = new ScrollViewer { Content = body, MaxHeight = 560, HorizontalContentAlignment = HorizontalAlignment.Stretch },
-            PrimaryButtonText = "Firmar una copia",
-            SecondaryButtonText = "Firmar este archivo",
-            CloseButtonText = "Cancelar",
+            PrimaryButtonText = Loc.Get("BtnSignCopy"),
+            SecondaryButtonText = Loc.Get("BtnSignThisFile"),
+            CloseButtonText = Loc.Get("BtnCancel"),
             DefaultButton = ContentDialogButton.Primary,
         };
 
@@ -1975,7 +2009,7 @@ public sealed partial class MainPage : Page
     {
         string target = SignedCopyPath(source);
 
-        using (BusyScope("Firmando una copia…"))
+        using (BusyScope(Loc.Get("BusySigningCopy")))
         {
             try
             {
@@ -1983,7 +2017,7 @@ public sealed partial class MainPage : Page
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("No se pudo firmar la copia", ex.Message);
+                await ShowMessageAsync(Loc.Get("MsgSignCopyFailed"), ex.Message);
                 return;
             }
         }
@@ -2009,25 +2043,25 @@ public sealed partial class MainPage : Page
 
         try
         {
-            using (BusyScope("Guardando los datos de validación…"))
+            using (BusyScope(Loc.Get("BusyValidationData")))
             {
                 int answers = await Task.Run(
                     () => PdfSignatures.AddValidationData(signedPath, staged, new HttpRevocationSource()));
 
                 if (answers == 0 && !File.Exists(staged))
                 {
-                    Hint("No se pudo preguntar por los certificados: la firma queda sin datos de validación.");
+                    Hint(Loc.Get("HintNoRevocationAnswer"));
                     return;
                 }
 
                 File.Move(staged, signedPath, overwrite: true);
-                Hint($"Firma con datos de validación: {answers} respuesta(s) de las autoridades.");
+                Hint(Loc.Format("HintValidationData", answers));
             }
         }
         catch (Exception ex)
         {
             TryDeleteFile(staged);
-            Hint($"La firma está hecha, pero sin datos de validación: {ex.Message}");
+            Hint(Loc.Format("HintValidationFailed", ex.Message));
         }
     }
 
@@ -2068,33 +2102,32 @@ public sealed partial class MainPage : Page
     /// </summary>
     private async Task AskForStampAsync(PdfTiledViewer viewer)
     {
-        var who = new TextBox { PlaceholderText = "Nombre y apellidos" };
-        var papers = new TextBox { PlaceholderText = "DNI" };
-        var reason = new TextBox { PlaceholderText = "Motivo, si hace falta" };
-        var heading = new TextBox { Text = "Revisado por" };
-        var withDate = new CheckBox { Content = "Poner la fecha", IsChecked = true };
+        var who = new TextBox { PlaceholderText = Loc.Get("FieldFullName") };
+        var papers = new TextBox { PlaceholderText = Loc.Get("FieldIdNumber") };
+        var reason = new TextBox { PlaceholderText = Loc.Get("FieldReasonOptional") };
+        var heading = new TextBox { Text = Loc.Get("HeadingReviewedBy") };
+        var withDate = new CheckBox { Content = Loc.Get("FieldWithDate"), IsChecked = true };
 
         var body = new StackPanel { Spacing = 8, Width = 420 };
         body.Children.Add(new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
-            Text = "Un sello es una marca sobre el dibujo: dice quién lo ha visto, pero no lo firma. "
-                 + "No queda constancia criptográfica y cualquiera puede moverlo o quitarlo.",
+            Text = Loc.Get("StampNote"),
         });
 
-        body.Children.Add(Labelled("Encabezado", heading));
-        body.Children.Add(Labelled("Nombre", who));
-        body.Children.Add(Labelled("DNI", papers));
-        body.Children.Add(Labelled("Motivo", reason));
+        body.Children.Add(Labelled(Loc.Get("FieldHeading"), heading));
+        body.Children.Add(Labelled(Loc.Get("FieldName"), who));
+        body.Children.Add(Labelled(Loc.Get("FieldIdNumber"), papers));
+        body.Children.Add(Labelled(Loc.Get("FieldReason"), reason));
         body.Children.Add(withDate);
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Poner un sello",
+            Title = Loc.Get("DlgPutStamp"),
             Content = body,
-            PrimaryButtonText = "Colocarlo",
-            CloseButtonText = "Cancelar",
+            PrimaryButtonText = Loc.Get("BtnPlaceIt"),
+            CloseButtonText = Loc.Get("BtnCancel"),
             DefaultButton = ContentDialogButton.Primary,
         };
 
@@ -2112,18 +2145,22 @@ public sealed partial class MainPage : Page
     /// <summary>
     /// The heading a stamp with nothing under it may carry.
     ///
-    /// "Firmado digitalmente por" is a claim about cryptography, and a box that
-    /// makes it without any is the one way this feature could deceive the
-    /// person receiving the drawing. Anything else the reader typed is theirs
-    /// to keep — this only refuses to repeat the one sentence that would be a
-    /// lie.
+    /// A heading that says the signing was digital is a claim about
+    /// cryptography, and a box that makes it without any is the one way this
+    /// feature could deceive the person receiving the drawing. Anything else
+    /// the reader typed is theirs to keep — this only refuses to repeat the one
+    /// sentence that would be a lie.
+    ///
+    /// The word looked for is the same in both languages ("digitalmente",
+    /// "digitally"), which is luck rather than design: a language where it is
+    /// not would need its own word here.
     /// </summary>
     private static string StampHeading(string typed)
     {
         string heading = typed.Trim();
 
         return heading.Contains("digital", StringComparison.OrdinalIgnoreCase)
-            ? "Firmado por"
+            ? Loc.Get("HeadingSignedByShort")
             : heading;
     }
 
@@ -2134,7 +2171,7 @@ public sealed partial class MainPage : Page
         if (await PlaceStampAsync(viewer, lines, forSigning: false) is not { } placed) return;
 
         viewer.PlaceStamp(placed.Page, placed.Box, string.Join('\n', lines.Select(line => line.Text)));
-        Hint("Sello puesto. Es una marca: se mueve, se cambia y se borra como cualquier otra.");
+        Hint(Loc.Get("HintStampPlaced"));
         UpdateChrome();
     }
 
@@ -2164,19 +2201,19 @@ public sealed partial class MainPage : Page
         PdfTiledViewer viewer, IReadOnlyList<(string Text, bool Strong)> lines, bool forSigning = true)
     {
         // The strip says what pressing it will do. A stamp that offered
-        // "Firmar aquí" would be promising a signature it is not going to make.
+        // «Sign here» would be promising a signature it is not going to make.
         SignStripLabel.Text = forSigning
-            ? "Arrastra la firma para moverla"
-            : "Arrastra el sello para moverlo";
-        SignConfirmButton.Content = forSigning ? "Firmar aquí" : "Ponerlo aquí";
-        SignRedrawButton.Content = forSigning ? "Dibujarla otra vez" : "Dibujarlo otra vez";
-        SignDropButton.Content = forSigning ? "Quitarla" : "Quitarlo";
+            ? Loc.Get("StripDragSignature")
+            : Loc.Get("StripDragStamp");
+        SignConfirmButton.Content = forSigning ? Loc.Get("StripSignHere") : Loc.Get("StripPlaceHere");
+        SignRedrawButton.Content = forSigning ? Loc.Get("StripDrawAgainF") : Loc.Get("StripDrawAgainM");
+        SignDropButton.Content = forSigning ? Loc.Get("StripRemoveF") : Loc.Get("StripRemoveM");
 
         while (true)
         {
             _hintMessage = forSigning
-                ? "Dibuja un rectángulo para colocar la firma · Esc para dejarlo"
-                : "Dibuja un rectángulo para colocar el sello · Esc para dejarlo";
+                ? Loc.Get("HintDrawSignatureBox")
+                : Loc.Get("HintDrawStampBox");
             UpdateChrome();
 
             var spot = await AskForSpotAsync(viewer);
@@ -2313,11 +2350,11 @@ public sealed partial class MainPage : Page
 
     private async Task SignInPlaceAsync(PdfTiledViewer viewer, IPdfSigner signer, PdfSignatureOptions options)
     {
-        using (BusyScope("Firmando…"))
+        using (BusyScope(Loc.Get("BusySigning")))
         {
             if (viewer.HasUnsavedChanges && await viewer.SaveChangesAsync() is { } failure)
             {
-                await ShowMessageAsync("No se pudo guardar antes de firmar", failure);
+                await ShowMessageAsync(Loc.Get("MsgSaveBeforeSignFailed"), failure);
                 return;
             }
 
@@ -2325,7 +2362,7 @@ public sealed partial class MainPage : Page
 
             if (await viewer.SignAsync(signer, options, proof) is { } error)
             {
-                await ShowMessageAsync("No se pudo firmar el documento", error);
+                await ShowMessageAsync(Loc.Get("MsgSignFailed"), error);
             }
         }
     }
@@ -2339,25 +2376,25 @@ public sealed partial class MainPage : Page
     {
         if (signatures.Count == 0)
         {
-            return "Este documento no lleva ninguna firma todavía.";
+            return Loc.Get("SignaturesNone");
         }
 
         var lines = signatures.Select(s =>
-            $"· {(s.Signer.Length > 0 ? s.Signer : "firmante desconocido")}"
+            $"· {(s.Signer.Length > 0 ? s.Signer : Loc.Get("SignerUnknown"))}"
             + (s.SignedAt is { } when ? $", {when:d} {when:t}" : "")
             // The time an authority vouched for outranks the one the signer's
             // own clock claimed, so it is the one shown when there is one.
             + (s.Timestamp is { } stamp
-                ? $" · sellada {stamp.Stamped:d} {stamp.Stamped:t}"
-                  + (stamp.CoversSignature ? "" : " (el sello no es de esta firma)")
+                ? " · " + Loc.Format("SignatureStamped", stamp.Stamped.ToString("d"), stamp.Stamped.ToString("t"))
+                  + (stamp.CoversSignature ? "" : Loc.Get("SignatureStampMismatch"))
                 : "")
-            + (s.DigestMatches ? "" : " — NO cuadra con el archivo"));
+            + (s.DigestMatches ? "" : Loc.Get("SignatureDigestMismatch")));
 
         string heading = signatures.Count == 1
-            ? "Este documento ya lleva una firma:"
-            : $"Este documento ya lleva {signatures.Count} firmas:";
+            ? Loc.Get("SignaturesOne")
+            : Loc.Format("SignaturesMany", signatures.Count);
 
-        return $"{heading}\n{string.Join("\n", lines)}\n\nLa tuya se añade encima sin tocarlas.";
+        return $"{heading}\n{string.Join("\n", lines)}\n\n{Loc.Get("SignatureAddedOnTop")}";
     }
 
     private static bool IsSamePath(string left, string right)
@@ -2380,7 +2417,7 @@ public sealed partial class MainPage : Page
     {
         int page = viewer.CurrentPageIndex;
 
-        using (BusyScope("Recargando…"))
+        using (BusyScope(Loc.Get("BusyReloading")))
         {
             try
             {
@@ -2390,7 +2427,7 @@ public sealed partial class MainPage : Page
             }
             catch (Exception ex)
             {
-                await ShowMessageAsync("No se pudo recargar el documento", ex.Message);
+                await ShowMessageAsync(Loc.Get("MsgReloadFailed"), ex.Message);
             }
         }
 
@@ -2438,12 +2475,12 @@ public sealed partial class MainPage : Page
         if (ActiveViewer is not { } viewer || viewer.SourcePath is null) return;
         if (viewer.PageCount == 0) return;
 
-        string title = (Tabs.SelectedItem as TabViewItem)?.Header as string ?? "Documento";
+        string title = (Tabs.SelectedItem as TabViewItem)?.Header as string ?? Loc.Get("UntitledDocument");
         PdfPrintSource? source = null;
 
         try
         {
-            using (BusyScope("Preparando la impresión…"))
+            using (BusyScope(Loc.Get("BusyPreparingPrint")))
             {
                 var job = await PdfPrintJob.OpenAsync(viewer.Plan);
                 // Marks print whether or not they have been saved, for the same
@@ -2468,12 +2505,12 @@ public sealed partial class MainPage : Page
 
             if (source.Problem is { } problem)
             {
-                await ShowMessageAsync("Hubo un problema al imprimir", problem);
+                await ShowMessageAsync(Loc.Get("MsgPrintProblem"), problem);
             }
         }
         catch (Exception ex)
         {
-            await ShowMessageAsync("No se pudo imprimir", ex.Message);
+            await ShowMessageAsync(Loc.Get("MsgPrintFailed"), ex.Message);
         }
         finally
         {
@@ -2509,13 +2546,13 @@ public sealed partial class MainPage : Page
 
         try
         {
-            using (BusyScope("Abriendo la revisión…"))
+            using (BusyScope(Loc.Get("BusyOpeningRevision")))
             {
                 await viewer.CompareWithAsync(file.Path, file.Name);
             }
 
             RibbonTabs.SelectedItem = TabComparar;
-            Hint($"Comparando con {file.Name}");
+            Hint(Loc.Format("HintComparingWith", file.Name));
         }
         catch (PdfPasswordRequiredException)
         {
@@ -2525,7 +2562,7 @@ public sealed partial class MainPage : Page
 
             try
             {
-                using (BusyScope("Abriendo la revisión…"))
+                using (BusyScope(Loc.Get("BusyOpeningRevision")))
                 {
                     await viewer.CompareWithAsync(file.Path, file.Name, password);
                 }
@@ -2649,7 +2686,7 @@ public sealed partial class MainPage : Page
         {
             PropertiesIconText.Visibility = Visibility.Collapsed;
             PropertiesIconMark.Visibility = Visibility.Collapsed;
-            PropertiesTitle.Text = "Comparación";
+            PropertiesTitle.Text = Loc.Get("PropertiesCompare");
         }
 
         CompareOpenButton.IsEnabled = interactive;
@@ -2665,11 +2702,11 @@ public sealed partial class MainPage : Page
         if (!comparing)
         {
             ChangeIndicator.Text = string.Empty;
-            ComparePairLabel.Text = "Emparejar";
+            ComparePairLabel.Text = Loc.Get("ComparePairUp");
             return;
         }
 
-        // "Sin cambios" and "still looking" are different answers, and saying
+        // «No changes» and «still looking» are different answers, and saying
         // the first while the sweep is running is the one way this feature can
         // lie outright.
         //
@@ -2688,34 +2725,36 @@ public sealed partial class MainPage : Page
         ChangeIndicator.Text = !viewer!.ChangesReadyHere
             ? viewer.SweepStageHere switch
             {
-                CompareSweepStage.Sheet => "Leyendo 1 de 2…",
-                CompareSweepStage.Revision => "Leyendo 2 de 2…",
-                CompareSweepStage.Looking => "Buscando cambios…",
-                _ => "Buscando…",
+                CompareSweepStage.Sheet => Loc.Get("SweepReadingSheet"),
+                CompareSweepStage.Revision => Loc.Get("SweepReadingRevision"),
+                CompareSweepStage.Looking => Loc.Get("SweepLooking"),
+                _ => Loc.Get("SweepBusy"),
             }
             : changes == 0
-                ? "Sin cambios"
+                ? Loc.Get("CompareNoChanges")
                 : viewer.ChangeNumber > 0
-                    ? $"Cambio {viewer.ChangeNumber} de {all}"
-                    : changes == 1 ? "1 cambio" : $"{all} cambios";
+                    ? Loc.Format("CompareChangeOf", viewer.ChangeNumber, all)
+                    : changes == 1 ? Loc.Get("CompareOneChange") : Loc.Format("CompareChanges", all);
 
         int paired = viewer.PairedPageNumber(viewer.CurrentPageIndex);
-        ComparePairLabel.Text = paired > 0 ? $"Con la hoja {paired}" : "Sin pareja";
+        ComparePairLabel.Text = paired > 0
+            ? Loc.Format("ComparePairedWith", paired)
+            : Loc.Get("ComparePairNone");
 
         var palette = viewer.ComparePalette;
         CompareSheetSwatch.Background = Swatch(palette.Sheet);
         CompareRevisionSwatch.Background = Swatch(palette.Revision);
 
-        string name = (Tabs.SelectedItem as TabViewItem)?.Header as string ?? "Este documento";
-        CompareSheetName.Text = $"Solo en {name}";
-        CompareRevisionName.Text = $"Solo en {viewer.Revision!.Name}";
+        string name = (Tabs.SelectedItem as TabViewItem)?.Header as string ?? Loc.Get("CompareThisDocument");
+        CompareSheetName.Text = Loc.Format("CompareOnlyIn", name);
+        CompareRevisionName.Text = Loc.Format("CompareOnlyIn", viewer.Revision!.Name);
 
         ComparePairing.Text = paired > 0
-            ? $"Hoja {viewer.CurrentPageNumber} sobre la hoja {paired} de la revisión."
-            : "Esta hoja no tiene pareja en la revisión, así que se ve tal cual.";
+            ? Loc.Format("CompareSheetOverSheet", viewer.CurrentPageNumber, paired)
+            : Loc.Get("CompareNoPairNote");
 
         CompareStatus.Text = changes > 0
-            ? "F4 lleva al cambio siguiente; Mayús+F4, al anterior."
+            ? Loc.Get("CompareKeysNote")
             : string.Empty;
 
         _syncingPanel = true;
@@ -2858,11 +2897,11 @@ public sealed partial class MainPage : Page
 
         if (spot is null)
         {
-            ShowToast("Captura cancelada", "el recuadro se quedó demasiado pequeño");
+            ShowToast(Loc.Get("ToastCaptureCancelled"), Loc.Get("ToastCaptureTooSmall"));
             return;
         }
 
-        Hint("Preparando la captura…");
+        Hint(Loc.Get("HintPreparingCapture"));
 
         CaptureImage? shot;
         try
@@ -2871,13 +2910,13 @@ public sealed partial class MainPage : Page
         }
         catch (Exception error)
         {
-            ShowToast("No se pudo preparar la captura", error.Message);
+            ShowToast(Loc.Get("ToastCaptureFailed"), error.Message);
             return;
         }
 
         if (shot is null)
         {
-            ShowToast("No se pudo preparar la captura");
+            ShowToast(Loc.Get("ToastCaptureFailed"));
             return;
         }
 
@@ -2897,11 +2936,11 @@ public sealed partial class MainPage : Page
             // The size is not decoration: it is what says whether the capture
             // is worth pasting, and it is the only way to notice that the
             // twenty-megapixel ceiling softened this one.
-            ShowToast("Imagen copiada al portapapeles", $"{shot.Width} × {shot.Height} px");
+            ShowToast(Loc.Get("ToastImageCopied"), $"{shot.Width} × {shot.Height} px");
         }
         catch (Exception error)
         {
-            ShowToast("No se pudo copiar al portapapeles", error.Message);
+            ShowToast(Loc.Get("ToastClipboardFailed"), error.Message);
         }
         finally
         {
@@ -2952,8 +2991,8 @@ public sealed partial class MainPage : Page
 
         viewer.SnapToInk = SnapToolButton.IsChecked == true;
         Hint(viewer.SnapToInk
-            ? "Los puntos se pegan a las líneas del plano."
-            : "Los puntos van donde sueltes, sin pegarse a nada.");
+            ? Loc.Get("HintSnapOn")
+            : Loc.Get("HintSnapOff"));
     }
 
     private void OnOrthoClicked(object sender, RoutedEventArgs e)
@@ -2962,8 +3001,8 @@ public sealed partial class MainPage : Page
 
         viewer.AxisLock = OrthoToolButton.IsChecked == true;
         Hint(viewer.AxisLock
-            ? "Las medidas salen horizontales o verticales. Mayús para una suelta en diagonal."
-            : "Las medidas van donde las lleves. Mayús para una suelta a escuadra.");
+            ? Loc.Get("HintOrthoOn")
+            : Loc.Get("HintOrthoOff"));
     }
 
     private void OnClearScaleClicked(object sender, RoutedEventArgs e)
@@ -2971,7 +3010,7 @@ public sealed partial class MainPage : Page
         if (ActiveViewer is not { } viewer) return;
 
         viewer.CalibrateSheet(viewer.CurrentPageIndex, null);
-        Hint("Hoja sin calibrar. Las medidas que haya se quedan sin número.");
+        Hint(Loc.Get("HintScaleCleared"));
         UpdateChrome();
     }
 
@@ -2984,7 +3023,7 @@ public sealed partial class MainPage : Page
     {
         if (!ReferenceEquals(sender, ActiveViewer) || ActiveViewer is not { } viewer) return;
 
-        var box = new TextBox { PlaceholderText = "Por ejemplo 5,40", Width = 140 };
+        var box = new TextBox { PlaceholderText = Loc.Get("FieldExampleLength"), Width = 140 };
         var units = new ComboBox
         {
             ItemsSource = new[] { "mm", "cm", "m", "km", "in", "ft" },
@@ -3012,7 +3051,7 @@ public sealed partial class MainPage : Page
         body.Children.Add(new TextBlock
         {
             TextWrapping = TextWrapping.Wrap,
-            Text = "¿Cuánto mide de verdad lo que acabas de recorrer?",
+            Text = Loc.Get("CalibrateQuestion"),
         });
         body.Children.Add(row);
         body.Children.Add(new TextBlock
@@ -3020,16 +3059,16 @@ public sealed partial class MainPage : Page
             TextWrapping = TextWrapping.Wrap,
             Opacity = 0.6,
             FontSize = 12,
-            Text = "Con esto quedan calibradas todas las medidas de esta hoja, también las que ya estén hechas.",
+            Text = Loc.Get("CalibrateNote"),
         });
 
         var dialog = new ContentDialog
         {
             XamlRoot = XamlRoot,
-            Title = "Calibrar la hoja",
+            Title = Loc.Get("DlgCalibrate"),
             Content = body,
-            PrimaryButtonText = "Calibrar",
-            CloseButtonText = "Cancelar",
+            PrimaryButtonText = Loc.Get("BtnCalibrate"),
+            CloseButtonText = Loc.Get("BtnCancel"),
             DefaultButton = ContentDialogButton.Primary,
         };
 
@@ -3056,7 +3095,7 @@ public sealed partial class MainPage : Page
             CultureInfo.InvariantCulture,
             out double length) || length <= 0)
         {
-            await ShowMessageAsync("No se pudo calibrar", "Escribe la distancia como un número, por ejemplo 5,40.");
+            await ShowMessageAsync(Loc.Get("MsgCalibrateFailed"), Loc.Get("MsgCalibrateNumber"));
             return;
         }
 
@@ -3066,8 +3105,8 @@ public sealed partial class MainPage : Page
         if (SheetScale.From(drag.PaperPt, length, unit) is not { } scale)
         {
             await ShowMessageAsync(
-                "No se pudo calibrar",
-                "El arrastre es demasiado corto para calibrar con él: recorre una distancia más larga del plano.");
+                Loc.Get("MsgCalibrateFailed"),
+                Loc.Get("MsgCalibrateTooShort"));
             return;
         }
 
@@ -3076,7 +3115,7 @@ public sealed partial class MainPage : Page
         // Straight on to measuring: calibrating is never the point, it is what
         // has to happen first.
         SetTool(ViewerTool.Distance);
-        Hint($"Hoja calibrada a {scale.RatioLabel}. {scale.FormatLength(drag.PaperPt)} de lo que recorriste.");
+        Hint(Loc.Format("HintCalibrated", scale.RatioLabel, scale.FormatLength(drag.PaperPt)));
         UpdateChrome();
     }
 
@@ -3085,7 +3124,7 @@ public sealed partial class MainPage : Page
     {
         var scale = interactive ? viewer?.ScaleHere : null;
 
-        ScaleIndicator.Text = !interactive ? string.Empty : scale is { } known ? known.RatioLabel : "Sin calibrar";
+        ScaleIndicator.Text = !interactive ? string.Empty : scale is { } known ? known.RatioLabel : Loc.Get("ScaleUncalibrated");
         ClearScaleButton.IsEnabled = scale is not null;
 
         // What a centimetre of paper stands for, which is the sanity check a
@@ -3094,8 +3133,8 @@ public sealed partial class MainPage : Page
         const double PointsPerCentimetre = 72.0 / 2.54;
 
         SheetScaleText.Text = scale is { } sheet
-            ? $"Calibrada a {sheet.RatioLabel} · 1 cm de papel = {sheet.FormatLength(PointsPerCentimetre)}"
-            : "Sin calibrar. Ninguna medida puede dar un número todavía.";
+            ? Loc.Format("ScaleCalibratedNote", sheet.RatioLabel, sheet.FormatLength(PointsPerCentimetre))
+            : Loc.Get("ScaleUncalibratedNote");
 
         // The measuring tools are only honest on a calibrated sheet. An angle
         // is the exception and stays available: paper and building agree about
@@ -3130,7 +3169,7 @@ public sealed partial class MainPage : Page
 
         if (mark.Kind == AnnotationKind.Angle)
         {
-            return mark.Text.Length > 0 ? $"Ángulo {mark.Text}" : string.Empty;
+            return mark.Text.Length > 0 ? Loc.Format("MeasureAngle", mark.Text) : string.Empty;
         }
 
         if (mark.Scale is not { } scale) return string.Empty;
@@ -3139,16 +3178,16 @@ public sealed partial class MainPage : Page
 
         return mark.Kind switch
         {
-            AnnotationKind.Distance => $"Distancia {scale.FormatLength(around)}",
+            AnnotationKind.Distance => Loc.Format("MeasureDistance", scale.FormatLength(around)),
 
             AnnotationKind.Area =>
-                $"Área {scale.FormatArea(AnnotationGeometry.PolygonArea(mark.Points))}"
-                + $" · perímetro {scale.FormatLength(around)}",
+                Loc.Format("MeasureArea", scale.FormatArea(AnnotationGeometry.PolygonArea(mark.Points)))
+                + " · " + Loc.Format("MeasureAndPerimeter", scale.FormatLength(around)),
 
             // A closed run of segments encloses something whether or not that
             // is what it was drawn for.
-            _ => $"Perímetro {scale.FormatLength(around)}"
-                 + $" · encierra {scale.FormatArea(AnnotationGeometry.PolygonArea(mark.Points))}",
+            _ => Loc.Format("MeasurePerimeter", scale.FormatLength(around))
+                 + " · " + Loc.Format("MeasureAndEncloses", scale.FormatArea(AnnotationGeometry.PolygonArea(mark.Points))),
         };
     }
 
@@ -3579,8 +3618,8 @@ public sealed partial class MainPage : Page
         CopySelectionButton.IsEnabled = hasSelection;
         SelectAllButton.IsEnabled = hasDocument;
         SelectionStatus.Text = hasSelection
-            ? "Texto seleccionado. Ctrl+C también copia."
-            : "Arrastra sobre la página para seleccionar.";
+            ? Loc.Get("SelectionCopied")
+            : Loc.Get("SelectionPrompt");
 
         if ((_busyMessage ?? _hintMessage) is { } message)
         {
@@ -3596,7 +3635,7 @@ public sealed partial class MainPage : Page
             return;
         }
 
-        PageIndicator.Text = $"Página {viewer.CurrentPageNumber} de {viewer.PageCount}";
+        PageIndicator.Text = Loc.Format("PageOf", viewer.CurrentPageNumber, viewer.PageCount);
         ZoomIndicator.Text = $"{viewer.ZoomPercent:0} %";
 
         // A permanent Save button says "there is something to write" only by
@@ -3637,7 +3676,7 @@ public sealed partial class MainPage : Page
         {
             PropertiesTitle.Text = tool switch
             {
-                ViewerTool.SelectText => "Selección de texto",
+                ViewerTool.SelectText => Loc.Get("PropertiesTextSelection"),
                 ViewerTool.Calibrate => ToolTitle(tool),
                 _ => PropertiesTitle.Text,
             };
@@ -3684,7 +3723,7 @@ public sealed partial class MainPage : Page
             FillOpacitySection.Visibility = changeable && takesFill && style.Fill is not null
                 ? Visibility.Visible
                 : Visibility.Collapsed;
-            FillStateText.Text = style.Fill is null ? "Sin relleno" : string.Empty;
+            FillStateText.Text = style.Fill is null ? Loc.Get("FillNoneLabel") : string.Empty;
             CurrentFillSwatch.Visibility = style.Fill is null ? Visibility.Collapsed : Visibility.Visible;
             if (style.Fill is { } fill)
             {
@@ -3697,10 +3736,10 @@ public sealed partial class MainPage : Page
             NoteEditor.Visibility = typing ? Visibility.Visible : Visibility.Collapsed;
             if (typing)
             {
-                NoteEditorLabel.Text = selected!.Kind == AnnotationKind.Note ? "Comentario" : "Texto";
+                NoteEditorLabel.Text = selected!.Kind == AnnotationKind.Note ? Loc.Get("NoteLabel") : Loc.Get("TextLabel");
                 NoteText.PlaceholderText = selected.Kind == AnnotationKind.Note
-                    ? "Qué hay que revisar"
-                    : "Escribe texto...";
+                    ? Loc.Get("NotePlaceholder")
+                    : Loc.Get("TextPlaceholder");
 
                 if (NoteText.Text != selected.Text)
                 {
@@ -3719,30 +3758,28 @@ public sealed partial class MainPage : Page
         bool placing = viewer?.IsPlacingVertices ?? false;
 
         MarkStatus.Text = placing
-            ? "Clic para cada vértice. Intro o doble clic lo termina, Retroceso quita el último, Esc lo descarta."
+            ? Loc.Get("HintVertexTool")
             : selected is not null && !changeable
-                ? $"El resaltado va con el texto que cubre: no se mueve ni cambia, solo se elimina. {Sheet(onSheet)}"
+                ? $"{Loc.Get("HintHighlightFixed")} {Sheet(onSheet)}"
             : selected is not null
-                ? $"Marca seleccionada. Arrástrala para moverla, tira de un tirador para estirarla o del pomo para girarla. {Sheet(onSheet)}"
-                : tool switch
+                ? $"{Loc.Get("HintMarkSelected")} {Sheet(onSheet)}"
+                : $"{Loc.Get(tool switch
                 {
-                    ViewerTool.SelectAnnotation => $"Haz clic en una marca para cogerla. {Sheet(onSheet)}",
-                    ViewerTool.Note => $"Haz clic en la página para dejar un comentario. {Sheet(onSheet)}",
-                    ViewerTool.FreeText =>
-                        $"Haz clic en la página y escribe ahí mismo; Esc lo cierra. {Sheet(onSheet)}",
-                    ViewerTool.Ink => $"Dibuja con el lápiz o el ratón. La otra punta del lápiz borra. {Sheet(onSheet)}",
-                    ViewerTool.Highlight => $"Arrastra sobre el texto para resaltarlo. {Sheet(onSheet)}",
-                    ViewerTool.Cloud => $"Arrastra un recuadro, o haz clic en cada vértice. {Sheet(onSheet)}",
-                    ViewerTool.Polyline or ViewerTool.Polygon =>
-                        $"Haz clic en cada vértice; Intro o doble clic lo termina. {Sheet(onSheet)}",
-                    _ => $"Arrastra sobre la página para dibujar. {Sheet(onSheet)}",
-                };
+                    ViewerTool.SelectAnnotation => "HintPickAMark",
+                    ViewerTool.Note => "HintLeaveANote",
+                    ViewerTool.FreeText => "HintWriteOnPage",
+                    ViewerTool.Ink => "HintDrawFreehand",
+                    ViewerTool.Highlight => "HintDragOverText",
+                    ViewerTool.Cloud => "HintCloud",
+                    ViewerTool.Polyline or ViewerTool.Polygon => "HintClickVertices",
+                    _ => "HintDragToDraw",
+                })} {Sheet(onSheet)}";
 
         static string Sheet(int count) => count switch
         {
-            0 => "Esta página no tiene marcas.",
-            1 => "Hay 1 marca en esta página.",
-            _ => $"Hay {count} marcas en esta página.",
+            0 => Loc.Get("MarksNone"),
+            1 => Loc.Get("MarksOne"),
+            _ => Loc.Format("MarksMany", count),
         };
     }
 
@@ -3772,24 +3809,24 @@ public sealed partial class MainPage : Page
 
     private static string ToolTitle(ViewerTool tool) => tool switch
     {
-        ViewerTool.SelectAnnotation => "Marcas",
-        ViewerTool.Ink => "Lápiz",
-        ViewerTool.Line => "Línea",
-        ViewerTool.Arrow => "Flecha",
-        ViewerTool.Polyline => "Polilínea",
-        ViewerTool.Rectangle => "Rectángulo",
-        ViewerTool.Ellipse => "Elipse",
-        ViewerTool.Polygon => "Polígono",
-        ViewerTool.Cloud => "Nube de revisión",
-        ViewerTool.Highlight => "Resaltar texto",
-        ViewerTool.FreeText => "Texto",
-        ViewerTool.Note => "Comentario",
-        ViewerTool.Calibrate => "Calibrar la hoja",
-        ViewerTool.Distance => "Distancia",
-        ViewerTool.Perimeter => "Perímetro",
-        ViewerTool.Area => "Área",
-        ViewerTool.Angle => "Ángulo",
-        _ => "Herramienta",
+        ViewerTool.SelectAnnotation => Loc.Get("ToolNameSelectAnnotation"),
+        ViewerTool.Ink => Loc.Get("ToolNameInk"),
+        ViewerTool.Line => Loc.Get("ToolNameLine"),
+        ViewerTool.Arrow => Loc.Get("ToolNameArrow"),
+        ViewerTool.Polyline => Loc.Get("ToolNamePolyline"),
+        ViewerTool.Rectangle => Loc.Get("ToolNameRectangle"),
+        ViewerTool.Ellipse => Loc.Get("ToolNameEllipse"),
+        ViewerTool.Polygon => Loc.Get("ToolNamePolygon"),
+        ViewerTool.Cloud => Loc.Get("ToolNameCloud"),
+        ViewerTool.Highlight => Loc.Get("ToolNameHighlight"),
+        ViewerTool.FreeText => Loc.Get("TextLabel"),
+        ViewerTool.Note => Loc.Get("NoteLabel"),
+        ViewerTool.Calibrate => Loc.Get("DlgCalibrate"),
+        ViewerTool.Distance => Loc.Get("ToolNameDistance"),
+        ViewerTool.Perimeter => Loc.Get("ToolNamePerimeter"),
+        ViewerTool.Area => Loc.Get("ToolNameArea"),
+        ViewerTool.Angle => Loc.Get("ToolNameAngle"),
+        _ => Loc.Get("ToolNameOther"),
     };
 
     /// <summary>
@@ -3821,8 +3858,8 @@ public sealed partial class MainPage : Page
         // Two-up only means anything as a way of laying sheets out side by
         // side; on one sheet at a time it is the spread that changes, so the
         // choice stays available and the label carries the distinction.
-        string flow = continuous ? "Continuo" : "Página a página";
-        string spread = columns == 2 ? " · 2 pág." : string.Empty;
+        string flow = continuous ? Loc.Get("ViewFlowContinuous") : Loc.Get("ViewFlowSingle");
+        string spread = columns == 2 ? Loc.Get("ViewTwoPages") : string.Empty;
         ViewModeText.Text = $"{flow}{spread}";
     }
 

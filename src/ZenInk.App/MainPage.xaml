@@ -250,12 +250,12 @@
                 SelectionChanged="OnRibbonTabChanged">
                 <SelectorBarItem
                     x:Name="TabInicio"
-                    IsSelected="True"
-                    Text="Inicio" />
-                <SelectorBarItem x:Name="TabAnotar" Text="Anotar" />
-                <SelectorBarItem x:Name="TabOrganizador" Text="Organizador" />
-                <SelectorBarItem x:Name="TabComparar" Text="Comparar" />
-                <SelectorBarItem x:Name="TabMedir" Text="Medir" />
+                    x:Uid="TabHome"
+                    IsSelected="True" />
+                <SelectorBarItem x:Name="TabAnotar" x:Uid="TabAnnotate" />
+                <SelectorBarItem x:Name="TabOrganizador" x:Uid="TabOrganise" />
+                <SelectorBarItem x:Name="TabComparar" x:Uid="TabCompare" />
+                <SelectorBarItem x:Name="TabMedir" x:Uid="TabMeasure" />
             </SelectorBar>
 
             <TextBlock
@@ -280,18 +280,18 @@
                 -->
                 <Button
                     x:Name="UndoButton"
+                    x:Uid="UndoButton"
                     Click="OnUndoClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Deshacer (Ctrl+Z)">
+                    Style="{StaticResource SlimIconButtonStyle}">
                     <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M6.5 6.2 L3 9.7 L6.5 13.2 M3 9.7h8.2a4.6 4.6 0 0 1 0 9.2" />
                 </Button>
                 <Button
                     x:Name="RedoButton"
+                    x:Uid="RedoButton"
                     Click="OnRedoClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Rehacer (Ctrl+Y)">
+                    Style="{StaticResource SlimIconButtonStyle}">
                     <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M13.5 6.2 L17 9.7 L13.5 13.2 M17 9.7H8.8a4.6 4.6 0 0 0 0 9.2" />
                 </Button>
 
@@ -299,10 +299,10 @@
 
                 <Button
                     x:Name="PreviousPageButton"
+                    x:Uid="PreviousPageButton"
                     Click="OnPreviousPageClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Página anterior">
+                    Style="{StaticResource SlimIconButtonStyle}">
                     <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M5.5 12.25 L10 7.75 L14.5 12.25" />
                 </Button>
                 <TextBlock
@@ -312,10 +312,10 @@
                     Opacity="0.7" />
                 <Button
                     x:Name="NextPageButton"
+                    x:Uid="NextPageButton"
                     Click="OnNextPageClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Página siguiente">
+                    Style="{StaticResource SlimIconButtonStyle}">
                     <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M5.5 7.75 L10 12.25 L14.5 7.75" />
                 </Button>
 
@@ -323,10 +323,10 @@
 
                 <Button
                     x:Name="ZoomOutButton"
+                    x:Uid="ZoomOutButton"
                     Click="OnZoomOutClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Alejar">
+                    Style="{StaticResource SlimIconButtonStyle}">
                     <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M4.8 10 L15.2 10" />
                 </Button>
                 <TextBlock
@@ -337,10 +337,10 @@
                     TextAlignment="Center" />
                 <Button
                     x:Name="ZoomInButton"
+                    x:Uid="ZoomInButton"
                     Click="OnZoomInClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimIconButtonStyle}"
-                    ToolTipService.ToolTip="Acercar">
+                    Style="{StaticResource SlimIconButtonStyle}">
                     <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M10 4.8 L10 15.2 M4.8 10 L15.2 10" />
                 </Button>
             </StackPanel>
@@ -375,11 +375,11 @@
                 Spacing="2">
                 <ToggleButton
                     x:Name="PanToolButton"
+                    x:Uid="PanToolButton"
                     Click="OnPanToolClicked"
                     IsChecked="True"
                     IsEnabled="False"
-                    Style="{StaticResource SlimIconToggleStyle}"
-                    ToolTipService.ToolTip="Mano — arrastrar para desplazar (M)">
+                    Style="{StaticResource SlimIconToggleStyle}">
                     <!--
                         Una mano abierta y nada más. Los cuatro dedos se dibujan
                         encadenados —el lado derecho de uno es el izquierdo del
@@ -392,26 +392,26 @@
                 </ToggleButton>
                 <ToggleButton
                     x:Name="SelectMarkToolButton"
+                    x:Uid="SelectMarkToolButton"
                     Click="OnSelectMarkToolClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimIconToggleStyle}"
-                    ToolTipService.ToolTip="Seleccionar marcas — arrastrar para moverlas, Supr para borrar (V)">
+                    Style="{StaticResource SlimIconToggleStyle}">
                     <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M5.6 3.2 L5.6 15.4 L8.6 12.6 L10.6 16.8 L12.8 15.8 L10.8 11.8 L15 11.6 Z" />
                 </ToggleButton>
                 <ToggleButton
                     x:Name="TextToolButton"
+                    x:Uid="TextToolButton"
                     Click="OnTextToolClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimIconToggleStyle}"
-                    ToolTipService.ToolTip="Seleccionar texto (X)">
+                    Style="{StaticResource SlimIconToggleStyle}">
                     <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M8 3.5h4 M8 16.5h4 M10 3.5v13" />
                 </ToggleButton>
                 <ToggleButton
                     x:Name="ZoomToolButton"
+                    x:Uid="ZoomToolButton"
                     Click="OnZoomToolClicked"
                     IsEnabled="False"
-                    Style="{StaticResource SlimIconToggleStyle}"
-                    ToolTipService.ToolTip="Zoom por ventana — arrastra un rectángulo sobre la zona (Z)">
+                    Style="{StaticResource SlimIconToggleStyle}">
                     <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M8.6 14.6a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z M13 13 17.2 17.2 M6.2 8.6h4.8 M8.6 6.2v4.8" />
                 </ToggleButton>
 
@@ -449,12 +449,12 @@
                         -->
                         <SplitButton
                             x:Name="OpenButton"
+                            x:Uid="OpenButton"
                             Click="OnOpenClicked"
-                            Style="{StaticResource SlimSplitButtonStyle}"
-                            ToolTipService.ToolTip="Abrir un documento">
+                            Style="{StaticResource SlimSplitButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.5 5.5A1.5 1.5 0 0 1 4 4h3.4l1.6 2H16a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5Z" />
-                                <TextBlock Text="Abrir" />
+                                <TextBlock x:Uid="LabelOpen" />
                             </StackPanel>
                             <SplitButton.Flyout>
                                 <MenuFlyout
@@ -466,10 +466,10 @@
 
                         <SplitButton
                             x:Name="SaveButton"
+                            x:Uid="SaveButton"
                             Click="OnSaveClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimSplitButtonStyle}"
-                            ToolTipService.ToolTip="Guardar los cambios en el PDF (Ctrl+S)">
+                            Style="{StaticResource SlimSplitButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--  La flecha es la acción; la bandeja es el sitio donde cae.  -->
                                 <controls:ToolIcon
@@ -477,19 +477,19 @@
                                     Accent="{ThemeResource IconSaveBrush}"
                                     AccentData="M10 3.4v8.4 M6.4 8.4 L10 12 L13.6 8.4"
                                     Data="M3.6 13.2v2.2a1.2 1.2 0 0 0 1.2 1.2h10.4a1.2 1.2 0 0 0 1.2-1.2v-2.2" />
-                                <TextBlock Text="Guardar" />
+                                <TextBlock x:Uid="LabelSave" />
                             </StackPanel>
                             <SplitButton.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedLeft">
                                     <MenuFlyoutItem
                                         x:Name="SaveItem"
+                                        x:Uid="SaveItem"
                                         Click="OnSaveItemClicked"
-                                        KeyboardAcceleratorTextOverride="Ctrl+S"
-                                        Text="Guardar en el PDF" />
+                                        KeyboardAcceleratorTextOverride="Ctrl+S" />
                                     <MenuFlyoutItem
                                         x:Name="SaveCopyItem"
-                                        Click="OnSaveCopyClicked"
-                                        Text="Guardar como…" />
+                                        x:Uid="SaveCopyItem"
+                                        Click="OnSaveCopyClicked" />
 
                                     <MenuFlyoutSeparator />
 
@@ -500,8 +500,8 @@
                                     -->
                                     <MenuFlyoutItem
                                         x:Name="DiscardChangesItem"
-                                        Click="OnDiscardChangesClicked"
-                                        Text="Descartar los cambios sin guardar" />
+                                        x:Uid="DiscardChangesItem"
+                                        Click="OnDiscardChangesClicked" />
                                 </MenuFlyout>
                             </SplitButton.Flyout>
                         </SplitButton>
@@ -514,21 +514,21 @@
                         -->
                         <Button
                             x:Name="FlattenButton"
+                            x:Uid="FlattenButton"
                             Click="OnFlattenClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimButtonStyle}"
-                            ToolTipService.ToolTip="Aplanar las marcas en el documento (no se puede deshacer)">
+                            Style="{StaticResource SlimButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.6 4.6 L10 8 L16.4 4.6 M3.6 9 L10 12.4 L16.4 9 M3.6 16.4 H16.4" />
-                                <TextBlock Text="Aplanar" />
+                                <TextBlock x:Uid="LabelFlatten" />
                             </StackPanel>
                         </Button>
                         <Button
                             x:Name="SignButton"
+                            x:Uid="SignButton"
                             Click="OnSignClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimButtonStyle}"
-                            ToolTipService.ToolTip="Firmar el documento con un certificado">
+                            Style="{StaticResource SlimButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--  La rúbrica es tinta y el renglón es papel: solo la primera lleva color.  -->
                                 <controls:ToolIcon
@@ -536,7 +536,7 @@
                                     Accent="{ThemeResource IconSignatureBrush}"
                                     AccentData="M4.2 13.8 C 3.6 8.6, 6.2 4.2, 8.2 4.8 C 10 5.4, 9 9, 7.4 11.4 C 6.2 13.2, 7 14.2, 8.8 13.4 C 10.8 12.5, 12.6 10.6, 14.4 11 C 15.3 11.2, 15.6 12.2, 16.6 11.4"
                                     Data="M3.4 16.6 H16.6" />
-                                <TextBlock Text="Firmar" />
+                                <TextBlock x:Uid="LabelSign" />
                             </StackPanel>
                         </Button>
 
@@ -544,13 +544,13 @@
 
                         <Button
                             x:Name="PrintButton"
+                            x:Uid="PrintButton"
                             Click="OnPrintClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimButtonStyle}"
-                            ToolTipService.ToolTip="Imprimir (Ctrl+P)">
+                            Style="{StaticResource SlimButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M6 7.4V3.2h8v4.2 M6 13.4H4.4a1.4 1.4 0 0 1-1.4-1.4V8.8a1.4 1.4 0 0 1 1.4-1.4h11.2a1.4 1.4 0 0 1 1.4 1.4V12a1.4 1.4 0 0 1-1.4 1.4H14 M6 11.6h8v5.2H6Z" />
-                                <TextBlock Text="Imprimir" />
+                                <TextBlock x:Uid="LabelPrint" />
                             </StackPanel>
                         </Button>
 
@@ -563,81 +563,81 @@
                         -->
                         <DropDownButton
                             x:Name="ViewModeButton"
+                            x:Uid="ViewModeButton"
                             IsEnabled="False"
-                            Style="{StaticResource SlimDropDownStyle}"
-                            ToolTipService.ToolTip="Cómo se ve el documento">
+                            Style="{StaticResource SlimDropDownStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="7">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.8 3.6h14.4v12.8H2.8Z M10 3.6v12.8" />
-                                <TextBlock x:Name="ViewModeText" Text="Vista" />
+                                <TextBlock x:Name="ViewModeText" x:Uid="ViewModeText" />
                             </StackPanel>
                             <DropDownButton.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedLeft">
                                     <RadioMenuFlyoutItem
                                         x:Name="FitWidthItem"
+                                        x:Uid="FitWidthItem"
                                         Click="OnFitWidthClicked"
                                         GroupName="ZenInkFit"
-                                        KeyboardAcceleratorTextOverride="Ctrl+1"
-                                        Text="Ancho completo" />
+                                        KeyboardAcceleratorTextOverride="Ctrl+1" />
                                     <RadioMenuFlyoutItem
                                         x:Name="FitPageItem"
+                                        x:Uid="FitPageItem"
                                         Click="OnFitPageClicked"
                                         GroupName="ZenInkFit"
-                                        KeyboardAcceleratorTextOverride="Ctrl+2"
-                                        Text="Página completa" />
+                                        KeyboardAcceleratorTextOverride="Ctrl+2" />
                                     <RadioMenuFlyoutItem
                                         x:Name="FitActualItem"
+                                        x:Uid="FitActualItem"
                                         Click="OnActualSizeClicked"
                                         GroupName="ZenInkFit"
-                                        KeyboardAcceleratorTextOverride="Ctrl+0"
-                                        Text="Tamaño real (100 %)" />
+                                        KeyboardAcceleratorTextOverride="Ctrl+0" />
                                     <RadioMenuFlyoutItem
                                         x:Name="FitFreeItem"
+                                        x:Uid="FitFreeItem"
                                         Click="OnFitFreeClicked"
-                                        GroupName="ZenInkFit"
-                                        Text="Zoom libre" />
+                                        GroupName="ZenInkFit" />
 
                                     <MenuFlyoutSeparator />
 
                                     <RadioMenuFlyoutItem
                                         x:Name="OneColumnItem"
+                                        x:Uid="OneColumnItem"
                                         Click="OnOneColumnClicked"
-                                        GroupName="ZenInkColumns"
-                                        Text="A una página" />
+                                        GroupName="ZenInkColumns" />
                                     <RadioMenuFlyoutItem
                                         x:Name="TwoColumnsItem"
+                                        x:Uid="TwoColumnsItem"
                                         Click="OnTwoColumnsClicked"
-                                        GroupName="ZenInkColumns"
-                                        Text="A dos páginas" />
+                                        GroupName="ZenInkColumns" />
 
                                     <MenuFlyoutSeparator />
 
                                     <RadioMenuFlyoutItem
                                         x:Name="ContinuousItem"
+                                        x:Uid="ContinuousItem"
                                         Click="OnContinuousModeClicked"
-                                        GroupName="ZenInkFlow"
-                                        Text="Continuo — todas las páginas en una tira" />
+                                        GroupName="ZenInkFlow" />
                                     <RadioMenuFlyoutItem
                                         x:Name="SingleItem"
+                                        x:Uid="SingleItem"
                                         Click="OnSingleModeClicked"
-                                        GroupName="ZenInkFlow"
-                                        Text="Página a página — la rueda hace zoom" />
+                                        GroupName="ZenInkFlow" />
                                 </MenuFlyout>
                             </DropDownButton.Flyout>
                         </DropDownButton>
 
                         <ToggleButton
                             x:Name="LineWeightButton"
+                            x:Uid="LineWeightButton"
                             Click="OnLineWeightClicked"
                             IsChecked="True"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Grosores de línea — desactivar dibuja todas las líneas finas">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="7">
                                 <controls:ToolIcon
                                     Style="{StaticResource BarIconStyle}"
                                     Data="M3 4.5h14v1.1H3Z M3 8.9h14v2.2H3Z M3 14.1h14v3.4H3Z"
                                     Filled="True" />
-                                <TextBlock Text="Grosores" />
+                                <TextBlock x:Uid="LabelWeights" />
                             </StackPanel>
                         </ToggleButton>
 
@@ -645,13 +645,13 @@
 
                         <Button
                             x:Name="FindButton"
+                            x:Uid="FindButton"
                             Click="OnFindClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimButtonStyle}"
-                            ToolTipService.ToolTip="Buscar en el documento (Ctrl+F)">
+                            Style="{StaticResource SlimButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M9 15.4a6.4 6.4 0 1 0 0-12.8 6.4 6.4 0 0 0 0 12.8Z M13.6 13.6 17.2 17.2" />
-                                <TextBlock Text="Buscar" />
+                                <TextBlock x:Uid="LabelFind" />
                             </StackPanel>
                         </Button>
 
@@ -664,12 +664,12 @@
                         -->
                         <Button
                             x:Name="CommandButton"
+                            x:Uid="CommandButton"
                             Click="OnCommandButtonClicked"
-                            Style="{StaticResource SlimButtonStyle}"
-                            ToolTipService.ToolTip="Buscar una herramienta o una acción (Ctrl+K)">
+                            Style="{StaticResource SlimButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.8 4.6h14.4a1 1 0 0 1 1 1v8.8a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1V5.6a1 1 0 0 1 1-1Z M5.6 8.2 L8 10.4 L5.6 12.6 M10 12.6h4.4" />
-                                <TextBlock Text="Comandos" />
+                                <TextBlock x:Uid="LabelCommands" />
                             </StackPanel>
                         </Button>
 
@@ -677,27 +677,51 @@
 
                         <Button
                             x:Name="SettingsButton"
-                            Style="{StaticResource SlimIconButtonStyle}"
-                            ToolTipService.ToolTip="Preferencias">
+                            x:Uid="SettingsButton"
+                            Style="{StaticResource SlimIconButtonStyle}">
                             <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 12.6a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2Z M15.9 12.6a1.4 1.4 0 0 0 .3 1.6l.1.1a1.7 1.7 0 1 1-2.4 2.4l-.1-.1a1.4 1.4 0 0 0-1.6-.3 1.4 1.4 0 0 0-.9 1.3v.2a1.7 1.7 0 1 1-3.4 0v-.1a1.4 1.4 0 0 0-.9-1.3 1.4 1.4 0 0 0-1.6.3l-.1.1a1.7 1.7 0 1 1-2.4-2.4l.1-.1a1.4 1.4 0 0 0 .3-1.6 1.4 1.4 0 0 0-1.3-.9h-.2a1.7 1.7 0 1 1 0-3.4h.1a1.4 1.4 0 0 0 1.3-.9 1.4 1.4 0 0 0-.3-1.6l-.1-.1a1.7 1.7 0 1 1 2.4-2.4l.1.1a1.4 1.4 0 0 0 1.6.3h.1a1.4 1.4 0 0 0 .9-1.3v-.2a1.7 1.7 0 1 1 3.4 0v.1a1.4 1.4 0 0 0 .9 1.3 1.4 1.4 0 0 0 1.6-.3l.1-.1a1.7 1.7 0 1 1 2.4 2.4l-.1.1a1.4 1.4 0 0 0-.3 1.6v.1a1.4 1.4 0 0 0 1.3.9h.2a1.7 1.7 0 1 1 0 3.4h-.1a1.4 1.4 0 0 0-1.3.9Z" />
                             <Button.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedRight">
-                                    <MenuFlyoutSubItem Text="Tema">
+                                    <MenuFlyoutSubItem x:Uid="MenuTheme">
                                         <RadioMenuFlyoutItem
                                             x:Name="ThemeSystemItem"
+                                            x:Uid="ThemeSystemItem"
                                             Click="OnThemeSystemClicked"
-                                            GroupName="AppTheme"
-                                            Text="Según el sistema" />
+                                            GroupName="AppTheme" />
                                         <RadioMenuFlyoutItem
                                             x:Name="ThemeLightItem"
+                                            x:Uid="ThemeLightItem"
                                             Click="OnThemeLightClicked"
-                                            GroupName="AppTheme"
-                                            Text="Claro" />
+                                            GroupName="AppTheme" />
                                         <RadioMenuFlyoutItem
                                             x:Name="ThemeDarkItem"
+                                            x:Uid="ThemeDarkItem"
                                             Click="OnThemeDarkClicked"
-                                            GroupName="AppTheme"
-                                            Text="Oscuro" />
+                                            GroupName="AppTheme" />
+                                    </MenuFlyoutSubItem>
+
+                                    <!--
+                                        Los idiomas se dicen en su propio idioma —
+                                        «Español», «English»—, que es como los escribe
+                                        todo el mundo: quien busca el suyo lo reconoce
+                                        sin saber leer el que hay puesto.
+                                    -->
+                                    <MenuFlyoutSubItem x:Uid="MenuLanguage">
+                                        <RadioMenuFlyoutItem
+                                            x:Name="LanguageSystemItem"
+                                            x:Uid="MenuLanguageSystem"
+                                            Click="OnLanguageSystemClicked"
+                                            GroupName="AppLanguage" />
+                                        <RadioMenuFlyoutItem
+                                            x:Name="LanguageSpanishItem"
+                                            Click="OnLanguageSpanishClicked"
+                                            GroupName="AppLanguage"
+                                            Text="Español" />
+                                        <RadioMenuFlyoutItem
+                                            x:Name="LanguageEnglishItem"
+                                            Click="OnLanguageEnglishClicked"
+                                            GroupName="AppLanguage"
+                                            Text="English" />
                                     </MenuFlyoutSubItem>
                                     <MenuFlyoutSeparator />
                                     <!--
@@ -708,8 +732,8 @@
                                     -->
                                     <MenuFlyoutItem
                                         x:Name="DefaultPdfItem"
-                                        Click="OnDefaultPdfClicked"
-                                        Text="Abrir los PDF con ZenInk…" />
+                                        x:Uid="DefaultPdfItem"
+                                        Click="OnDefaultPdfClicked" />
 
                                     <MenuFlyoutSeparator />
 
@@ -722,8 +746,8 @@
                                     -->
                                     <MenuFlyoutItem
                                         x:Name="AboutItem"
-                                        Click="OnAboutClicked"
-                                        Text="Acerca de ZenInk…" />
+                                        x:Uid="AboutItem"
+                                        Click="OnAboutClicked" />
                                 </MenuFlyout>
                             </Button.Flyout>
                         </Button>
@@ -745,10 +769,10 @@
                         -->
                         <ToggleButton
                             x:Name="CaptureToolButton"
+                            x:Uid="CaptureToolButton"
                             Click="OnCaptureToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Capturar una zona al portapapeles — arrastra un recuadro (K)">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--
                                     Las cuatro esquinas de un encuadre y el disparador
@@ -761,7 +785,7 @@
                                     Accent="{ThemeResource IconCaptureBrush}"
                                     AccentData="M8.2 10 H11.8 M10 8.2 V11.8"
                                     Data="M2.8 7 V4.2a1.4 1.4 0 0 1 1.4-1.4H7 M13 2.8h2.8a1.4 1.4 0 0 1 1.4 1.4V7 M17.2 13v2.8a1.4 1.4 0 0 1-1.4 1.4H13 M7 17.2H4.2a1.4 1.4 0 0 1-1.4-1.4V13" />
-                                <TextBlock Text="Capturar" />
+                                <TextBlock x:Uid="LabelCapture" />
                             </StackPanel>
                         </ToggleButton>
 
@@ -769,35 +793,35 @@
 
                         <ToggleButton
                             x:Name="LineToolButton"
+                            x:Uid="LineToolButton"
                             Click="OnLineToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Línea (L)">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4 16 L16 4" />
-                                <TextBlock Text="Línea" />
+                                <TextBlock x:Uid="LabelLine" />
                             </StackPanel>
                         </ToggleButton>
                         <ToggleButton
                             x:Name="ArrowToolButton"
+                            x:Uid="ArrowToolButton"
                             Click="OnArrowToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Flecha (F)">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4 16 L15.4 4.6 M10.2 4.6 H15.4 V9.8" />
-                                <TextBlock Text="Flecha" />
+                                <TextBlock x:Uid="LabelArrow" />
                             </StackPanel>
                         </ToggleButton>
                         <ToggleButton
                             x:Name="PolylineToolButton"
+                            x:Uid="PolylineToolButton"
                             Click="OnPolylineToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Polilínea — clic en cada vértice, Intro o doble clic para terminar (P)">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.4 15.2 L7.6 6.6 L11.2 12.4 L16.6 4.8" />
-                                <TextBlock Text="Polilínea" />
+                                <TextBlock x:Uid="LabelPolyline" />
                             </StackPanel>
                         </ToggleButton>
 
@@ -805,43 +829,43 @@
 
                         <ToggleButton
                             x:Name="RectangleToolButton"
+                            x:Uid="RectangleToolButton"
                             Click="OnRectangleToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Rectángulo (R)">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.6 5.4h12.8v9.2H3.6Z" />
-                                <TextBlock Text="Rectángulo" />
+                                <TextBlock x:Uid="LabelRectangle" />
                             </StackPanel>
                         </ToggleButton>
                         <ToggleButton
                             x:Name="EllipseToolButton"
+                            x:Uid="EllipseToolButton"
                             Click="OnEllipseToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Elipse (E)">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 15.4c3.6 0 6.4-2.4 6.4-5.4S13.6 4.6 10 4.6 3.6 7 3.6 10s2.8 5.4 6.4 5.4Z" />
-                                <TextBlock Text="Elipse" />
+                                <TextBlock x:Uid="LabelEllipse" />
                             </StackPanel>
                         </ToggleButton>
                         <ToggleButton
                             x:Name="PolygonToolButton"
+                            x:Uid="PolygonToolButton"
                             Click="OnPolygonToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Polígono — clic en cada vértice, Intro o doble clic para cerrarlo (G)">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 3.2 L16.8 8.2 L14.2 16.4 H5.8 L3.2 8.2 Z" />
-                                <TextBlock Text="Polígono" />
+                                <TextBlock x:Uid="LabelPolygon" />
                             </StackPanel>
                         </ToggleButton>
                         <ToggleButton
                             x:Name="CloudToolButton"
+                            x:Uid="CloudToolButton"
                             Click="OnCloudToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Nube de revisión — arrastra un recuadro, o clic en cada vértice (N)">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--
                                     Cuatro lóbulos y una base: a 18 px es lo que
@@ -854,7 +878,7 @@
                                     Style="{StaticResource BarIconStyle}"
                                     Accent="{ThemeResource IconRevisionBrush}"
                                     AccentData="M5.6 15.2a2.7 2.7 0 0 1-.4-5.3 3.3 3.3 0 0 1 5.6-2.6 2.9 2.9 0 0 1 4.5 2.7 2.6 2.6 0 0 1-.5 5.2Z" />
-                                <TextBlock Text="Nube" />
+                                <TextBlock x:Uid="LabelCloud" />
                             </StackPanel>
                         </ToggleButton>
 
@@ -862,10 +886,10 @@
 
                         <ToggleButton
                             x:Name="HighlightToolButton"
+                            x:Uid="HighlightToolButton"
                             Click="OnHighlightToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Resaltar texto — arrastra sobre el texto (S)">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--  La tinta va debajo del contorno, como en un rotulador de verdad.  -->
                                 <controls:ToolIcon
@@ -874,38 +898,38 @@
                                     AccentFill="M5.6 12.2 12.4 5.4l2.6 2.6-6.8 6.8H5.6Z"
                                     AccentFillOpacity="0.5"
                                     Data="M5.6 12.2 12.4 5.4l2.6 2.6-6.8 6.8H5.6Z M3.8 17.2h12.4" />
-                                <TextBlock Text="Resaltar" />
+                                <TextBlock x:Uid="LabelHighlight" />
                             </StackPanel>
                         </ToggleButton>
                         <ToggleButton
                             x:Name="TextToolMarkButton"
+                            x:Uid="TextToolMarkButton"
                             Click="OnFreeTextToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Texto — clic en la página y se escribe ahí mismo (T)">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--  Una A sobre una línea de base: el texto que se queda en el plano.  -->
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4.6 13.4 9 3.6h2L15.4 13.4 M6.6 10.2h6.8 M3.6 16.6h12.8" />
-                                <TextBlock Text="Texto" />
+                                <TextBlock x:Uid="LabelText" />
                             </StackPanel>
                         </ToggleButton>
                         <ToggleButton
                             x:Name="NoteToolButton"
+                            x:Uid="NoteToolButton"
                             Click="OnNoteToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Comentario — clic en la página y se escribe al lado (C)">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.8 5h12.4v8.2H9.4L6.2 16.4V13.2H3.8Z" />
-                                <TextBlock Text="Comentario" />
+                                <TextBlock x:Uid="LabelNote" />
                             </StackPanel>
                         </ToggleButton>
                         <ToggleButton
                             x:Name="InkToolButton"
+                            x:Uid="InkToolButton"
                             Click="OnInkToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Lápiz — dibujar a mano alzada (A)">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--  Solo la punta lleva color: es la parte que pinta.  -->
                                 <controls:ToolIcon
@@ -914,7 +938,7 @@
                                     AccentFill="M4 16.2h3.4l3.2-3.2-3.4-3.4L4 12.8Z"
                                     AccentFillOpacity="0.62"
                                     Data="M4 16.2h3.4l8.8-8.8a1.7 1.7 0 0 0 0-2.4l-1-1a1.7 1.7 0 0 0-2.4 0L4 12.8Z M11.6 5.6 14.8 8.8" />
-                                <TextBlock Text="Lápiz" />
+                                <TextBlock x:Uid="LabelPencil" />
                             </StackPanel>
                         </ToggleButton>
                     </StackPanel>
@@ -934,13 +958,13 @@
                         Visibility="Collapsed">
                         <ToggleButton
                             x:Name="ThumbnailsButton"
+                            x:Uid="ThumbnailsButton"
                             Click="OnThumbnailsClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Panel de hojas">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.8 3.6h6v6h-6Z M11.2 3.6h6v6h-6Z M2.8 11.4h6v6h-6Z M11.2 11.4h6v6h-6Z" />
-                                <TextBlock Text="Panel" />
+                                <TextBlock x:Uid="LabelPanel" />
                             </StackPanel>
                         </ToggleButton>
 
@@ -948,9 +972,9 @@
 
                         <DropDownButton
                             x:Name="RotateButton"
+                            x:Uid="RotateButton"
                             IsEnabled="False"
-                            Style="{StaticResource SlimDropDownStyle}"
-                            ToolTipService.ToolTip="Girar páginas">
+                            Style="{StaticResource SlimDropDownStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="7">
                                 <!--
                                     Three quarters of a circle, drawn clockwise from
@@ -961,58 +985,58 @@
                                     18px.
                                 -->
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M10 3.8 A6.2 6.2 0 1 1 3.8 10 M1.9 12.2 L3.8 10 L5.7 12.2" />
-                                <TextBlock Text="Girar" />
+                                <TextBlock x:Uid="LabelRotate" />
                             </StackPanel>
                             <DropDownButton.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                                    <MenuFlyoutItem Click="OnRotateLeftClicked" Text="Girar la página a la izquierda" />
-                                    <MenuFlyoutItem Click="OnRotateRightClicked" Text="Girar la página a la derecha" />
+                                    <MenuFlyoutItem x:Uid="MenuRotatePageLeft" Click="OnRotateLeftClicked" />
+                                    <MenuFlyoutItem x:Uid="MenuRotatePageRight" Click="OnRotateRightClicked" />
 
                                     <MenuFlyoutSeparator />
 
-                                    <MenuFlyoutItem Click="OnRotateAllLeftClicked" Text="Girar todas las páginas a la izquierda" />
-                                    <MenuFlyoutItem Click="OnRotateAllRightClicked" Text="Girar todas las páginas a la derecha" />
+                                    <MenuFlyoutItem x:Uid="MenuRotateAllLeft" Click="OnRotateAllLeftClicked" />
+                                    <MenuFlyoutItem x:Uid="MenuRotateAllRight" Click="OnRotateAllRightClicked" />
                                 </MenuFlyout>
                             </DropDownButton.Flyout>
                         </DropDownButton>
 
                         <DropDownButton
                             x:Name="InsertPagesButton"
+                            x:Uid="InsertPagesButton"
                             IsEnabled="False"
-                            Style="{StaticResource SlimDropDownStyle}"
-                            ToolTipService.ToolTip="Insertar hojas detrás de la marcada">
+                            Style="{StaticResource SlimDropDownStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="7">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4 3.4h8l3.6 3.6v9.6H4Z M12 3.4v3.6h3.6 M10 9.6v4.4 M7.8 11.8h4.4" />
-                                <TextBlock Text="Insertar" />
+                                <TextBlock x:Uid="LabelInsert" />
                             </StackPanel>
                             <DropDownButton.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                                    <MenuFlyoutItem Click="OnInsertFromFileClicked" Text="Hojas de otro PDF…" />
-                                    <MenuFlyoutItem Click="OnInsertBlankClicked" Text="Una hoja en blanco…" />
+                                    <MenuFlyoutItem x:Uid="RibbonInsertFromFile" Click="OnInsertFromFileClicked" />
+                                    <MenuFlyoutItem x:Uid="RibbonInsertBlank" Click="OnInsertBlankClicked" />
                                 </MenuFlyout>
                             </DropDownButton.Flyout>
                         </DropDownButton>
 
                         <Button
                             x:Name="DuplicatePageButton"
+                            x:Uid="DuplicatePageButton"
                             Click="OnDuplicatePageClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimButtonStyle}"
-                            ToolTipService.ToolTip="Duplicar la hoja">
+                            Style="{StaticResource SlimButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M7 2.8h8.2a1.4 1.4 0 0 1 1.4 1.4v8.2 M4.8 5.6h7.6a1.4 1.4 0 0 1 1.4 1.4v8.2a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4V7a1.4 1.4 0 0 1 1.4-1.4Z" />
-                                <TextBlock Text="Duplicar" />
+                                <TextBlock x:Uid="LabelDuplicate" />
                             </StackPanel>
                         </Button>
                         <Button
                             x:Name="DeletePageButton"
+                            x:Uid="DeletePageButton"
                             Click="OnDeletePageClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimButtonStyle}"
-                            ToolTipService.ToolTip="Quitar la hoja del documento">
+                            Style="{StaticResource SlimButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.6 5.6h12.8 M8 5.6V3.8h4v1.8 M5.4 5.6l.8 10.2a1 1 0 0 0 1 .9h5.6a1 1 0 0 0 1-.9l.8-10.2" />
-                                <TextBlock Text="Quitar" />
+                                <TextBlock x:Uid="LabelRemove" />
                             </StackPanel>
                         </Button>
 
@@ -1020,24 +1044,24 @@
 
                         <Button
                             x:Name="ExtractPagesButton"
+                            x:Uid="ExtractPagesButton"
                             Click="OnExtractPagesClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimButtonStyle}"
-                            ToolTipService.ToolTip="Extraer las hojas a un PDF nuevo">
+                            Style="{StaticResource SlimButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4 3.4h6l3.6 3.6v4.4 M10 3.4v3.6h3.6 M4 3.4v13.2h5 M13 12.6v5.2 M10.8 15.6 L13 17.8 L15.2 15.6" />
-                                <TextBlock Text="Extraer" />
+                                <TextBlock x:Uid="LabelExtract" />
                             </StackPanel>
                         </Button>
                         <Button
                             x:Name="SplitPagesButton"
+                            x:Uid="SplitPagesButton"
                             Click="OnSplitPagesClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimButtonStyle}"
-                            ToolTipService.ToolTip="Dividir el documento en archivos nuevos">
+                            Style="{StaticResource SlimButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.4 3.6h5.2v5.2H3.4Z M11.4 3.6h5.2v5.2h-5.2Z M3.4 11.2h5.2v5.2H3.4Z M11.4 11.2h5.2v5.2h-5.2Z M10 1.8v16.4" />
-                                <TextBlock Text="Dividir" />
+                                <TextBlock x:Uid="LabelSplit" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -1060,10 +1084,10 @@
                         Visibility="Collapsed">
                         <Button
                             x:Name="CompareOpenButton"
+                            x:Uid="CompareOpenButton"
                             Click="OnCompareOpenClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimButtonStyle}"
-                            ToolTipService.ToolTip="Superponer otra revisión de este plano">
+                            Style="{StaticResource SlimButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--
                                     Dos hojas superpuestas, y solo la de encima
@@ -1075,18 +1099,18 @@
                                     Accent="{ThemeResource IconRevisionBrush}"
                                     AccentData="M8.6 7.4h8v9.2h-8Z"
                                     Data="M3.4 3.4h8v9.2h-8Z" />
-                                <TextBlock Text="Revisión…" />
+                                <TextBlock x:Uid="LabelRevision" />
                             </StackPanel>
                         </Button>
                         <Button
                             x:Name="CompareStopButton"
+                            x:Uid="CompareStopButton"
                             Click="OnCompareStopClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimButtonStyle}"
-                            ToolTipService.ToolTip="Dejar de comparar y volver al plano">
+                            Style="{StaticResource SlimButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M5.4 5.4 L14.6 14.6 M14.6 5.4 L5.4 14.6" />
-                                <TextBlock Text="Salir" />
+                                <TextBlock x:Uid="LabelExit" />
                             </StackPanel>
                         </Button>
 
@@ -1095,11 +1119,10 @@
                         <!--  Solo llevan dibujo, así que el nombre tiene que ir aparte.  -->
                         <Button
                             x:Name="PreviousChangeButton"
-                            AutomationProperties.Name="Cambio anterior"
+                            x:Uid="PreviousChangeButton"
                             Click="OnPreviousChangeClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimIconButtonStyle}"
-                            ToolTipService.ToolTip="Cambio anterior">
+                            Style="{StaticResource SlimIconButtonStyle}">
                             <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M12.25 5.5 L7.75 10 L12.25 14.5" />
                         </Button>
                         <TextBlock
@@ -1111,11 +1134,10 @@
                             TextAlignment="Center" />
                         <Button
                             x:Name="NextChangeButton"
-                            AutomationProperties.Name="Cambio siguiente"
+                            x:Uid="NextChangeButton"
                             Click="OnNextChangeClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimIconButtonStyle}"
-                            ToolTipService.ToolTip="Cambio siguiente">
+                            Style="{StaticResource SlimIconButtonStyle}">
                             <controls:ToolIcon Style="{StaticResource BarIconBoldStyle}" Data="M7.75 5.5 L12.25 10 L7.75 14.5" />
                         </Button>
 
@@ -1123,51 +1145,51 @@
 
                         <DropDownButton
                             x:Name="ComparePairButton"
+                            x:Uid="ComparePairButton"
                             IsEnabled="False"
-                            Style="{StaticResource SlimDropDownStyle}"
-                            ToolTipService.ToolTip="Qué hoja de la revisión va con cuál">
+                            Style="{StaticResource SlimDropDownStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="7">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.2 4.4h5v11.2h-5Z M11.8 4.4h5v11.2h-5Z M8.8 10h2.4" />
-                                <TextBlock x:Name="ComparePairLabel" Text="Emparejar" />
+                                <TextBlock x:Name="ComparePairLabel" x:Uid="ComparePairLabel" />
                             </StackPanel>
                             <DropDownButton.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                                    <MenuFlyoutItem Click="OnComparePairBackClicked" Text="Atrasar la revisión una hoja" />
-                                    <MenuFlyoutItem Click="OnComparePairForwardClicked" Text="Adelantar la revisión una hoja" />
+                                    <MenuFlyoutItem x:Uid="MenuPairBack" Click="OnComparePairBackClicked" />
+                                    <MenuFlyoutItem x:Uid="MenuPairForward" Click="OnComparePairForwardClicked" />
 
                                     <MenuFlyoutSeparator />
 
-                                    <MenuFlyoutItem Click="OnComparePairResetClicked" Text="Emparejar hoja con hoja" />
+                                    <MenuFlyoutItem x:Uid="MenuPairReset" Click="OnComparePairResetClicked" />
                                 </MenuFlyout>
                             </DropDownButton.Flyout>
                         </DropDownButton>
 
                         <DropDownButton
                             x:Name="CompareFitButton"
+                            x:Uid="CompareFitButton"
                             IsEnabled="False"
-                            Style="{StaticResource SlimDropDownStyle}"
-                            ToolTipService.ToolTip="Cómo se coloca la revisión sobre la hoja">
+                            Style="{StaticResource SlimDropDownStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="7">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M2.8 4h14.4v12H2.8Z M6.6 7.4h6.8v5.2H6.6Z" />
-                                <TextBlock Text="Ajuste" />
+                                <TextBlock x:Uid="LabelFit" />
                             </StackPanel>
                             <DropDownButton.Flyout>
                                 <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                                    <MenuFlyoutItem Click="OnCompareFitClicked" Text="Ajustar a la hoja, sin deformar" />
-                                    <MenuFlyoutItem Click="OnCompareStretchClicked" Text="Estirar hasta llenar la hoja" />
+                                    <MenuFlyoutItem x:Uid="MenuFitKeep" Click="OnCompareFitClicked" />
+                                    <MenuFlyoutItem x:Uid="MenuFitStretch" Click="OnCompareStretchClicked" />
                                 </MenuFlyout>
                             </DropDownButton.Flyout>
                         </DropDownButton>
 
                         <Button
                             x:Name="CompareSwapButton"
+                            x:Uid="CompareSwapButton"
                             Click="OnCompareSwapClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimButtonStyle}"
-                            ToolTipService.ToolTip="Cambiar de color cada archivo">
+                            Style="{StaticResource SlimButtonStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4.6 7.6h10.8 M12.8 5 L15.4 7.6 L12.8 10.2 M15.4 12.4H4.6 M7.2 9.8 L4.6 12.4 L7.2 15" />
-                                <TextBlock Text="Colores" />
+                                <TextBlock x:Uid="LabelColours" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -1187,10 +1209,10 @@
 
                         <ToggleButton
                             x:Name="CalibrateToolButton"
+                            x:Uid="CalibrateToolButton"
                             Click="OnCalibrateToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Calibrar la hoja — arrastra sobre una distancia conocida y di cuánto mide">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--
                                     Una regla: el trazo con sus marcas de
@@ -1202,7 +1224,7 @@
                                     Accent="{ThemeResource IconMeasureBrush}"
                                     AccentData="M6 11.6V14 M10 10.4V14 M14 11.6V14"
                                     Data="M2.8 6h14.4v8H2.8Z" />
-                                <TextBlock Text="Calibrar" />
+                                <TextBlock x:Uid="LabelCalibrate" />
                             </StackPanel>
                         </ToggleButton>
 
@@ -1216,10 +1238,10 @@
 
                         <ToggleButton
                             x:Name="SnapToolButton"
+                            x:Uid="SnapToolButton"
                             Click="OnSnapClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Pegar los puntos a las líneas del plano">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--
                                     Un punto sobre el cruce de dos líneas: eso
@@ -1231,16 +1253,16 @@
                                     Accent="{ThemeResource IconMeasureBrush}"
                                     AccentData="M10 7.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 1 0 0-4.8Z"
                                     Data="M3 10h14 M10 3v14" />
-                                <TextBlock Text="Ajustar" />
+                                <TextBlock x:Uid="LabelSnap" />
                             </StackPanel>
                         </ToggleButton>
 
                         <ToggleButton
                             x:Name="OrthoToolButton"
+                            x:Uid="OrthoToolButton"
                             Click="OnOrthoClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Medir solo en horizontal o en vertical (Mayús hace lo contrario)">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--
                                     El signo de escuadra de toda la vida: el
@@ -1253,7 +1275,7 @@
                                     Accent="{ThemeResource IconMeasureBrush}"
                                     AccentData="M4.5 12.5h3v3h-3Z"
                                     Data="M4.5 3.5v12h12" />
-                                <TextBlock Text="Ortogonal" />
+                                <TextBlock x:Uid="LabelOrtho" />
                             </StackPanel>
                         </ToggleButton>
 
@@ -1261,35 +1283,35 @@
 
                         <ToggleButton
                             x:Name="DistanceToolButton"
+                            x:Uid="DistanceToolButton"
                             Click="OnDistanceToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Distancia — arrastra de un punto a otro">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--  Una línea de cota: el trazo y sus dos topes.  -->
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M4 10h12 M4 6.4v7.2 M16 6.4v7.2" />
-                                <TextBlock Text="Distancia" />
+                                <TextBlock x:Uid="LabelDistance" />
                             </StackPanel>
                         </ToggleButton>
 
                         <ToggleButton
                             x:Name="PerimeterToolButton"
+                            x:Uid="PerimeterToolButton"
                             Click="OnPerimeterToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Perímetro — clic en cada vértice, Intro o doble clic para cerrar">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.6 13.4 L6.8 4.8 L12 8.6 L16.4 5.6 L14.6 15.2Z" />
-                                <TextBlock Text="Perímetro" />
+                                <TextBlock x:Uid="LabelPerimeter" />
                             </StackPanel>
                         </ToggleButton>
 
                         <ToggleButton
                             x:Name="AreaToolButton"
+                            x:Uid="AreaToolButton"
                             Click="OnAreaToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Área — clic en cada vértice, Intro o doble clic para cerrar">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--  La misma figura que el perímetro, con el interior teñido: eso es lo que las separa.  -->
                                 <controls:ToolIcon
@@ -1297,16 +1319,16 @@
                                     Accent="{ThemeResource IconMeasureBrush}"
                                     AccentData="M6.6 11.2 L8.2 7.4 L11.8 9.6 L13.4 12.6Z"
                                     Data="M3.6 13.4 L6.8 4.8 L12 8.6 L16.4 5.6 L14.6 15.2Z" />
-                                <TextBlock Text="Área" />
+                                <TextBlock x:Uid="LabelArea" />
                             </StackPanel>
                         </ToggleButton>
 
                         <ToggleButton
                             x:Name="AngleToolButton"
+                            x:Uid="AngleToolButton"
                             Click="OnAngleToolClicked"
                             IsEnabled="False"
-                            Style="{StaticResource SlimToggleStyle}"
-                            ToolTipService.ToolTip="Ángulo — un brazo, el vértice y el otro brazo">
+                            Style="{StaticResource SlimToggleStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <!--  Dos brazos y el arco entre ellos, que es como se acota un ángulo.  -->
                                 <controls:ToolIcon
@@ -1314,7 +1336,7 @@
                                     Accent="{ThemeResource IconMeasureBrush}"
                                     AccentData="M9.4 15.2a6.4 6.4 0 0 0-3.6-3.6"
                                     Data="M4 16 L4 4 M4 16 H16.4" />
-                                <TextBlock Text="Ángulo" />
+                                <TextBlock x:Uid="LabelAngle" />
                             </StackPanel>
                         </ToggleButton>
                     </StackPanel>
@@ -1362,8 +1384,8 @@
                     <StackPanel Spacing="6">
                         <TextBox
                             x:Name="CommandQuery"
+                            x:Uid="CommandQuery"
                             KeyDown="OnCommandQueryKeyDown"
-                            PlaceholderText="Buscar una herramienta o una acción…"
                             TextChanged="OnCommandQueryChanged" />
                         <ListView
                             x:Name="CommandList"
@@ -1442,21 +1464,21 @@
                         VerticalAlignment="Center">
                         <TextBlock
                             x:Name="SignStripLabel"
-                            VerticalAlignment="Center"
-                            Text="Arrastra la firma para moverla" />
+                            x:Uid="SignStripLabel"
+                            VerticalAlignment="Center" />
                         <Button
                             x:Name="SignConfirmButton"
+                            x:Uid="SignConfirmButton"
                             Click="OnSignConfirmClicked"
-                            Content="Firmar aquí"
                             Style="{StaticResource AccentButtonStyle}" />
                         <Button
                             x:Name="SignRedrawButton"
-                            Click="OnSignRedrawClicked"
-                            Content="Dibujarla otra vez" />
+                            x:Uid="SignRedrawButton"
+                            Click="OnSignRedrawClicked" />
                         <Button
                             x:Name="SignDropButton"
-                            Click="OnSignDropClicked"
-                            Content="Quitarla" />
+                            x:Uid="SignDropButton"
+                            Click="OnSignDropClicked" />
                     </StackPanel>
                 </Border>
 
@@ -1486,9 +1508,9 @@
                             Opacity="0.32"
                             Thickness="1" />
                         <TextBlock
+                            x:Uid="StartPagePrompt"
                             HorizontalAlignment="Center"
-                            Opacity="0.55"
-                            Text="Abre un documento para empezar" />
+                            Opacity="0.55" />
 
                         <StackPanel
                             x:Name="RecentSection"
@@ -1497,10 +1519,10 @@
                             Spacing="2"
                             Visibility="Collapsed">
                             <TextBlock
+                                x:Uid="RecentHeading"
                                 Margin="10,0,0,4"
                                 FontSize="12"
-                                Opacity="0.5"
-                                Text="Abiertos hace poco" />
+                                Opacity="0.5" />
                             <ItemsControl x:Name="RecentList">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="local:RecentEntry">
@@ -1551,10 +1573,10 @@
                         -->
                         <Button
                             x:Name="AboutLineButton"
+                            x:Uid="AboutLineButton"
                             Margin="0,18,0,0"
                             Padding="8,4"
                             HorizontalAlignment="Center"
-                            AutomationProperties.Name="Acerca de ZenInk"
                             Background="Transparent"
                             BorderThickness="0"
                             Click="OnAboutClicked"
@@ -1616,9 +1638,9 @@
                         Visibility="Collapsed" />
                     <TextBlock
                         x:Name="PropertiesTitle"
+                        x:Uid="PropertiesTitle"
                         VerticalAlignment="Center"
-                        FontWeight="SemiBold"
-                        Text="Selección de texto" />
+                        FontWeight="SemiBold" />
                 </StackPanel>
 
                 <!--
@@ -1635,8 +1657,8 @@
                             Spacing="14">
                             <TextBlock
                                 x:Name="SelectionStatus"
+                                x:Uid="SelectionStatus"
                                 Opacity="0.6"
-                                Text="Arrastra sobre la página para seleccionar."
                                 TextWrapping="Wrap" />
                             <Button
                                 x:Name="CopySelectionButton"
@@ -1645,7 +1667,7 @@
                                 IsEnabled="False">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M7 2.8h8.2a1.4 1.4 0 0 1 1.4 1.4v8.2 M4.8 5.6h7.6a1.4 1.4 0 0 1 1.4 1.4v8.2a1.4 1.4 0 0 1-1.4 1.4H4.8a1.4 1.4 0 0 1-1.4-1.4V7a1.4 1.4 0 0 1 1.4-1.4Z" />
-                                    <TextBlock Text="Copiar" />
+                                    <TextBlock x:Uid="LabelCopy" />
                                 </StackPanel>
                             </Button>
                             <Button
@@ -1654,7 +1676,7 @@
                                 Click="OnSelectAllClicked">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.4 6.2V4.6a1.2 1.2 0 0 1 1.2-1.2h1.6 M16.6 6.2V4.6a1.2 1.2 0 0 0-1.2-1.2h-1.6 M3.4 13.8v1.6a1.2 1.2 0 0 0 1.2 1.2h1.6 M16.6 13.8v1.6a1.2 1.2 0 0 1-1.2 1.2h-1.6 M6.6 6.8h6.8v6.4H6.6Z" />
-                                    <TextBlock Text="Seleccionar la página" />
+                                    <TextBlock x:Uid="LabelSelectPage" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>
@@ -1672,10 +1694,10 @@
                             <StackPanel x:Name="ColourSection" Spacing="8">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock
+                                        x:Uid="PropColourLabel"
                                         VerticalAlignment="Center"
                                         FontSize="12"
-                                        Opacity="0.7"
-                                        Text="Color" />
+                                        Opacity="0.7" />
                                     <Border
                                         x:Name="CurrentColourSwatch"
                                         Width="16"
@@ -1688,61 +1710,61 @@
 
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <Button
+                                        x:Uid="ColourRed"
                                         Click="OnColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="D82020"
-                                        ToolTipService.ToolTip="Rojo">
+                                        Tag="D82020">
                                         <Border Background="#D82020" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                     <Button
+                                        x:Uid="ColourOrange"
                                         Click="OnColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="F07A1E"
-                                        ToolTipService.ToolTip="Naranja">
+                                        Tag="F07A1E">
                                         <Border Background="#F07A1E" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                     <Button
+                                        x:Uid="ColourYellow"
                                         Click="OnColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="FFC800"
-                                        ToolTipService.ToolTip="Amarillo">
+                                        Tag="FFC800">
                                         <Border Background="#FFC800" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                     <Button
+                                        x:Uid="ColourGreen"
                                         Click="OnColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="1E9B4B"
-                                        ToolTipService.ToolTip="Verde">
+                                        Tag="1E9B4B">
                                         <Border Background="#1E9B4B" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <Button
+                                        x:Uid="ColourBlue"
                                         Click="OnColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="0067C0"
-                                        ToolTipService.ToolTip="Azul">
+                                        Tag="0067C0">
                                         <Border Background="#0067C0" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                     <Button
+                                        x:Uid="ColourViolet"
                                         Click="OnColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="7B4BD6"
-                                        ToolTipService.ToolTip="Violeta">
+                                        Tag="7B4BD6">
                                         <Border Background="#7B4BD6" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                     <Button
+                                        x:Uid="ColourMagenta"
                                         Click="OnColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="E0359C"
-                                        ToolTipService.ToolTip="Magenta">
+                                        Tag="E0359C">
                                         <Border Background="#E0359C" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                     <Button
+                                        x:Uid="ColourBlack"
                                         Click="OnColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="1C1C1C"
-                                        ToolTipService.ToolTip="Negro">
+                                        Tag="1C1C1C">
                                         <Border Background="#1C1C1C" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                 </StackPanel>
@@ -1758,10 +1780,10 @@
                             <StackPanel x:Name="FillSection" Spacing="8">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock
+                                        x:Uid="PropFillLabel"
                                         VerticalAlignment="Center"
                                         FontSize="12"
-                                        Opacity="0.7"
-                                        Text="Relleno" />
+                                        Opacity="0.7" />
                                     <Border
                                         x:Name="CurrentFillSwatch"
                                         Width="16"
@@ -1779,9 +1801,9 @@
 
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <Button
+                                        x:Uid="FillNone"
                                         Click="OnNoFillClicked"
-                                        Style="{StaticResource SwatchButtonStyle}"
-                                        ToolTipService.ToolTip="Sin relleno">
+                                        Style="{StaticResource SwatchButtonStyle}">
                                         <controls:ToolIcon
                                             Width="18"
                                             Height="18"
@@ -1789,54 +1811,54 @@
                                             Thickness="1.3" />
                                     </Button>
                                     <Button
+                                        x:Uid="FillYellow"
                                         Click="OnFillColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="FFC800"
-                                        ToolTipService.ToolTip="Relleno amarillo">
+                                        Tag="FFC800">
                                         <Border Background="#FFC800" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                     <Button
+                                        x:Uid="FillRed"
                                         Click="OnFillColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="D82020"
-                                        ToolTipService.ToolTip="Relleno rojo">
+                                        Tag="D82020">
                                         <Border Background="#D82020" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                     <Button
+                                        x:Uid="FillGreen"
                                         Click="OnFillColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="1E9B4B"
-                                        ToolTipService.ToolTip="Relleno verde">
+                                        Tag="1E9B4B">
                                         <Border Background="#1E9B4B" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <Button
+                                        x:Uid="FillBlue"
                                         Click="OnFillColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="0067C0"
-                                        ToolTipService.ToolTip="Relleno azul">
+                                        Tag="0067C0">
                                         <Border Background="#0067C0" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                     <Button
+                                        x:Uid="FillViolet"
                                         Click="OnFillColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="7B4BD6"
-                                        ToolTipService.ToolTip="Relleno violeta">
+                                        Tag="7B4BD6">
                                         <Border Background="#7B4BD6" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                     <Button
+                                        x:Uid="FillGrey"
                                         Click="OnFillColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="9AA0A6"
-                                        ToolTipService.ToolTip="Relleno gris">
+                                        Tag="9AA0A6">
                                         <Border Background="#9AA0A6" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                     <Button
+                                        x:Uid="FillBlack"
                                         Click="OnFillColourClicked"
                                         Style="{StaticResource SwatchButtonStyle}"
-                                        Tag="1C1C1C"
-                                        ToolTipService.ToolTip="Relleno negro">
+                                        Tag="1C1C1C">
                                         <Border Background="#1C1C1C" Style="{StaticResource SwatchStyle}" />
                                     </Button>
                                 </StackPanel>
@@ -1844,10 +1866,10 @@
                                 <StackPanel x:Name="FillOpacitySection" Spacing="2">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <TextBlock
+                                            x:Uid="PropOpacityLabel"
                                             VerticalAlignment="Center"
                                             FontSize="12"
-                                            Opacity="0.7"
-                                            Text="Opacidad" />
+                                            Opacity="0.7" />
                                         <TextBlock
                                             x:Name="FillOpacityText"
                                             VerticalAlignment="Center"
@@ -1868,10 +1890,10 @@
                             <StackPanel x:Name="WidthSection" Spacing="2">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock
+                                        x:Uid="PropThicknessLabel"
                                         VerticalAlignment="Center"
                                         FontSize="12"
-                                        Opacity="0.7"
-                                        Text="Grosor" />
+                                        Opacity="0.7" />
                                     <TextBlock
                                         x:Name="WidthValueText"
                                         VerticalAlignment="Center"
@@ -1901,10 +1923,10 @@
                             <StackPanel x:Name="FontSizeSection" Spacing="2">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock
+                                        x:Uid="PropSizeLabel"
                                         VerticalAlignment="Center"
                                         FontSize="12"
-                                        Opacity="0.7"
-                                        Text="Tamaño" />
+                                        Opacity="0.7" />
                                     <TextBlock
                                         x:Name="FontSizeText"
                                         VerticalAlignment="Center"
@@ -1925,14 +1947,14 @@
                             <StackPanel x:Name="NoteEditor" Spacing="6" Visibility="Collapsed">
                                 <TextBlock
                                     x:Name="NoteEditorLabel"
+                                    x:Uid="NoteEditorLabel"
                                     FontSize="12"
-                                    Opacity="0.7"
-                                    Text="Comentario" />
+                                    Opacity="0.7" />
                                 <TextBox
                                     x:Name="NoteText"
+                                    x:Uid="NoteText"
                                     Height="120"
                                     AcceptsReturn="True"
-                                    PlaceholderText="Qué hay que revisar"
                                     LostFocus="OnNoteTextLostFocus"
                                     TextChanged="OnNoteTextChanged"
                                     TextWrapping="Wrap" />
@@ -1945,7 +1967,7 @@
                                 IsEnabled="False">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <controls:ToolIcon Style="{StaticResource BarIconStyle}" Data="M3.6 5.6h12.8 M8 5.6V3.8h4v1.8 M5.2 5.6l.8 10.4a1.2 1.2 0 0 0 1.2 1.1h5.6a1.2 1.2 0 0 0 1.2-1.1l.8-10.4" />
-                                    <TextBlock Text="Eliminar la marca (Supr)" />
+                                    <TextBlock x:Uid="LabelDeleteMark" />
                                 </StackPanel>
                             </Button>
 
@@ -1979,9 +2001,9 @@
                                         CornerRadius="3" />
                                     <TextBlock
                                         x:Name="CompareSheetName"
+                                        x:Uid="CompareSheetName"
                                         MaxWidth="200"
                                         FontSize="12"
-                                        Text="Este documento"
                                         TextWrapping="Wrap" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Spacing="10">
@@ -1994,9 +2016,9 @@
                                         CornerRadius="3" />
                                     <TextBlock
                                         x:Name="CompareRevisionName"
+                                        x:Uid="CompareRevisionName"
                                         MaxWidth="200"
                                         FontSize="12"
-                                        Text="La revisión"
                                         TextWrapping="Wrap" />
                                 </StackPanel>
                                 <StackPanel Orientation="Horizontal" Spacing="10">
@@ -2008,9 +2030,9 @@
                                         Background="#8C8C8C"
                                         CornerRadius="3" />
                                     <TextBlock
+                                        x:Uid="CompareBothLabel"
                                         FontSize="12"
                                         Opacity="0.75"
-                                        Text="En las dos: no ha cambiado"
                                         TextWrapping="Wrap" />
                                 </StackPanel>
                             </StackPanel>
@@ -2030,9 +2052,9 @@
                             -->
                             <StackPanel Spacing="2">
                                 <TextBlock
+                                    x:Uid="CompareBackgroundLabel"
                                     FontSize="12"
-                                    Opacity="0.7"
-                                    Text="Fondo sin cambios" />
+                                    Opacity="0.7" />
                                 <Slider
                                     x:Name="CompareCommonSlider"
                                     Maximum="255"
@@ -2069,9 +2091,9 @@
                             -->
                             <StackPanel x:Name="MeasureDetailSection" Spacing="4" Visibility="Collapsed">
                                 <TextBlock
+                                    x:Uid="MeasureThisLabel"
                                     FontSize="12"
-                                    Opacity="0.7"
-                                    Text="Esta medida" />
+                                    Opacity="0.7" />
                                 <TextBlock
                                     x:Name="MeasureDetailText"
                                     FontSize="14"
@@ -2080,9 +2102,9 @@
 
                             <StackPanel Spacing="4">
                                 <TextBlock
+                                    x:Uid="MeasureSheetLabel"
                                     FontSize="12"
-                                    Opacity="0.7"
-                                    Text="Esta hoja" />
+                                    Opacity="0.7" />
                                 <TextBlock
                                     x:Name="SheetScaleText"
                                     FontSize="14"
@@ -2090,22 +2112,22 @@
                             </StackPanel>
 
                             <TextBlock
+                                x:Uid="CalibrateHelp"
                                 FontSize="12"
                                 Opacity="0.55"
-                                Text="Arrastra sobre una distancia conocida —una cota del plano, una escala gráfica— y di cuánto mide de verdad."
                                 TextWrapping="Wrap" />
 
                             <Button
                                 x:Name="ClearScaleButton"
+                                x:Uid="ClearScaleButton"
                                 Click="OnClearScaleClicked"
-                                Content="Quitar la calibración"
                                 IsEnabled="False"
                                 Style="{StaticResource SlimButtonStyle}" />
 
                             <TextBlock
+                                x:Uid="ScaleTravelsNote"
                                 FontSize="12"
                                 Opacity="0.55"
-                                Text="La escala viaja con la hoja: si la mueves o la llevas a otro archivo, va con ella."
                                 TextWrapping="Wrap" />
                         </StackPanel>
                     </StackPanel>

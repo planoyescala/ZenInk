@@ -177,7 +177,7 @@ public sealed class PdfPrintJob : IAsyncDisposable
         // failure that looks like success, so it must never be silent.
         if (!_open)
         {
-            Problem = "El documento se cerró antes de dibujar la hoja.";
+            Problem = Loc.Get("PrintClosedEarly");
             return;
         }
 
@@ -193,13 +193,13 @@ public sealed class PdfPrintJob : IAsyncDisposable
         var destination = piece.Destination;
         if (source.Width <= 0 || source.Height <= 0)
         {
-            Problem = "La zona del plano a imprimir quedó vacía.";
+            Problem = Loc.Get("PrintEmptyArea");
             return;
         }
 
         if (destination.Width <= 0 || destination.Height <= 0)
         {
-            Problem = "El hueco disponible en el papel quedó vacío.";
+            Problem = Loc.Get("PrintEmptySlot");
             return;
         }
 
@@ -207,7 +207,7 @@ public sealed class PdfPrintJob : IAsyncDisposable
         double scale = destination.Width / source.Width * (Dpi / 72.0);
         if (scale <= 0)
         {
-            Problem = "La escala de impresión resultó nula.";
+            Problem = Loc.Get("PrintNoScale");
             return;
         }
 
@@ -254,7 +254,7 @@ public sealed class PdfPrintJob : IAsyncDisposable
 
                 if (band is not { } data)
                 {
-                    Problem = "PDFium no devolvió parte de la hoja.";
+                    Problem = Loc.Get("PrintNoBitmap");
                     continue;
                 }
 

@@ -116,7 +116,7 @@ internal static class SingleInstance
         })
         {
             IsBackground = true,
-            Name = "ZenInk instancia única",
+            Name = "ZenInk single instance",
         };
 
         thread.Start();

@@ -350,7 +350,7 @@ public sealed partial class PagesPanel : UserControl
         catch (Exception ex)
         {
             // A preview is a convenience; losing one must not disturb the viewer.
-            System.Diagnostics.Debug.WriteLine($"ZenInk: fallo al generar la miniatura de {key.PageIndex}: {ex}");
+            System.Diagnostics.Debug.WriteLine($"ZenInk: could not draw the thumbnail of {key.PageIndex}: {ex}");
             _requested.Remove(key);
         }
     }
@@ -593,7 +593,7 @@ public sealed partial class PagesPanel : UserControl
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"ZenInk: no se pudo leer el índice del PDF: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"ZenInk: could not read the PDF outline: {ex.Message}");
             }
         }
 

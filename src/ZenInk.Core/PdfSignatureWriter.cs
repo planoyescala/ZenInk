@@ -48,11 +48,14 @@ internal static class PdfSignatureWriter
             // it is not. Writing anyway would produce a file that opens and is
             // quietly wrong, which is the worst of the outcomes available.
             throw new NotSupportedException(
-                "Este PDF está cifrado y todavía no se puede firmar. Guarda una copia sin contraseña y fírmala.");
+                CoreText.Say(
+                    "CoreEncryptedCannotSign",
+                    "This PDF is encrypted and cannot be signed yet. Save a copy without a password and sign that."));
         }
         if (map.Root < 0 || map.Size < 0)
         {
-            throw new InvalidDataException("El PDF no dice dónde está su catálogo.");
+            throw new InvalidDataException(CoreText.Say(
+                "CoreNoCatalogue", "The PDF does not say where its catalogue is."));
         }
 
         int pageNumber = FindPage(map, map.Root, options.PageIndex)
@@ -305,11 +308,15 @@ internal static class PdfSignatureWriter
         var map = PdfFileMap.Read(sourcePath);
         if (map.Unsupported is not null)
         {
-            throw new NotSupportedException($"No se pueden añadir los datos de validación: {map.Unsupported}.");
+            throw new NotSupportedException(CoreText.Say(
+                "CoreValidationUnsupported",
+                "The validation data cannot be added: {0}.",
+                map.Unsupported));
         }
         if (map.Root < 0 || map.Size < 0)
         {
-            throw new InvalidDataException("El PDF no dice dónde está su catálogo.");
+            throw new InvalidDataException(CoreText.Say(
+                "CoreNoCatalogue", "The PDF does not say where its catalogue is."));
         }
 
         var changed = new Dictionary<int, string>();

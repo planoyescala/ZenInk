@@ -23,6 +23,7 @@ Console.WriteLine("ZenInk engine checks");
 try
 {
     LayoutTests.Run();
+    ResourceTests.Run();
     PageTests.Run();
     RecentDocumentsTests.Run();
     PdfAssociationTests.Run();

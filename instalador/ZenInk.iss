@@ -1,4 +1,4 @@
-; --- INSTALADOR ZENINK (parte de ZenBIM · OPEN SOURCE) ---
+﻿; --- INSTALADOR ZENINK (parte de ZenBIM · OPEN SOURCE) ---
 
 #define MyAppName "ZenInk"
 #define MyAppExeName "ZenInk.App.exe"
@@ -45,6 +45,10 @@ WizardImageBackColor=clWhite
 WizardImageStretch=yes
 
 DisableWelcomePage=no
+
+; Con dos idiomas Windows elige el que coincide con el suyo y no pregunta;
+; solo sale el selector cuando no hay ninguno que coincida.
+ShowLanguageDialog=auto
 
 ; LICENCIA GPLv3 — la misma que va dentro del programa, sin una segunda copia
 ; que se pueda quedar atrás.
@@ -97,18 +101,44 @@ SignTool=zenink
 SignedUninstaller=yes
 #endif
 
+; --- IDIOMAS ---
+; El inglés primero porque es el idioma en el que se publica; Windows elige
+; solo el que coincida con el suyo, y solo pregunta cuando no hay ninguno.
+; Las frases propias van en [CustomMessages], una por idioma, y se piden con
+; {cm:…}: así una entrada nueva que se olvide en un idioma canta al compilar.
 [Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
+
 
 [Messages]
 ; --- TEXTOS DE BIENVENIDA ---
+english.WelcomeLabel1=Install ZenInk
+english.WelcomeLabel2=ZenInk {#MyAppVersion} is about to be installed on this computer.%n%nZenInk is a viewer and editor for PDF drawings: annotate, compare revisions, measure on the drawing and sign. It is free software, made by plano y escala and published under the GNU General Public License v3.%n%nNothing else needs installing: everything it needs travels inside.
+english.ClickNext=Press Next to accept the free licence and carry on.
 spanish.WelcomeLabel1=Instalar ZenInk
 spanish.WelcomeLabel2=Se va a instalar ZenInk {#MyAppVersion} en este ordenador.%n%nZenInk es un visor y editor de planos PDF: anotar, comparar revisiones, medir sobre el plano y firmar. Es software libre, hecho por plano y escala y publicado bajo la GNU General Public License v3.%n%nNo hace falta instalar nada más: todo lo que necesita va dentro.
 spanish.ClickNext=Pulsa Siguiente para aceptar la licencia libre y continuar.
 
+[CustomMessages]
+english.DesktopIcon=Create a shortcut on the desktop
+english.ShortcutsGroup=Shortcuts:
+english.PdfAssoc=Offer ZenInk when a PDF is opened (it appears under “Open with”)
+english.PdfFilesGroup=PDF files:
+english.PdfDocument=PDF document
+english.AppDescription=Viewer and editor for PDF drawings
+english.RunApp=Open ZenInk
+spanish.DesktopIcon=Crear un acceso directo en el escritorio
+spanish.ShortcutsGroup=Accesos directos:
+spanish.PdfAssoc=Ofrecer ZenInk al abrir un PDF (aparece en «Abrir con»)
+spanish.PdfFilesGroup=Archivos PDF:
+spanish.PdfDocument=Documento PDF
+spanish.AppDescription=Visor y editor de planos PDF
+spanish.RunApp=Abrir ZenInk
+
 [Tasks]
-Name: "desktopicon"; Description: "Crear un acceso directo en el escritorio"; GroupDescription: "Accesos directos:"
-Name: "pdfassoc"; Description: "Ofrecer ZenInk al abrir un PDF (aparece en «Abrir con»)"; GroupDescription: "Archivos PDF:"
+Name: "desktopicon"; Description: "{cm:DesktopIcon}"; GroupDescription: "{cm:ShortcutsGroup}"
+Name: "pdfassoc"; Description: "{cm:PdfAssoc}"; GroupDescription: "{cm:PdfFilesGroup}"
 
 [Files]
 ; El programa entero, con .NET y el Windows App SDK dentro. Por eso son ~280 MB
@@ -123,7 +153,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 ; Sin paquete MSIX, quien declara que ZenInk abre PDF es el registro. Todo bajo
 ; HKCU, que es lo que permite instalar sin administrador — y lo que hace que
 ; desinstalar no deje nada detrás.
-Root: HKCU; Subkey: "Software\Classes\ZenInk.pdf"; ValueType: string; ValueName: ""; ValueData: "Documento PDF"; Flags: uninsdeletekey; Tasks: pdfassoc
+Root: HKCU; Subkey: "Software\Classes\ZenInk.pdf"; ValueType: string; ValueName: ""; ValueData: "{cm:PdfDocument}"; Flags: uninsdeletekey; Tasks: pdfassoc
 Root: HKCU; Subkey: "Software\Classes\ZenInk.pdf\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"; Tasks: pdfassoc
 Root: HKCU; Subkey: "Software\Classes\ZenInk.pdf\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: pdfassoc
 
@@ -135,9 +165,9 @@ Root: HKCU; Subkey: "Software\Classes\Applications\{#MyAppExeName}\SupportedType
 
 ; Y para que salga en la lista de aplicaciones predeterminadas de Windows.
 Root: HKCU; Subkey: "Software\{#MyAppName}\Capabilities"; ValueType: string; ValueName: "ApplicationName"; ValueData: "{#MyAppName}"; Flags: uninsdeletekey; Tasks: pdfassoc
-Root: HKCU; Subkey: "Software\{#MyAppName}\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "Visor y editor de planos PDF"; Tasks: pdfassoc
+Root: HKCU; Subkey: "Software\{#MyAppName}\Capabilities"; ValueType: string; ValueName: "ApplicationDescription"; ValueData: "{cm:AppDescription}"; Tasks: pdfassoc
 Root: HKCU; Subkey: "Software\{#MyAppName}\Capabilities\FileAssociations"; ValueType: string; ValueName: ".pdf"; ValueData: "ZenInk.pdf"; Tasks: pdfassoc
 Root: HKCU; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: "Software\{#MyAppName}\Capabilities"; Flags: uninsdeletevalue; Tasks: pdfassoc
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Abrir ZenInk"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:RunApp}"; Flags: nowait postinstall skipifsilent

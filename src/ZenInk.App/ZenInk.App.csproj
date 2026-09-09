@@ -26,6 +26,14 @@
     <Copyright>© 2026 plano y escala. Software libre bajo GPL-3.0-or-later.</Copyright>
     <AssemblyTitle>ZenInk</AssemblyTitle>
     <Description>Visor y editor de planos PDF. Parte del proyecto ZenBIM de plano y escala.</Description>
+
+    <!--
+      The language a copy falls back to when the reader's own is not one we
+      speak. English rather than Spanish because this is published: a Spanish
+      Windows finds es-ES on its own, and everybody else gets something they
+      have a chance of reading.
+    -->
+    <DefaultLanguage>en-US</DefaultLanguage>
   </PropertyGroup>
 
   <ItemGroup>

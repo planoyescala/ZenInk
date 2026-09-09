@@ -23,6 +23,10 @@ namespace ZenInk_App;
 /// <param name="Also">
 /// Other words someone might reach for. Nobody looks up «nube de revisión» by
 /// typing "nube" only — they type "revision", or "marcar", or "globo".
+///
+/// These are translated like everything else, and not word for word: what
+/// somebody types when hunting for a tool is a matter of the language they
+/// think in, not of what the Spanish list happens to say.
 /// </param>
 public sealed record AppCommand(string Name, string Keys, string Also, Action Run);
 
@@ -41,98 +45,111 @@ public sealed partial class MainPage
 
         var commands = new List<AppCommand>
         {
-            new("Abrir un documento", "", "archivo pdf cargar", () => OnOpenClicked(OpenButton, null!)),
-            new("Guardar", "Ctrl+S", "escribir grabar", () => _ = SaveDocumentAsync()),
-            new("Guardar como…", "", "copia duplicar exportar", () => OnSaveCopyClicked(this, empty)),
-            new("Aplanar las marcas", "", "fijar quemar definitivo", () => OnFlattenClicked(this, empty)),
-            new("Firmar el documento", "", "firma certificado fnmt digital", () => OnSignClicked(this, empty)),
+            Cmd("Open", "", () => OnOpenClicked(OpenButton, null!)),
+            Cmd("Save", "Ctrl+S", () => _ = SaveDocumentAsync()),
+            Cmd("SaveAs", "", () => OnSaveCopyClicked(this, empty)),
+            Cmd("Flatten", "", () => OnFlattenClicked(this, empty)),
+            Cmd("Sign", "", () => OnSignClicked(this, empty)),
 
             // Separate from signing, and named so: it puts a box on the sheet
             // saying who looked at it, and seals nothing at all.
-            new("Poner un sello (sin firma)", "", "sello revisado visto conforme marca nombre",
-                () => _ = StampHereAsync()),
+            Cmd("Stamp", "", () => _ = StampHereAsync()),
 
-            new("Descartar los cambios sin guardar", "", "deshacer todo revertir", () => OnDiscardChangesClicked(this, empty)),
-            new("Imprimir", "Ctrl+P", "papel plotter", () => OnPrintClicked(this, empty)),
-            new("Buscar texto", "Ctrl+F", "encontrar localizar", () => OnFindClicked(this, empty)),
+            Cmd("Discard", "", () => OnDiscardChangesClicked(this, empty)),
+            Cmd("Print", "Ctrl+P", () => OnPrintClicked(this, empty)),
+            Cmd("Find", "Ctrl+F", () => OnFindClicked(this, empty)),
 
-            new("Deshacer", "Ctrl+Z", "atras", () => OnUndoClicked(this, empty)),
-            new("Rehacer", "Ctrl+Y", "adelante", () => OnRedoClicked(this, empty)),
+            Cmd("Undo", "Ctrl+Z", () => OnUndoClicked(this, empty)),
+            Cmd("Redo", "Ctrl+Y", () => OnRedoClicked(this, empty)),
 
-            new("Acercar", "", "zoom aumentar más", () => OnZoomInClicked(this, empty)),
-            new("Alejar", "", "zoom reducir menos", () => OnZoomOutClicked(this, empty)),
-            new("Ajustar al ancho", "Ctrl+1", "encajar", () => OnFitWidthClicked(this, empty)),
-            new("Ajustar a la página", "Ctrl+2", "encajar entera", () => OnFitPageClicked(this, empty)),
-            new("Tamaño real", "Ctrl+0", "cien por cien 100", () => OnActualSizeClicked(this, empty)),
+            Cmd("ZoomIn", "", () => OnZoomInClicked(this, empty)),
+            Cmd("ZoomOut", "", () => OnZoomOutClicked(this, empty)),
+            Cmd("FitWidth", "Ctrl+1", () => OnFitWidthClicked(this, empty)),
+            Cmd("FitPage", "Ctrl+2", () => OnFitPageClicked(this, empty)),
+            Cmd("ActualSize", "Ctrl+0", () => OnActualSizeClicked(this, empty)),
 
-            new("Vista continua", "", "tira seguido scroll", () => OnContinuousModeClicked(this, empty)),
-            new("Página a página", "", "suelta individual", () => OnSingleModeClicked(this, empty)),
-            new("Una página de ancho", "", "columna", () => OnOneColumnClicked(this, empty)),
-            new("Dos páginas de ancho", "", "columnas doble libro", () => OnTwoColumnsClicked(this, empty)),
-            new("Panel de hojas", "", "miniaturas lateral páginas índice marcadores", () => OnThumbnailsClicked(this, empty)),
+            Cmd("Continuous", "", () => OnContinuousModeClicked(this, empty)),
+            Cmd("SinglePage", "", () => OnSingleModeClicked(this, empty)),
+            Cmd("OneColumn", "", () => OnOneColumnClicked(this, empty)),
+            Cmd("TwoColumns", "", () => OnTwoColumnsClicked(this, empty)),
+            Cmd("SheetPanel", "", () => OnThumbnailsClicked(this, empty)),
 
-            new("Girar la página a la izquierda", "", "rotar", () => OnRotateLeftClicked(this, empty)),
-            new("Girar la página a la derecha", "", "rotar", () => OnRotateRightClicked(this, empty)),
-            new("Girar todas a la izquierda", "", "rotar todo", () => OnRotateAllLeftClicked(this, empty)),
-            new("Girar todas a la derecha", "", "rotar todo", () => OnRotateAllRightClicked(this, empty)),
+            Cmd("RotateLeft", "", () => OnRotateLeftClicked(this, empty)),
+            Cmd("RotateRight", "", () => OnRotateRightClicked(this, empty)),
+            Cmd("RotateAllLeft", "", () => OnRotateAllLeftClicked(this, empty)),
+            Cmd("RotateAllRight", "", () => OnRotateAllRightClicked(this, empty)),
 
-            new("Subir la hoja", "Alt+↑", "mover reordenar antes arriba", () => Pages.Run(PageAction.MoveUp)),
-            new("Bajar la hoja", "Alt+↓", "mover reordenar después abajo", () => Pages.Run(PageAction.MoveDown)),
-            new("Mover la hoja a…", "", "llevar posición número reordenar colocar", () => Pages.Run(PageAction.MoveTo)),
-            new("Duplicar la hoja", "", "copiar página repetir", () => Pages.Run(PageAction.Duplicate)),
-            new("Quitar la hoja del documento", "", "borrar eliminar página suprimir", () => Pages.Run(PageAction.Delete)),
-            new("Insertar hojas de otro PDF…", "", "añadir traer combinar unir juntar merge", () => Pages.Run(PageAction.InsertFromFile)),
-            new("Insertar una hoja en blanco…", "", "añadir papel vacía nueva", () => Pages.Run(PageAction.InsertBlank)),
-            new("Extraer hojas a un PDF nuevo…", "", "sacar separar exportar páginas", () => Pages.Run(PageAction.Extract)),
-            new("Dividir el documento…", "", "partir separar trocear split", () => Pages.Run(PageAction.Split)),
+            Cmd("MoveUp", "Alt+↑", () => Pages.Run(PageAction.MoveUp)),
+            Cmd("MoveDown", "Alt+↓", () => Pages.Run(PageAction.MoveDown)),
+            Cmd("MoveTo", "", () => Pages.Run(PageAction.MoveTo)),
+            Cmd("Duplicate", "", () => Pages.Run(PageAction.Duplicate)),
+            Cmd("RemoveSheet", "", () => Pages.Run(PageAction.Delete)),
+            Cmd("InsertFromFile", "", () => Pages.Run(PageAction.InsertFromFile)),
+            Cmd("InsertBlank", "", () => Pages.Run(PageAction.InsertBlank)),
+            Cmd("Extract", "", () => Pages.Run(PageAction.Extract)),
+            Cmd("Split", "", () => Pages.Run(PageAction.Split)),
 
-            new("Comparar con otra revisión…", "", "superponer diferencias cambios version revisar overlay", () => _ = PickRevisionAsync()),
-            new("Cambio siguiente", "F4", "diferencia comparar avanzar", () => StepChange(1)),
-            new("Cambio anterior", "Mayús+F4", "diferencia comparar atras", () => StepChange(-1)),
-            new("Intercambiar los colores de la comparación", "", "revisión rojo azul cambiar", () => OnCompareSwapClicked(this, empty)),
-            new("Dejar de comparar", "", "salir cerrar revisión superposición", () => OnCompareStopClicked(this, empty)),
+            Cmd("Compare", "", () => _ = PickRevisionAsync()),
+            Cmd("NextChange", "F4", () => StepChange(1)),
+            Cmd("PreviousChange", $"{Loc.Get("KeyShift")}+F4", () => StepChange(-1)),
+            Cmd("SwapColours", "", () => OnCompareSwapClicked(this, empty)),
+            Cmd("StopCompare", "", () => OnCompareStopClicked(this, empty)),
 
-            new("Seleccionar toda la página", "", "todo copiar", () => OnSelectAllClicked(this, empty)),
-            new("Copiar la selección", "Ctrl+C", "portapapeles", () => OnCopySelectionClicked(this, empty)),
+            Cmd("SelectPage", "", () => OnSelectAllClicked(this, empty)),
+            Cmd("CopySelection", "Ctrl+C", () => OnCopySelectionClicked(this, empty)),
 
-            new("Tema del sistema", "", "apariencia claro oscuro", () => OnThemeSystemClicked(this, empty)),
-            new("Tema claro", "", "apariencia blanco", () => OnThemeLightClicked(this, empty)),
-            new("Tema oscuro", "", "apariencia negro", () => OnThemeDarkClicked(this, empty)),
+            Cmd("ThemeSystem", "", () => OnThemeSystemClicked(this, empty)),
+            Cmd("ThemeLight", "", () => OnThemeLightClicked(this, empty)),
+            Cmd("ThemeDark", "", () => OnThemeDarkClicked(this, empty)),
 
-            new("Acerca de ZenInk", "", "versión licencia gpl software libre zenbim plano y escala créditos",
-                () => OnAboutClicked(this, empty)),
+            Cmd("About", "", () => OnAboutClicked(this, empty)),
         };
 
         // The marking tools, by name. Since they moved into the ribbon they
         // carry labels of their own, but typing still beats hunting for the
         // tab a rarely-used one lives on.
-        commands.AddRange(new (string Name, string Also, ViewerTool Tool)[]
+        commands.AddRange(new (string Key, ViewerTool Tool)[]
         {
-            ("Herramienta: mano", "mover desplazar arrastrar", ViewerTool.Pan),
-            ("Herramienta: zoom por ventana", "rectángulo acercar", ViewerTool.ZoomRectangle),
-            ("Herramienta: seleccionar texto", "copiar", ViewerTool.SelectText),
-            ("Herramienta: seleccionar marca", "mover editar flecha", ViewerTool.SelectAnnotation),
-            ("Herramienta: línea", "recta", ViewerTool.Line),
-            ("Herramienta: flecha", "señalar apuntar", ViewerTool.Arrow),
-            ("Herramienta: polilínea", "quebrada varios tramos", ViewerTool.Polyline),
-            ("Herramienta: rectángulo", "caja cuadro recuadro", ViewerTool.Rectangle),
-            ("Herramienta: elipse", "círculo óvalo", ViewerTool.Ellipse),
-            ("Herramienta: polígono", "cerrado varios lados", ViewerTool.Polygon),
-            ("Herramienta: nube de revisión", "revisión globo marcar cambio", ViewerTool.Cloud),
-            ("Herramienta: resaltado", "subrayar marcador amarillo", ViewerTool.Highlight),
-            ("Herramienta: texto", "escribir rótulo nota", ViewerTool.FreeText),
-            ("Herramienta: comentario", "nota post-it globo", ViewerTool.Note),
-            ("Herramienta: lápiz", "mano alzada dibujar", ViewerTool.Ink),
-            ("Capturar una zona al portapapeles", "recorte captura copiar imagen pantalla trozo", ViewerTool.CaptureRegion),
-            ("Calibrar la hoja", "escala medir 1:100 distancia conocida", ViewerTool.Calibrate),
-            ("Medir: distancia", "longitud largo metros cota", ViewerTool.Distance),
-            ("Medir: perímetro", "contorno vuelta alrededor", ViewerTool.Perimeter),
-            ("Medir: área", "superficie metros cuadrados m2 sala", ViewerTool.Area),
-            ("Medir: ángulo", "grados esquina inclinación", ViewerTool.Angle),
-        }.Select(entry => new AppCommand(entry.Name, "", entry.Also, () => SetTool(entry.Tool))));
+            ("Pan", ViewerTool.Pan),
+            ("ZoomRect", ViewerTool.ZoomRectangle),
+            ("SelectText", ViewerTool.SelectText),
+            ("SelectMark", ViewerTool.SelectAnnotation),
+            ("Line", ViewerTool.Line),
+            ("Arrow", ViewerTool.Arrow),
+            ("Polyline", ViewerTool.Polyline),
+            ("Rectangle", ViewerTool.Rectangle),
+            ("Ellipse", ViewerTool.Ellipse),
+            ("Polygon", ViewerTool.Polygon),
+            ("Cloud", ViewerTool.Cloud),
+            ("Highlight", ViewerTool.Highlight),
+            ("FreeText", ViewerTool.FreeText),
+            ("Note", ViewerTool.Note),
+            ("Ink", ViewerTool.Ink),
+            ("Capture", ViewerTool.CaptureRegion),
+            ("Calibrate", ViewerTool.Calibrate),
+            ("Distance", ViewerTool.Distance),
+            ("Perimeter", ViewerTool.Perimeter),
+            ("Area", ViewerTool.Area),
+            ("Angle", ViewerTool.Angle),
+        }.Select(entry => new AppCommand(
+            Loc.Get($"Tool{entry.Key}"),
+            string.Empty,
+            Loc.Get($"Tool{entry.Key}Also"),
+            () => SetTool(entry.Tool))));
 
         return commands;
     }
+
+    /// <summary>
+    /// One command, named and described from the resources: <c>Cmd…</c> is what
+    /// the list shows, <c>Cmd…Also</c> the words that also find it.
+    ///
+    /// Two keys per command rather than two literals, because a palette whose
+    /// synonyms stayed in Spanish would be a palette that only answers to
+    /// someone who speaks it.
+    /// </summary>
+    private static AppCommand Cmd(string key, string keys, Action run) =>
+        new(Loc.Get($"Cmd{key}"), keys, Loc.Get($"Cmd{key}Also"), run);
 
     private List<AppCommand> _commands = [];
 

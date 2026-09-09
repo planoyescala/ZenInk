@@ -70,19 +70,19 @@ public static class DefaultPdfApp
         {
             TextWrapping = TextWrapping.Wrap,
             Text = current.FriendlyName is { Length: > 0 } name
-                ? $"Ahora los PDF se abren con {name}. Este cambio Windows lo reserva a quien usa el ordenador, así que ZenInk no puede hacerlo solo: se abre su ficha en los ajustes, con un botón «Establecer como predeterminado» para los .pdf."
-                : "Este cambio Windows lo reserva a quien usa el ordenador, así que ZenInk no puede hacerlo solo: se abre la ficha de ZenInk en los ajustes, con un botón «Establecer como predeterminado» para los .pdf.",
+                ? Loc.Format("DefaultPdfBodyWith", name)
+                : Loc.Get("DefaultPdfBody"),
         };
 
-        var never = new CheckBox { Content = "No volver a preguntar", Margin = new Thickness(0, 16, 0, 0) };
+        var never = new CheckBox { Content = Loc.Get("DontAskAgain"), Margin = new Thickness(0, 16, 0, 0) };
 
         var dialog = new ContentDialog
         {
             XamlRoot = root,
-            Title = "¿Abrir los PDF con ZenInk?",
+            Title = Loc.Get("DefaultPdfTitle"),
             Content = new StackPanel { Width = 380, Children = { explanation, never } },
-            PrimaryButtonText = "Abrir los ajustes",
-            CloseButtonText = "Ahora no",
+            PrimaryButtonText = Loc.Get("OpenSettings"),
+            CloseButtonText = Loc.Get("NotNow"),
             DefaultButton = ContentDialogButton.Primary,
         };
 

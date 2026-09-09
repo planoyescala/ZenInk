@@ -318,7 +318,8 @@ public static class PdfAnnotations
         int subtype = SubtypeOf(mark.Kind);
 
         var annotation = fpdf_annot.FPDFPageCreateAnnot(page, subtype)
-            ?? throw new InvalidOperationException("PDFium no pudo crear la anotación.");
+            ?? throw new InvalidOperationException(CoreText.Say(
+                "CoreAnnotationNotCreated", "PDFium could not make the annotation."));
 
         try
         {

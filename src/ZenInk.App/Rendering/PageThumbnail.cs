@@ -62,6 +62,15 @@ public sealed class PageThumbnail : INotifyPropertyChanged
     /// <summary>Blank paper says so, because an empty white frame reads as one still loading.</summary>
     public Visibility BlankNote => IsBlank ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>
+    /// The word written across a sheet that has nothing on it.
+    ///
+    /// It comes from here rather than from the template, because x:Uid inside a
+    /// DataTemplate is not resolved: the words would stay in whatever language
+    /// they were typed in.
+    /// </summary>
+    public static string BlankLabel => Loc.Get("BlankSheetTag");
+
     public BitmapSource? Image
     {
         get => _image;
@@ -115,7 +124,7 @@ public sealed class OutlineNode
 {
     private OutlineNode(OutlineEntry entry)
     {
-        Title = string.IsNullOrWhiteSpace(entry.Title) ? "(sin título)" : entry.Title;
+        Title = string.IsNullOrWhiteSpace(entry.Title) ? Loc.Get("OutlineUntitled") : entry.Title;
         PageIndex = entry.PageIndex;
         Children = Tree(entry.Children);
     }

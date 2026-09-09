@@ -93,7 +93,7 @@ public sealed class PdfPrintSource : IAsyncDisposable
             bool shown = await PrintManagerInterop.ShowPrintUIForWindowAsync(_window);
             if (!shown)
             {
-                Problem = "Windows no pudo abrir el panel de impresión.";
+                Problem = Loc.Get("PrintNoPanel");
                 return;
             }
 
@@ -123,7 +123,7 @@ public sealed class PdfPrintSource : IAsyncDisposable
         {
             if (completion.Completion == PrintTaskCompletion.Failed)
             {
-                Problem ??= "Windows no pudo completar la impresión.";
+                Problem ??= Loc.Get("PrintFailed");
             }
             _finished.TrySetResult();
         };
@@ -158,9 +158,9 @@ public sealed class PdfPrintSource : IAsyncDisposable
 
     private void AddScaleOption(PrintTaskOptionDetails details)
     {
-        var option = details.CreateItemListOption(ScaleOptionId, "Escala");
-        option.AddItem("fit", "Ajustar al papel");
-        option.AddItem("actual", "Tamaño real (1:1)");
+        var option = details.CreateItemListOption(ScaleOptionId, Loc.Get("PrintScaleOption"));
+        option.AddItem("fit", Loc.Get("PrintFitPaper"));
+        option.AddItem("actual", Loc.Get("PrintActualSize"));
 
         // The drawing scales come first among the numbers, and only for a
         // calibrated sheet: on one that has never been calibrated "1:100" would
@@ -169,15 +169,15 @@ public sealed class PdfPrintSource : IAsyncDisposable
         {
             foreach (double ratio in DrawingRatios)
             {
-                option.AddItem($"d{ratio:0.##}", $"1:{ratio:0.##} del dibujo");
+                option.AddItem($"d{ratio:0.##}", Loc.Format("PrintDrawingRatio", ratio.ToString("0.##")));
             }
         }
 
         option.AddItem("25", "25 %");
         option.AddItem("50", "50 %");
-        option.AddItem("71", "71 % (A1 a A2)");
+        option.AddItem("71", Loc.Get("PrintA1toA2"));
         option.AddItem("100", "100 %");
-        option.AddItem("141", "141 % (A4 a A3)");
+        option.AddItem("141", Loc.Get("PrintA4toA3"));
         option.AddItem("200", "200 %");
 
         option.TrySetValue(CurrentScaleValue());
@@ -200,23 +200,23 @@ public sealed class PdfPrintSource : IAsyncDisposable
 
     private void AddPosterOption(PrintTaskOptionDetails details)
     {
-        var option = details.CreateToggleOption(PosterOptionId, "Repartir en varias hojas");
+        var option = details.CreateToggleOption(PosterOptionId, Loc.Get("PrintPosterOption"));
         option.TrySetValue(_job.Settings.Poster);
         details.DisplayedOptions.Add(PosterOptionId);
     }
 
     private void AddInkOption(PrintTaskOptionDetails details)
     {
-        var option = details.CreateToggleOption(InkOptionId, "Convertir a grises");
+        var option = details.CreateToggleOption(InkOptionId, Loc.Get("PrintGreyOption"));
         option.TrySetValue(_job.Settings.Monochrome);
         details.DisplayedOptions.Add(InkOptionId);
     }
 
     private void AddMarginOption(PrintTaskOptionDetails details)
     {
-        var option = details.CreateItemListOption(MarginOptionId, "Márgenes");
-        option.AddItem("printer", "Los del propio papel");
-        option.AddItem("none", "Sin margen");
+        var option = details.CreateItemListOption(MarginOptionId, Loc.Get("PrintMarginOption"));
+        option.AddItem("printer", Loc.Get("PrintMarginPrinter"));
+        option.AddItem("none", Loc.Get("PrintMarginNone"));
         option.AddItem("10", "10 mm");
         option.AddItem("20", "20 mm");
 
@@ -226,10 +226,10 @@ public sealed class PdfPrintSource : IAsyncDisposable
 
     private void AddQualityOption(PrintTaskOptionDetails details)
     {
-        var option = details.CreateItemListOption(QualityOptionId, "Calidad");
-        option.AddItem("150", "Borrador (150 ppp)");
-        option.AddItem("300", "Normal (300 ppp)");
-        option.AddItem("600", "Alta (600 ppp)");
+        var option = details.CreateItemListOption(QualityOptionId, Loc.Get("PrintQualityOption"));
+        option.AddItem("150", Loc.Get("PrintQualityDraft"));
+        option.AddItem("300", Loc.Get("PrintQualityNormal"));
+        option.AddItem("600", Loc.Get("PrintQualityHigh"));
 
         option.TrySetValue(((int)_job.Dpi).ToString());
         details.DisplayedOptions.Add(QualityOptionId);
@@ -295,7 +295,7 @@ public sealed class PdfPrintSource : IAsyncDisposable
     }
 
     /// <summary>
-    /// "Los del propio papel" is whatever the printer physically cannot reach,
+    /// The paper's own margin is whatever the printer physically cannot reach,
     /// which the page description reports; the fixed sizes are millimetres.
     /// </summary>
     private PrintMarginsPt MarginsFor(string value) => value switch
@@ -341,7 +341,7 @@ public sealed class PdfPrintSource : IAsyncDisposable
         }
 
         Problem = _job.Pieces.Count == 0
-            ? "Con este papel y esta escala no cabe ninguna hoja."
+            ? Loc.Get("PrintNothingFits")
             : null;
 
         uint count = (uint)Math.Max(1, _job.Pieces.Count);
@@ -419,7 +419,7 @@ public sealed class PdfPrintSource : IAsyncDisposable
         catch (Exception ex)
         {
             Problem = ex.Message;
-            System.Diagnostics.Debug.WriteLine($"ZenInk: fallo al imprimir: {ex}");
+            System.Diagnostics.Debug.WriteLine($"ZenInk: printing failed: {ex}");
         }
         finally
         {

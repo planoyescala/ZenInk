@@ -107,7 +107,8 @@ public sealed class PdfFileMap
             }
         }
 
-        throw new InvalidDataException($"El objeto {number} no está en el xref.");
+        throw new InvalidDataException(CoreText.Say(
+            "CoreObjectNotInXref", "Object {0} is not in the xref.", number));
     }
 
     public (int Start, int End) BodyRange(int number)
@@ -378,7 +379,11 @@ public sealed class PdfFileMap
         if (_streamIndex.TryGetValue(container, out var known)) return known;
 
         long at = OffsetOf(container);
-        if (at < 0) throw new InvalidDataException($"El flujo de objetos {container} no está en el xref.");
+        if (at < 0)
+        {
+            throw new InvalidDataException(CoreText.Say(
+                "CoreObjectStreamNotInXref", "Object stream {0} is not in the xref.", container));
+        }
 
         var (dictionaryAt, dictionaryEnd) = PdfLexer.ObjectBody(Data, (int)at);
         byte[] decoded = StreamBytes(Data, dictionaryAt, dictionaryEnd);

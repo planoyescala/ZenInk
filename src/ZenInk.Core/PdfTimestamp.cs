@@ -201,7 +201,12 @@ public sealed class HttpTimestamper(string url, TimeSpan? timeout = null) : ITim
             // to be told the signing did not happen: they need to know it was
             // the authority and not their drawing.
             throw new InvalidOperationException(
-                $"No se pudo pedir el sello de tiempo a «{url}»: {ex.Message}", ex);
+                CoreText.Say(
+                    "CoreTimestampNotAsked",
+                    "The time stamp could not be asked of “{0}”: {1}",
+                    url,
+                    ex.Message),
+                ex);
         }
 
         using (reply)
@@ -209,14 +214,23 @@ public sealed class HttpTimestamper(string url, TimeSpan? timeout = null) : ITim
             if (!reply.IsSuccessStatusCode)
             {
                 throw new InvalidOperationException(
-                    $"La autoridad de sellado «{url}» respondió {(int)reply.StatusCode} {reply.ReasonPhrase}.");
+                    CoreText.Say(
+                        "CoreTimestampRefused",
+                        "The stamping authority “{0}” answered {1} {2}.",
+                        url,
+                        (int)reply.StatusCode,
+                        reply.ReasonPhrase));
             }
 
             string? type = reply.Content.Headers.ContentType?.MediaType;
             if (type is not null && !type.Equals(ReplyType, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
-                    $"«{url}» contestó {type}, que no es una respuesta de sellado.");
+                    CoreText.Say(
+                        "CoreTimestampWrongType",
+                        "“{0}” answered {1}, which is not a stamping reply.",
+                        url,
+                        type));
             }
 
             return reply.Content.ReadAsByteArrayAsync().GetAwaiter().GetResult();

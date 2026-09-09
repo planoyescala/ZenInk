@@ -1438,7 +1438,7 @@ public sealed partial class PdfTiledViewer : UserControl
         {
             // A drawing whose annotations cannot be read is still a drawing
             // worth showing, so this does not take the document down with it.
-            System.Diagnostics.Debug.WriteLine($"ZenInk: no se pudieron leer las anotaciones: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"ZenInk: could not read the annotations: {ex.Message}");
         }
     }
 
@@ -1629,7 +1629,7 @@ public sealed partial class PdfTiledViewer : UserControl
         catch (Exception ex)
         {
             // A sheet whose marks cannot be read is still a sheet worth having.
-            System.Diagnostics.Debug.WriteLine($"ZenInk: no se pudieron leer las marcas de las hojas traídas: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"ZenInk: could not read the marks of the sheets brought in: {ex.Message}");
         }
     }
 
@@ -1721,7 +1721,7 @@ public sealed partial class PdfTiledViewer : UserControl
     /// </summary>
     public async Task<string?> SaveChangesAsync()
     {
-        if (SourcePath is not { } path || _documentId < 0) return "El documento no tiene un archivo asociado.";
+        if (SourcePath is not { } path || _documentId < 0) return Loc.Get("NoFileBehind");
 
         bool turned = HasUnsavedRotations;
         var outcome = await _queue.ApplyChangesInPlaceAsync(_documentId, path, Plan, _annotations.Snapshot());
@@ -1756,7 +1756,7 @@ public sealed partial class PdfTiledViewer : UserControl
     /// </summary>
     public async Task<string?> FlattenAsync()
     {
-        if (SourcePath is not { } path || _documentId < 0) return "El documento no tiene un archivo asociado.";
+        if (SourcePath is not { } path || _documentId < 0) return Loc.Get("NoFileBehind");
 
         var outcome = await _queue.ApplyChangesInPlaceAsync(
             _documentId, path, Plan, _annotations.Snapshot(), flatten: true);
@@ -1781,7 +1781,7 @@ public sealed partial class PdfTiledViewer : UserControl
     /// </summary>
     public Task SaveChangesCopyAsync(string targetPath, bool flatten = false)
     {
-        if (SourcePath is null) throw new InvalidOperationException("El documento no tiene un archivo asociado.");
+        if (SourcePath is null) throw new InvalidOperationException("The document has no file behind it.");
         return _queue.SaveChangesCopyAsync(Plan, targetPath, _annotations.Snapshot(), flatten);
     }
 
@@ -2065,7 +2065,7 @@ public sealed partial class PdfTiledViewer : UserControl
     public async Task<string?> SignAsync(
         IPdfSigner signer, PdfSignatureOptions options, IRevocationSource? validation = null)
     {
-        if (SourcePath is not { } path || _documentId < 0) return "El documento no tiene un archivo asociado.";
+        if (SourcePath is not { } path || _documentId < 0) return Loc.Get("NoFileBehind");
 
         var outcome = await _queue.SignInPlaceAsync(_documentId, path, signer, options, validation);
         AdoptReopenedDocument(outcome.Document);
@@ -2090,7 +2090,7 @@ public sealed partial class PdfTiledViewer : UserControl
     /// </summary>
     public async Task SignCopyAsync(string targetPath, IPdfSigner signer, PdfSignatureOptions options)
     {
-        if (SourcePath is null) throw new InvalidOperationException("El documento no tiene un archivo asociado.");
+        if (SourcePath is null) throw new InvalidOperationException("The document has no file behind it.");
 
         await SaveChangesCopyAsync(targetPath);
         await PdfRenderQueue.SignCopyAsync(targetPath, targetPath, signer, options);
@@ -4341,7 +4341,7 @@ public sealed partial class PdfTiledViewer : UserControl
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"ZenInk: fallo al renderizar tile {key}: {ex}");
+            System.Diagnostics.Debug.WriteLine($"ZenInk: could not rasterise tile {key}: {ex}");
         }
         finally
         {
@@ -4368,7 +4368,7 @@ public sealed partial class PdfTiledViewer : UserControl
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"ZenInk: fallo al extraer texto de la página {key.PageIndex}: {ex}");
+            System.Diagnostics.Debug.WriteLine($"ZenInk: could not pull the text out of page {key.PageIndex}: {ex}");
         }
         finally
         {
@@ -4683,7 +4683,7 @@ public sealed partial class PdfTiledViewer : UserControl
         {
             // A sheet whose changes cannot be counted is still a sheet worth
             // showing the comparison of.
-            System.Diagnostics.Debug.WriteLine($"ZenInk: no se pudo comparar la hoja {sheet}: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"ZenInk: could not compare sheet {sheet}: {ex.Message}");
         }
         finally
         {
@@ -4910,7 +4910,7 @@ public sealed partial class PdfTiledViewer : UserControl
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"ZenInk: fallo al buscar en la hoja {pageIndex}: {ex}");
+                    System.Diagnostics.Debug.WriteLine($"ZenInk: could not search sheet {pageIndex}: {ex}");
                     continue;
                 }
 
@@ -5027,7 +5027,7 @@ public sealed partial class PdfTiledViewer : UserControl
 
         if (!any)
         {
-            FindCount.Text = _searchRunning ? "Buscando…" : "Sin resultados";
+            FindCount.Text = Loc.Get(_searchRunning ? "Searching" : "NoMatches");
             return;
         }
 

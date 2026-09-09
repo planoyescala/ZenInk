@@ -1,0 +1,1999 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="TabHome.Text" xml:space="preserve">
+    <value>Home</value>
+  </data>
+  <data name="TabAnnotate.Text" xml:space="preserve">
+    <value>Annotate</value>
+  </data>
+  <data name="TabOrganise.Text" xml:space="preserve">
+    <value>Sheets</value>
+  </data>
+  <data name="TabCompare.Text" xml:space="preserve">
+    <value>Compare</value>
+  </data>
+  <data name="TabMeasure.Text" xml:space="preserve">
+    <value>Measure</value>
+  </data>
+  <data name="UndoButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Undo (Ctrl+Z)</value>
+  </data>
+  <data name="MenuLanguage.Text" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="MenuLanguageSystem.Text" xml:space="preserve">
+    <value>Follow Windows</value>
+  </data>
+  <data name="LanguageChangedTitle" xml:space="preserve">
+    <value>Language changed</value>
+  </data>
+  <data name="LanguageChangedBody" xml:space="preserve">
+    <value>ZenInk speaks the language you chose the next time you open it: what is on screen was written as it opened.</value>
+  </data>
+  <data name="Understood" xml:space="preserve">
+    <value>Got it</value>
+  </data>
+  <data name="RedoButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Redo (Ctrl+Y)</value>
+  </data>
+  <data name="PreviousPageButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Previous page</value>
+  </data>
+  <data name="NextPageButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Next page</value>
+  </data>
+  <data name="ZoomOutButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Zoom out</value>
+  </data>
+  <data name="ZoomInButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Zoom in</value>
+  </data>
+  <data name="PanToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Hand — drag to move the sheet (M)</value>
+  </data>
+  <data name="SelectMarkToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Select marks — drag to move them, Del to remove (V)</value>
+  </data>
+  <data name="TextToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Select text (X)</value>
+  </data>
+  <data name="ZoomToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Zoom to a window — drag a rectangle over the area (Z)</value>
+  </data>
+  <data name="OpenButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Open a document</value>
+  </data>
+  <data name="LabelOpen.Text" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="SaveButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Save the changes into the PDF (Ctrl+S)</value>
+  </data>
+  <data name="LabelSave.Text" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="SaveItem.Text" xml:space="preserve">
+    <value>Save into the PDF</value>
+  </data>
+  <data name="SaveCopyItem.Text" xml:space="preserve">
+    <value>Save as…</value>
+  </data>
+  <data name="DiscardChangesItem.Text" xml:space="preserve">
+    <value>Discard the unsaved changes</value>
+  </data>
+  <data name="FlattenButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Flatten the marks into the document (cannot be undone)</value>
+  </data>
+  <data name="LabelFlatten.Text" xml:space="preserve">
+    <value>Flatten</value>
+  </data>
+  <data name="SignButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Sign the document with a certificate</value>
+  </data>
+  <data name="LabelSign.Text" xml:space="preserve">
+    <value>Sign</value>
+  </data>
+  <data name="PrintButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Print (Ctrl+P)</value>
+  </data>
+  <data name="LabelPrint.Text" xml:space="preserve">
+    <value>Print</value>
+  </data>
+  <data name="ViewModeButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>How the document is shown</value>
+  </data>
+  <data name="ViewModeText.Text" xml:space="preserve">
+    <value>View</value>
+  </data>
+  <data name="FitWidthItem.Text" xml:space="preserve">
+    <value>Full width</value>
+  </data>
+  <data name="FitPageItem.Text" xml:space="preserve">
+    <value>Whole page</value>
+  </data>
+  <data name="FitActualItem.Text" xml:space="preserve">
+    <value>Actual size (100%)</value>
+  </data>
+  <data name="FitFreeItem.Text" xml:space="preserve">
+    <value>Free zoom</value>
+  </data>
+  <data name="OneColumnItem.Text" xml:space="preserve">
+    <value>One page across</value>
+  </data>
+  <data name="TwoColumnsItem.Text" xml:space="preserve">
+    <value>Two pages across</value>
+  </data>
+  <data name="ContinuousItem.Text" xml:space="preserve">
+    <value>Continuous — every page in one strip</value>
+  </data>
+  <data name="SingleItem.Text" xml:space="preserve">
+    <value>Page by page — the wheel zooms</value>
+  </data>
+  <data name="LineWeightButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Line weights — turned off, every line is drawn thin</value>
+  </data>
+  <data name="LabelWeights.Text" xml:space="preserve">
+    <value>Weights</value>
+  </data>
+  <data name="FindButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Find in the document (Ctrl+F)</value>
+  </data>
+  <data name="LabelFind.Text" xml:space="preserve">
+    <value>Find</value>
+  </data>
+  <data name="CommandButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Find a tool or an action (Ctrl+K)</value>
+  </data>
+  <data name="LabelCommands.Text" xml:space="preserve">
+    <value>Commands</value>
+  </data>
+  <data name="SettingsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Preferences</value>
+  </data>
+  <data name="MenuTheme.Text" xml:space="preserve">
+    <value>Theme</value>
+  </data>
+  <data name="ThemeSystemItem.Text" xml:space="preserve">
+    <value>Follow Windows</value>
+  </data>
+  <data name="ThemeLightItem.Text" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="ThemeDarkItem.Text" xml:space="preserve">
+    <value>Dark</value>
+  </data>
+  <data name="DefaultPdfItem.Text" xml:space="preserve">
+    <value>Open PDFs with ZenInk…</value>
+  </data>
+  <data name="AboutItem.Text" xml:space="preserve">
+    <value>About ZenInk…</value>
+  </data>
+  <data name="CaptureToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Capture an area to the clipboard — drag a box (K)</value>
+  </data>
+  <data name="LabelCapture.Text" xml:space="preserve">
+    <value>Capture</value>
+  </data>
+  <data name="LineToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Line (L)</value>
+  </data>
+  <data name="LabelLine.Text" xml:space="preserve">
+    <value>Line</value>
+  </data>
+  <data name="ArrowToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Arrow (F)</value>
+  </data>
+  <data name="LabelArrow.Text" xml:space="preserve">
+    <value>Arrow</value>
+  </data>
+  <data name="PolylineToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Polyline — click each vertex, Enter or double click to finish (P)</value>
+  </data>
+  <data name="LabelPolyline.Text" xml:space="preserve">
+    <value>Polyline</value>
+  </data>
+  <data name="RectangleToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Rectangle (R)</value>
+  </data>
+  <data name="LabelRectangle.Text" xml:space="preserve">
+    <value>Rectangle</value>
+  </data>
+  <data name="EllipseToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Ellipse (E)</value>
+  </data>
+  <data name="LabelEllipse.Text" xml:space="preserve">
+    <value>Ellipse</value>
+  </data>
+  <data name="PolygonToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Polygon — click each vertex, Enter or double click to close it (G)</value>
+  </data>
+  <data name="LabelPolygon.Text" xml:space="preserve">
+    <value>Polygon</value>
+  </data>
+  <data name="CloudToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Revision cloud — drag a box, or click each vertex (N)</value>
+  </data>
+  <data name="LabelCloud.Text" xml:space="preserve">
+    <value>Cloud</value>
+  </data>
+  <data name="HighlightToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Highlight text — drag over the text (S)</value>
+  </data>
+  <data name="LabelHighlight.Text" xml:space="preserve">
+    <value>Highlight</value>
+  </data>
+  <data name="TextToolMarkButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Text — click the page and write there (T)</value>
+  </data>
+  <data name="LabelText.Text" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="NoteToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Note — click the page and write beside it (C)</value>
+  </data>
+  <data name="LabelNote.Text" xml:space="preserve">
+    <value>Note</value>
+  </data>
+  <data name="InkToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Pencil — draw freehand (A)</value>
+  </data>
+  <data name="LabelPencil.Text" xml:space="preserve">
+    <value>Pencil</value>
+  </data>
+  <data name="ThumbnailsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Sheet panel</value>
+  </data>
+  <data name="LabelPanel.Text" xml:space="preserve">
+    <value>Panel</value>
+  </data>
+  <data name="RotateButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Rotate pages</value>
+  </data>
+  <data name="LabelRotate.Text" xml:space="preserve">
+    <value>Rotate</value>
+  </data>
+  <data name="MenuRotatePageLeft.Text" xml:space="preserve">
+    <value>Rotate the page left</value>
+  </data>
+  <data name="MenuRotatePageRight.Text" xml:space="preserve">
+    <value>Rotate the page right</value>
+  </data>
+  <data name="MenuRotateAllLeft.Text" xml:space="preserve">
+    <value>Rotate every page left</value>
+  </data>
+  <data name="MenuRotateAllRight.Text" xml:space="preserve">
+    <value>Rotate every page right</value>
+  </data>
+  <data name="InsertPagesButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Insert sheets after the marked one</value>
+  </data>
+  <data name="LabelInsert.Text" xml:space="preserve">
+    <value>Insert</value>
+  </data>
+  <data name="RibbonInsertFromFile.Text" xml:space="preserve">
+    <value>Sheets from another PDF…</value>
+  </data>
+  <data name="RibbonInsertBlank.Text" xml:space="preserve">
+    <value>A blank sheet…</value>
+  </data>
+  <data name="DuplicatePageButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Duplicate the sheet</value>
+  </data>
+  <data name="LabelDuplicate.Text" xml:space="preserve">
+    <value>Duplicate</value>
+  </data>
+  <data name="DeletePageButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Remove the sheet from the document</value>
+  </data>
+  <data name="LabelRemove.Text" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="ExtractPagesButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Extract the sheets into a new PDF</value>
+  </data>
+  <data name="LabelExtract.Text" xml:space="preserve">
+    <value>Extract</value>
+  </data>
+  <data name="SplitPagesButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Split the document into new files</value>
+  </data>
+  <data name="LabelSplit.Text" xml:space="preserve">
+    <value>Split</value>
+  </data>
+  <data name="CompareOpenButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Lay another revision of this drawing over it</value>
+  </data>
+  <data name="LabelRevision.Text" xml:space="preserve">
+    <value>Revision…</value>
+  </data>
+  <data name="CompareStopButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Stop comparing and go back to the drawing</value>
+  </data>
+  <data name="LabelExit.Text" xml:space="preserve">
+    <value>Exit</value>
+  </data>
+  <data name="PreviousChangeButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Previous change</value>
+  </data>
+  <data name="PreviousChangeButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Previous change</value>
+  </data>
+  <data name="NextChangeButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Next change</value>
+  </data>
+  <data name="NextChangeButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Next change</value>
+  </data>
+  <data name="ComparePairButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Which sheet of the revision goes with which</value>
+  </data>
+  <data name="ComparePairLabel.Text" xml:space="preserve">
+    <value>Pair up</value>
+  </data>
+  <data name="MenuPairBack.Text" xml:space="preserve">
+    <value>Take the revision back one sheet</value>
+  </data>
+  <data name="MenuPairForward.Text" xml:space="preserve">
+    <value>Take the revision forward one sheet</value>
+  </data>
+  <data name="MenuPairReset.Text" xml:space="preserve">
+    <value>Pair sheet with sheet</value>
+  </data>
+  <data name="CompareFitButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>How the revision is laid over the sheet</value>
+  </data>
+  <data name="LabelFit.Text" xml:space="preserve">
+    <value>Fit</value>
+  </data>
+  <data name="MenuFitKeep.Text" xml:space="preserve">
+    <value>Fit to the sheet, without distorting</value>
+  </data>
+  <data name="MenuFitStretch.Text" xml:space="preserve">
+    <value>Stretch to fill the sheet</value>
+  </data>
+  <data name="CompareSwapButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Swap the colour of each file</value>
+  </data>
+  <data name="LabelColours.Text" xml:space="preserve">
+    <value>Colours</value>
+  </data>
+  <data name="CalibrateToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Calibrate the sheet — drag over a known distance and say how long it is</value>
+  </data>
+  <data name="LabelCalibrate.Text" xml:space="preserve">
+    <value>Calibrate</value>
+  </data>
+  <data name="SnapToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Stick the points to the lines of the drawing</value>
+  </data>
+  <data name="LabelSnap.Text" xml:space="preserve">
+    <value>Snap</value>
+  </data>
+  <data name="OrthoToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Measure only horizontally or vertically (Shift does the opposite)</value>
+  </data>
+  <data name="LabelOrtho.Text" xml:space="preserve">
+    <value>Ortho</value>
+  </data>
+  <data name="DistanceToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Distance — drag from one point to another</value>
+  </data>
+  <data name="LabelDistance.Text" xml:space="preserve">
+    <value>Distance</value>
+  </data>
+  <data name="PerimeterToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Perimeter — click each vertex, Enter or double click to close</value>
+  </data>
+  <data name="LabelPerimeter.Text" xml:space="preserve">
+    <value>Perimeter</value>
+  </data>
+  <data name="AreaToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Area — click each vertex, Enter or double click to close</value>
+  </data>
+  <data name="LabelArea.Text" xml:space="preserve">
+    <value>Area</value>
+  </data>
+  <data name="AngleToolButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Angle — one arm, the vertex and the other arm</value>
+  </data>
+  <data name="LabelAngle.Text" xml:space="preserve">
+    <value>Angle</value>
+  </data>
+  <data name="CommandQuery.PlaceholderText" xml:space="preserve">
+    <value>Find a tool or an action…</value>
+  </data>
+  <data name="SignStripLabel.Text" xml:space="preserve">
+    <value>Drag the signature to move it</value>
+  </data>
+  <data name="SignConfirmButton.Content" xml:space="preserve">
+    <value>Sign here</value>
+  </data>
+  <data name="SignRedrawButton.Content" xml:space="preserve">
+    <value>Draw it again</value>
+  </data>
+  <data name="SignDropButton.Content" xml:space="preserve">
+    <value>Remove it</value>
+  </data>
+  <data name="StartPagePrompt.Text" xml:space="preserve">
+    <value>Open a document to begin</value>
+  </data>
+  <data name="RecentHeading.Text" xml:space="preserve">
+    <value>Opened recently</value>
+  </data>
+  <data name="AboutLineButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>About ZenInk</value>
+  </data>
+  <data name="PropertiesTitle.Text" xml:space="preserve">
+    <value>Text selection</value>
+  </data>
+  <data name="SelectionStatus.Text" xml:space="preserve">
+    <value>Drag over the page to select.</value>
+  </data>
+  <data name="LabelCopy.Text" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="LabelSelectPage.Text" xml:space="preserve">
+    <value>Select the page</value>
+  </data>
+  <data name="PropColourLabel.Text" xml:space="preserve">
+    <value>Colour</value>
+  </data>
+  <data name="ColourRed.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Red</value>
+  </data>
+  <data name="ColourOrange.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Orange</value>
+  </data>
+  <data name="ColourYellow.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Yellow</value>
+  </data>
+  <data name="ColourGreen.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Green</value>
+  </data>
+  <data name="ColourBlue.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Blue</value>
+  </data>
+  <data name="ColourViolet.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Violet</value>
+  </data>
+  <data name="ColourMagenta.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Magenta</value>
+  </data>
+  <data name="ColourBlack.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Black</value>
+  </data>
+  <data name="PropFillLabel.Text" xml:space="preserve">
+    <value>Fill</value>
+  </data>
+  <data name="FillNone.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>No fill</value>
+  </data>
+  <data name="FillYellow.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Yellow fill</value>
+  </data>
+  <data name="FillRed.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Red fill</value>
+  </data>
+  <data name="FillGreen.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Green fill</value>
+  </data>
+  <data name="FillBlue.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Blue fill</value>
+  </data>
+  <data name="FillViolet.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Violet fill</value>
+  </data>
+  <data name="FillGrey.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Grey fill</value>
+  </data>
+  <data name="FillBlack.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Black fill</value>
+  </data>
+  <data name="PropOpacityLabel.Text" xml:space="preserve">
+    <value>Opacity</value>
+  </data>
+  <data name="PropThicknessLabel.Text" xml:space="preserve">
+    <value>Thickness</value>
+  </data>
+  <data name="PropSizeLabel.Text" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="NoteEditorLabel.Text" xml:space="preserve">
+    <value>Note</value>
+  </data>
+  <data name="NoteText.PlaceholderText" xml:space="preserve">
+    <value>What needs checking</value>
+  </data>
+  <data name="LabelDeleteMark.Text" xml:space="preserve">
+    <value>Delete the mark (Del)</value>
+  </data>
+  <data name="CompareSheetName.Text" xml:space="preserve">
+    <value>This document</value>
+  </data>
+  <data name="CompareRevisionName.Text" xml:space="preserve">
+    <value>The revision</value>
+  </data>
+  <data name="CompareBothLabel.Text" xml:space="preserve">
+    <value>In both: unchanged</value>
+  </data>
+  <data name="CompareBackgroundLabel.Text" xml:space="preserve">
+    <value>Unchanged background</value>
+  </data>
+  <data name="MeasureThisLabel.Text" xml:space="preserve">
+    <value>This measurement</value>
+  </data>
+  <data name="MeasureSheetLabel.Text" xml:space="preserve">
+    <value>This sheet</value>
+  </data>
+  <data name="CalibrateHelp.Text" xml:space="preserve">
+    <value>Drag over a distance you know —a dimension on the drawing, a scale bar— and say how long it really is.</value>
+  </data>
+  <data name="ClearScaleButton.Content" xml:space="preserve">
+    <value>Remove the calibration</value>
+  </data>
+  <data name="ScaleTravelsNote.Text" xml:space="preserve">
+    <value>The scale travels with the sheet: if you move it, or take it to another file, it goes with it.</value>
+  </data>
+  <data name="SheetsTab.Content" xml:space="preserve">
+    <value>Sheets</value>
+  </data>
+  <data name="OutlineTab.Content" xml:space="preserve">
+    <value>Outline</value>
+  </data>
+  <data name="MenuMoveUp.Text" xml:space="preserve">
+    <value>Move up</value>
+  </data>
+  <data name="MenuMoveDown.Text" xml:space="preserve">
+    <value>Move down</value>
+  </data>
+  <data name="MenuMoveTo.Text" xml:space="preserve">
+    <value>Move to sheet…</value>
+  </data>
+  <data name="MenuRotateLeft.Text" xml:space="preserve">
+    <value>Rotate left</value>
+  </data>
+  <data name="MenuRotateRight.Text" xml:space="preserve">
+    <value>Rotate right</value>
+  </data>
+  <data name="MenuDuplicate.Text" xml:space="preserve">
+    <value>Duplicate</value>
+  </data>
+  <data name="MenuDelete.Text" xml:space="preserve">
+    <value>Remove from the document</value>
+  </data>
+  <data name="MenuInsertFile.Text" xml:space="preserve">
+    <value>Insert sheets from another PDF…</value>
+  </data>
+  <data name="MenuInsertBlank.Text" xml:space="preserve">
+    <value>Insert a blank sheet…</value>
+  </data>
+  <data name="MenuExtract.Text" xml:space="preserve">
+    <value>Extract into a new PDF…</value>
+  </data>
+  <data name="MenuSplit.Text" xml:space="preserve">
+    <value>Split the document…</value>
+  </data>
+  <data name="InsertButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Insert sheets</value>
+  </data>
+  <data name="PanelInsertFromFile.Text" xml:space="preserve">
+    <value>Sheets from another PDF…</value>
+  </data>
+  <data name="PanelInsertBlank.Text" xml:space="preserve">
+    <value>A blank sheet…</value>
+  </data>
+  <data name="MoveUpButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Move up (Alt+↑)</value>
+  </data>
+  <data name="MoveDownButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Move down (Alt+↓)</value>
+  </data>
+  <data name="RotateLeftButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Rotate left</value>
+  </data>
+  <data name="RotateRightButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Rotate right</value>
+  </data>
+  <data name="DuplicateButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Duplicate</value>
+  </data>
+  <data name="DeleteButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Remove from the document</value>
+  </data>
+  <data name="FindInput.PlaceholderText" xml:space="preserve">
+    <value>Find in the document</value>
+  </data>
+  <data name="FindMatchCase.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Match case and accents</value>
+  </data>
+  <data name="FindWholeWord.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Whole words only</value>
+  </data>
+  <data name="FindPreviousButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Previous (Shift+Enter)</value>
+  </data>
+  <data name="FindNextButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Next (Enter)</value>
+  </data>
+  <data name="FindCloseButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Close (Esc)</value>
+  </data>
+  <data name="KeyShift" xml:space="preserve">
+    <value>Shift</value>
+  </data>
+  <data name="BlankSheetTag" xml:space="preserve">
+    <value>blank</value>
+  </data>
+  <data name="OutlineUntitled" xml:space="preserve">
+    <value>(untitled)</value>
+  </data>
+  <data name="CmdOpen" xml:space="preserve">
+    <value>Open a document</value>
+  </data>
+  <data name="CmdOpenAlso" xml:space="preserve">
+    <value>file pdf load</value>
+  </data>
+  <data name="CmdSave" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="CmdSaveAlso" xml:space="preserve">
+    <value>write store</value>
+  </data>
+  <data name="CmdSaveAs" xml:space="preserve">
+    <value>Save as…</value>
+  </data>
+  <data name="CmdSaveAsAlso" xml:space="preserve">
+    <value>copy duplicate export</value>
+  </data>
+  <data name="CmdFlatten" xml:space="preserve">
+    <value>Flatten the marks</value>
+  </data>
+  <data name="CmdFlattenAlso" xml:space="preserve">
+    <value>fix burn permanent</value>
+  </data>
+  <data name="CmdSign" xml:space="preserve">
+    <value>Sign the document</value>
+  </data>
+  <data name="CmdSignAlso" xml:space="preserve">
+    <value>signature certificate digital</value>
+  </data>
+  <data name="CmdStamp" xml:space="preserve">
+    <value>Put a stamp (no signature)</value>
+  </data>
+  <data name="CmdStampAlso" xml:space="preserve">
+    <value>stamp reviewed checked seen name</value>
+  </data>
+  <data name="CmdDiscard" xml:space="preserve">
+    <value>Discard the unsaved changes</value>
+  </data>
+  <data name="CmdDiscardAlso" xml:space="preserve">
+    <value>undo everything revert</value>
+  </data>
+  <data name="CmdPrint" xml:space="preserve">
+    <value>Print</value>
+  </data>
+  <data name="CmdPrintAlso" xml:space="preserve">
+    <value>paper plotter</value>
+  </data>
+  <data name="CmdFind" xml:space="preserve">
+    <value>Find text</value>
+  </data>
+  <data name="CmdFindAlso" xml:space="preserve">
+    <value>search locate</value>
+  </data>
+  <data name="CmdUndo" xml:space="preserve">
+    <value>Undo</value>
+  </data>
+  <data name="CmdUndoAlso" xml:space="preserve">
+    <value>back</value>
+  </data>
+  <data name="CmdRedo" xml:space="preserve">
+    <value>Redo</value>
+  </data>
+  <data name="CmdRedoAlso" xml:space="preserve">
+    <value>forward</value>
+  </data>
+  <data name="CmdZoomIn" xml:space="preserve">
+    <value>Zoom in</value>
+  </data>
+  <data name="CmdZoomInAlso" xml:space="preserve">
+    <value>zoom closer bigger</value>
+  </data>
+  <data name="CmdZoomOut" xml:space="preserve">
+    <value>Zoom out</value>
+  </data>
+  <data name="CmdZoomOutAlso" xml:space="preserve">
+    <value>zoom further smaller</value>
+  </data>
+  <data name="CmdFitWidth" xml:space="preserve">
+    <value>Fit the width</value>
+  </data>
+  <data name="CmdFitWidthAlso" xml:space="preserve">
+    <value>fit</value>
+  </data>
+  <data name="CmdFitPage" xml:space="preserve">
+    <value>Fit the page</value>
+  </data>
+  <data name="CmdFitPageAlso" xml:space="preserve">
+    <value>fit whole</value>
+  </data>
+  <data name="CmdActualSize" xml:space="preserve">
+    <value>Actual size</value>
+  </data>
+  <data name="CmdActualSizeAlso" xml:space="preserve">
+    <value>hundred per cent 100</value>
+  </data>
+  <data name="CmdContinuous" xml:space="preserve">
+    <value>Continuous view</value>
+  </data>
+  <data name="CmdContinuousAlso" xml:space="preserve">
+    <value>strip scroll</value>
+  </data>
+  <data name="CmdSinglePage" xml:space="preserve">
+    <value>Page by page</value>
+  </data>
+  <data name="CmdSinglePageAlso" xml:space="preserve">
+    <value>single one at a time</value>
+  </data>
+  <data name="CmdOneColumn" xml:space="preserve">
+    <value>One page across</value>
+  </data>
+  <data name="CmdOneColumnAlso" xml:space="preserve">
+    <value>column</value>
+  </data>
+  <data name="CmdTwoColumns" xml:space="preserve">
+    <value>Two pages across</value>
+  </data>
+  <data name="CmdTwoColumnsAlso" xml:space="preserve">
+    <value>columns double book spread</value>
+  </data>
+  <data name="CmdSheetPanel" xml:space="preserve">
+    <value>Sheet panel</value>
+  </data>
+  <data name="CmdSheetPanelAlso" xml:space="preserve">
+    <value>thumbnails side pages outline bookmarks</value>
+  </data>
+  <data name="CmdRotateLeft" xml:space="preserve">
+    <value>Rotate the page left</value>
+  </data>
+  <data name="CmdRotateLeftAlso" xml:space="preserve">
+    <value>turn</value>
+  </data>
+  <data name="CmdRotateRight" xml:space="preserve">
+    <value>Rotate the page right</value>
+  </data>
+  <data name="CmdRotateRightAlso" xml:space="preserve">
+    <value>turn</value>
+  </data>
+  <data name="CmdRotateAllLeft" xml:space="preserve">
+    <value>Rotate every page left</value>
+  </data>
+  <data name="CmdRotateAllLeftAlso" xml:space="preserve">
+    <value>turn all</value>
+  </data>
+  <data name="CmdRotateAllRight" xml:space="preserve">
+    <value>Rotate every page right</value>
+  </data>
+  <data name="CmdRotateAllRightAlso" xml:space="preserve">
+    <value>turn all</value>
+  </data>
+  <data name="CmdMoveUp" xml:space="preserve">
+    <value>Move the sheet up</value>
+  </data>
+  <data name="CmdMoveUpAlso" xml:space="preserve">
+    <value>move reorder before up</value>
+  </data>
+  <data name="CmdMoveDown" xml:space="preserve">
+    <value>Move the sheet down</value>
+  </data>
+  <data name="CmdMoveDownAlso" xml:space="preserve">
+    <value>move reorder after down</value>
+  </data>
+  <data name="CmdMoveTo" xml:space="preserve">
+    <value>Move the sheet to…</value>
+  </data>
+  <data name="CmdMoveToAlso" xml:space="preserve">
+    <value>take position number reorder place</value>
+  </data>
+  <data name="CmdDuplicate" xml:space="preserve">
+    <value>Duplicate the sheet</value>
+  </data>
+  <data name="CmdDuplicateAlso" xml:space="preserve">
+    <value>copy page repeat</value>
+  </data>
+  <data name="CmdRemoveSheet" xml:space="preserve">
+    <value>Remove the sheet from the document</value>
+  </data>
+  <data name="CmdRemoveSheetAlso" xml:space="preserve">
+    <value>delete erase page remove</value>
+  </data>
+  <data name="CmdInsertFromFile" xml:space="preserve">
+    <value>Insert sheets from another PDF…</value>
+  </data>
+  <data name="CmdInsertFromFileAlso" xml:space="preserve">
+    <value>add bring combine join merge</value>
+  </data>
+  <data name="CmdInsertBlank" xml:space="preserve">
+    <value>Insert a blank sheet…</value>
+  </data>
+  <data name="CmdInsertBlankAlso" xml:space="preserve">
+    <value>add paper empty new</value>
+  </data>
+  <data name="CmdExtract" xml:space="preserve">
+    <value>Extract sheets into a new PDF…</value>
+  </data>
+  <data name="CmdExtractAlso" xml:space="preserve">
+    <value>take out separate export pages</value>
+  </data>
+  <data name="CmdSplit" xml:space="preserve">
+    <value>Split the document…</value>
+  </data>
+  <data name="CmdSplitAlso" xml:space="preserve">
+    <value>divide separate break apart</value>
+  </data>
+  <data name="CmdCompare" xml:space="preserve">
+    <value>Compare with another revision…</value>
+  </data>
+  <data name="CmdCompareAlso" xml:space="preserve">
+    <value>overlay differences changes version review</value>
+  </data>
+  <data name="CmdNextChange" xml:space="preserve">
+    <value>Next change</value>
+  </data>
+  <data name="CmdNextChangeAlso" xml:space="preserve">
+    <value>difference compare forward</value>
+  </data>
+  <data name="CmdPreviousChange" xml:space="preserve">
+    <value>Previous change</value>
+  </data>
+  <data name="CmdPreviousChangeAlso" xml:space="preserve">
+    <value>difference compare back</value>
+  </data>
+  <data name="CmdSwapColours" xml:space="preserve">
+    <value>Swap the colours of the comparison</value>
+  </data>
+  <data name="CmdSwapColoursAlso" xml:space="preserve">
+    <value>revision red blue change</value>
+  </data>
+  <data name="CmdStopCompare" xml:space="preserve">
+    <value>Stop comparing</value>
+  </data>
+  <data name="CmdStopCompareAlso" xml:space="preserve">
+    <value>exit close revision overlay</value>
+  </data>
+  <data name="CmdSelectPage" xml:space="preserve">
+    <value>Select the whole page</value>
+  </data>
+  <data name="CmdSelectPageAlso" xml:space="preserve">
+    <value>all copy</value>
+  </data>
+  <data name="CmdCopySelection" xml:space="preserve">
+    <value>Copy the selection</value>
+  </data>
+  <data name="CmdCopySelectionAlso" xml:space="preserve">
+    <value>clipboard</value>
+  </data>
+  <data name="CmdThemeSystem" xml:space="preserve">
+    <value>Theme: follow Windows</value>
+  </data>
+  <data name="CmdThemeSystemAlso" xml:space="preserve">
+    <value>appearance light dark</value>
+  </data>
+  <data name="CmdThemeLight" xml:space="preserve">
+    <value>Light theme</value>
+  </data>
+  <data name="CmdThemeLightAlso" xml:space="preserve">
+    <value>appearance white</value>
+  </data>
+  <data name="CmdThemeDark" xml:space="preserve">
+    <value>Dark theme</value>
+  </data>
+  <data name="CmdThemeDarkAlso" xml:space="preserve">
+    <value>appearance black</value>
+  </data>
+  <data name="CmdAbout" xml:space="preserve">
+    <value>About ZenInk</value>
+  </data>
+  <data name="CmdAboutAlso" xml:space="preserve">
+    <value>version licence gpl free software zenbim plano y escala credits</value>
+  </data>
+  <data name="ToolPan" xml:space="preserve">
+    <value>Tool: hand</value>
+  </data>
+  <data name="ToolPanAlso" xml:space="preserve">
+    <value>move pan drag</value>
+  </data>
+  <data name="ToolZoomRect" xml:space="preserve">
+    <value>Tool: zoom to a window</value>
+  </data>
+  <data name="ToolZoomRectAlso" xml:space="preserve">
+    <value>rectangle closer</value>
+  </data>
+  <data name="ToolSelectText" xml:space="preserve">
+    <value>Tool: select text</value>
+  </data>
+  <data name="ToolSelectTextAlso" xml:space="preserve">
+    <value>copy</value>
+  </data>
+  <data name="ToolSelectMark" xml:space="preserve">
+    <value>Tool: select a mark</value>
+  </data>
+  <data name="ToolSelectMarkAlso" xml:space="preserve">
+    <value>move edit arrow</value>
+  </data>
+  <data name="ToolLine" xml:space="preserve">
+    <value>Tool: line</value>
+  </data>
+  <data name="ToolLineAlso" xml:space="preserve">
+    <value>straight</value>
+  </data>
+  <data name="ToolArrow" xml:space="preserve">
+    <value>Tool: arrow</value>
+  </data>
+  <data name="ToolArrowAlso" xml:space="preserve">
+    <value>point at</value>
+  </data>
+  <data name="ToolPolyline" xml:space="preserve">
+    <value>Tool: polyline</value>
+  </data>
+  <data name="ToolPolylineAlso" xml:space="preserve">
+    <value>chain several legs</value>
+  </data>
+  <data name="ToolRectangle" xml:space="preserve">
+    <value>Tool: rectangle</value>
+  </data>
+  <data name="ToolRectangleAlso" xml:space="preserve">
+    <value>box square frame</value>
+  </data>
+  <data name="ToolEllipse" xml:space="preserve">
+    <value>Tool: ellipse</value>
+  </data>
+  <data name="ToolEllipseAlso" xml:space="preserve">
+    <value>circle oval</value>
+  </data>
+  <data name="ToolPolygon" xml:space="preserve">
+    <value>Tool: polygon</value>
+  </data>
+  <data name="ToolPolygonAlso" xml:space="preserve">
+    <value>closed several sides</value>
+  </data>
+  <data name="ToolCloud" xml:space="preserve">
+    <value>Tool: revision cloud</value>
+  </data>
+  <data name="ToolCloudAlso" xml:space="preserve">
+    <value>revision balloon mark change</value>
+  </data>
+  <data name="ToolHighlight" xml:space="preserve">
+    <value>Tool: highlighter</value>
+  </data>
+  <data name="ToolHighlightAlso" xml:space="preserve">
+    <value>underline marker yellow</value>
+  </data>
+  <data name="ToolFreeText" xml:space="preserve">
+    <value>Tool: text</value>
+  </data>
+  <data name="ToolFreeTextAlso" xml:space="preserve">
+    <value>write label note</value>
+  </data>
+  <data name="ToolNote" xml:space="preserve">
+    <value>Tool: note</value>
+  </data>
+  <data name="ToolNoteAlso" xml:space="preserve">
+    <value>comment post-it balloon</value>
+  </data>
+  <data name="ToolInk" xml:space="preserve">
+    <value>Tool: pencil</value>
+  </data>
+  <data name="ToolInkAlso" xml:space="preserve">
+    <value>freehand draw</value>
+  </data>
+  <data name="ToolCapture" xml:space="preserve">
+    <value>Capture an area to the clipboard</value>
+  </data>
+  <data name="ToolCaptureAlso" xml:space="preserve">
+    <value>crop screenshot copy image screen piece</value>
+  </data>
+  <data name="ToolCalibrate" xml:space="preserve">
+    <value>Calibrate the sheet</value>
+  </data>
+  <data name="ToolCalibrateAlso" xml:space="preserve">
+    <value>scale measure 1:100 known distance</value>
+  </data>
+  <data name="ToolDistance" xml:space="preserve">
+    <value>Measure: distance</value>
+  </data>
+  <data name="ToolDistanceAlso" xml:space="preserve">
+    <value>length long metres dimension</value>
+  </data>
+  <data name="ToolPerimeter" xml:space="preserve">
+    <value>Measure: perimeter</value>
+  </data>
+  <data name="ToolPerimeterAlso" xml:space="preserve">
+    <value>outline around</value>
+  </data>
+  <data name="ToolArea" xml:space="preserve">
+    <value>Measure: area</value>
+  </data>
+  <data name="ToolAreaAlso" xml:space="preserve">
+    <value>surface square metres m2 room</value>
+  </data>
+  <data name="ToolAngle" xml:space="preserve">
+    <value>Measure: angle</value>
+  </data>
+  <data name="ToolAngleAlso" xml:space="preserve">
+    <value>degrees corner slope</value>
+  </data>
+  <data name="DefaultPdfTitle" xml:space="preserve">
+    <value>Open PDFs with ZenInk?</value>
+  </data>
+  <data name="DefaultPdfBodyWith" xml:space="preserve">
+    <value>PDFs open with {0} at the moment. Windows keeps this change for whoever uses the computer, so ZenInk cannot make it on its own: its own settings page opens, with a “Set default” button for .pdf files.</value>
+  </data>
+  <data name="DefaultPdfBody" xml:space="preserve">
+    <value>Windows keeps this change for whoever uses the computer, so ZenInk cannot make it on its own: ZenInk's own settings page opens, with a “Set default” button for .pdf files.</value>
+  </data>
+  <data name="DontAskAgain" xml:space="preserve">
+    <value>Do not ask again</value>
+  </data>
+  <data name="OpenSettings" xml:space="preserve">
+    <value>Open the settings</value>
+  </data>
+  <data name="NotNow" xml:space="preserve">
+    <value>Not now</value>
+  </data>
+  <data name="PrintClosedEarly" xml:space="preserve">
+    <value>The document was closed before the sheet was drawn.</value>
+  </data>
+  <data name="PrintEmptyArea" xml:space="preserve">
+    <value>The part of the drawing to print came out empty.</value>
+  </data>
+  <data name="PrintEmptySlot" xml:space="preserve">
+    <value>The room left on the paper came out empty.</value>
+  </data>
+  <data name="PrintNoScale" xml:space="preserve">
+    <value>The print scale came out as nothing.</value>
+  </data>
+  <data name="PrintNoBitmap" xml:space="preserve">
+    <value>PDFium gave back none of the sheet.</value>
+  </data>
+  <data name="PrintNoPanel" xml:space="preserve">
+    <value>Windows could not open the print panel.</value>
+  </data>
+  <data name="PrintFailed" xml:space="preserve">
+    <value>Windows could not finish printing.</value>
+  </data>
+  <data name="PrintScaleOption" xml:space="preserve">
+    <value>Scale</value>
+  </data>
+  <data name="PrintFitPaper" xml:space="preserve">
+    <value>Fit to the paper</value>
+  </data>
+  <data name="PrintActualSize" xml:space="preserve">
+    <value>Actual size (1:1)</value>
+  </data>
+  <data name="PrintA1toA2" xml:space="preserve">
+    <value>71% (A1 to A2)</value>
+  </data>
+  <data name="PrintA4toA3" xml:space="preserve">
+    <value>141% (A4 to A3)</value>
+  </data>
+  <data name="PrintPosterOption" xml:space="preserve">
+    <value>Spread over several sheets</value>
+  </data>
+  <data name="PrintGreyOption" xml:space="preserve">
+    <value>Turn to greys</value>
+  </data>
+  <data name="PrintMarginOption" xml:space="preserve">
+    <value>Margins</value>
+  </data>
+  <data name="PrintMarginPrinter" xml:space="preserve">
+    <value>The paper's own</value>
+  </data>
+  <data name="PrintMarginNone" xml:space="preserve">
+    <value>No margin</value>
+  </data>
+  <data name="PrintQualityOption" xml:space="preserve">
+    <value>Quality</value>
+  </data>
+  <data name="PrintQualityDraft" xml:space="preserve">
+    <value>Draft (150 dpi)</value>
+  </data>
+  <data name="PrintQualityNormal" xml:space="preserve">
+    <value>Normal (300 dpi)</value>
+  </data>
+  <data name="PrintQualityHigh" xml:space="preserve">
+    <value>High (600 dpi)</value>
+  </data>
+  <data name="PrintNothingFits" xml:space="preserve">
+    <value>With this paper and this scale, no sheet fits.</value>
+  </data>
+  <data name="PrintDrawingRatio" xml:space="preserve">
+    <value>1:{0} of the drawing</value>
+  </data>
+  <data name="NoFileBehind" xml:space="preserve">
+    <value>The document has no file behind it.</value>
+  </data>
+  <data name="Searching" xml:space="preserve">
+    <value>Searching…</value>
+  </data>
+  <data name="NoMatches" xml:space="preserve">
+    <value>No matches</value>
+  </data>
+  <data name="AboutReadLicence" xml:space="preserve">
+    <value>Read the whole licence (GPL-3.0)</value>
+  </data>
+  <data name="BtnClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="RecentEmpty" xml:space="preserve">
+    <value>You have not opened a document yet</value>
+  </data>
+  <data name="RecentClear" xml:space="preserve">
+    <value>Empty the list</value>
+  </data>
+  <data name="DropCaption" xml:space="preserve">
+    <value>Open in ZenInk</value>
+  </data>
+  <data name="MsgDropFailed" xml:space="preserve">
+    <value>What was dropped could not be opened</value>
+  </data>
+  <data name="FieldPassword" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="DlgProtected" xml:space="preserve">
+    <value>This PDF is protected</value>
+  </data>
+  <data name="BtnOpen" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="BtnCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="MsgOpenFailed" xml:space="preserve">
+    <value>The document could not be opened</value>
+  </data>
+  <data name="DlgUnsaved" xml:space="preserve">
+    <value>There are unsaved changes</value>
+  </data>
+  <data name="BtnSaveAndClose" xml:space="preserve">
+    <value>Save and close</value>
+  </data>
+  <data name="BtnCloseWithoutSaving" xml:space="preserve">
+    <value>Close without saving</value>
+  </data>
+  <data name="BusySaving" xml:space="preserve">
+    <value>Saving…</value>
+  </data>
+  <data name="MsgSaveFailed" xml:space="preserve">
+    <value>The document could not be saved</value>
+  </data>
+  <data name="DiscardTurnsOnly" xml:space="preserve">
+    <value>The turns that have not been saved will be lost.</value>
+  </data>
+  <data name="DiscardOneMark" xml:space="preserve">
+    <value>The mark that has not been saved will be lost.</value>
+  </data>
+  <data name="DlgDiscard" xml:space="preserve">
+    <value>Discard the changes</value>
+  </data>
+  <data name="BtnDiscard" xml:space="preserve">
+    <value>Discard</value>
+  </data>
+  <data name="DlgMoveSheet" xml:space="preserve">
+    <value>Move the sheet</value>
+  </data>
+  <data name="DlgMoveSheets" xml:space="preserve">
+    <value>Move the sheets</value>
+  </data>
+  <data name="FieldMoveTo" xml:space="preserve">
+    <value>Take it to sheet</value>
+  </data>
+  <data name="BtnMove" xml:space="preserve">
+    <value>Move</value>
+  </data>
+  <data name="BusyReadingPdf" xml:space="preserve">
+    <value>Reading the PDF…</value>
+  </data>
+  <data name="MsgNothingInserted" xml:space="preserve">
+    <value>Nothing was inserted</value>
+  </data>
+  <data name="MsgNoneOpened" xml:space="preserve">
+    <value>None of the PDFs chosen could be opened.</value>
+  </data>
+  <data name="BusyInserting" xml:space="preserve">
+    <value>Inserting sheets…</value>
+  </data>
+  <data name="MsgInsertFailed" xml:space="preserve">
+    <value>The sheets could not be inserted</value>
+  </data>
+  <data name="OrderByName" xml:space="preserve">
+    <value>By file name</value>
+  </data>
+  <data name="OrderAsChosen" xml:space="preserve">
+    <value>In the order I chose them</value>
+  </data>
+  <data name="FieldOrder" xml:space="preserve">
+    <value>Order</value>
+  </data>
+  <data name="DlgInsertSheets" xml:space="preserve">
+    <value>Insert sheets</value>
+  </data>
+  <data name="BtnInsert" xml:space="preserve">
+    <value>Insert</value>
+  </data>
+  <data name="InsertReorderNote" xml:space="preserve">
+    <value>They can be reordered afterwards in the sheet panel.</value>
+  </data>
+  <data name="RangeNotUnderstood" xml:space="preserve">
+    <value>That cannot be read. For example: 1, 3, 5-8</value>
+  </data>
+  <data name="FieldWhichSheets" xml:space="preserve">
+    <value>Which sheets to bring</value>
+  </data>
+  <data name="FieldLandscape" xml:space="preserve">
+    <value>Landscape</value>
+  </data>
+  <data name="FieldPaperSize" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="FieldHowMany" xml:space="preserve">
+    <value>How many</value>
+  </data>
+  <data name="DlgInsertBlank" xml:space="preserve">
+    <value>Insert blank sheets</value>
+  </data>
+  <data name="MsgSameDocument" xml:space="preserve">
+    <value>That is the document you have open</value>
+  </data>
+  <data name="MsgExtractNeedsOwnFile" xml:space="preserve">
+    <value>Extracted sheets need a file of their own. Choose another name.</value>
+  </data>
+  <data name="BusyExtracting" xml:space="preserve">
+    <value>Extracting sheets…</value>
+  </data>
+  <data name="MsgExtractFailed" xml:space="preserve">
+    <value>The sheets could not be extracted</value>
+  </data>
+  <data name="FieldSheetsPerFile" xml:space="preserve">
+    <value>Sheets per file</value>
+  </data>
+  <data name="DlgSplit" xml:space="preserve">
+    <value>Split the document</value>
+  </data>
+  <data name="BtnChooseFolder" xml:space="preserve">
+    <value>Choose a folder…</value>
+  </data>
+  <data name="BusySplitting" xml:space="preserve">
+    <value>Splitting the document…</value>
+  </data>
+  <data name="MsgSplitFailed" xml:space="preserve">
+    <value>The document could not be split</value>
+  </data>
+  <data name="OneSheet" xml:space="preserve">
+    <value>One sheet</value>
+  </data>
+  <data name="DlgSigned" xml:space="preserve">
+    <value>This document is signed</value>
+  </data>
+  <data name="BtnSaveAnyway" xml:space="preserve">
+    <value>Save anyway</value>
+  </data>
+  <data name="FlattenNoMarks" xml:space="preserve">
+    <value>The document's annotations will become part of the drawing.</value>
+  </data>
+  <data name="FlattenOneMark" xml:space="preserve">
+    <value>The mark on this document will become part of the drawing.</value>
+  </data>
+  <data name="DlgFlatten" xml:space="preserve">
+    <value>Flatten the marks</value>
+  </data>
+  <data name="BtnFlattenSave" xml:space="preserve">
+    <value>Flatten and save</value>
+  </data>
+  <data name="BtnFlattenCopy" xml:space="preserve">
+    <value>Flatten into a copy…</value>
+  </data>
+  <data name="BusyFlattening" xml:space="preserve">
+    <value>Flattening the marks…</value>
+  </data>
+  <data name="MsgFlattenFailed" xml:space="preserve">
+    <value>The marks could not be flattened</value>
+  </data>
+  <data name="MsgChooseAnotherFile" xml:space="preserve">
+    <value>Choose another file</value>
+  </data>
+  <data name="MsgFlattenSameFile" xml:space="preserve">
+    <value>That is the document you are looking at. To flatten it onto itself, use “Flatten and save”.</value>
+  </data>
+  <data name="BusyFlatteningCopy" xml:space="preserve">
+    <value>Flattening into a copy…</value>
+  </data>
+  <data name="MsgFlattenCopyFailed" xml:space="preserve">
+    <value>It could not be flattened into a copy</value>
+  </data>
+  <data name="DlgNoCertificate" xml:space="preserve">
+    <value>There is no certificate</value>
+  </data>
+  <data name="BtnImportCertificate" xml:space="preserve">
+    <value>Import a certificate…</value>
+  </data>
+  <data name="BtnStampOnly" xml:space="preserve">
+    <value>Put a stamp instead</value>
+  </data>
+  <data name="FieldFullName" xml:space="preserve">
+    <value>Full name</value>
+  </data>
+  <data name="FieldIdNumber" xml:space="preserve">
+    <value>ID number</value>
+  </data>
+  <data name="FieldSignReason" xml:space="preserve">
+    <value>Reason for signing</value>
+  </data>
+  <data name="HeadingSignedBy" xml:space="preserve">
+    <value>Digitally signed by</value>
+  </data>
+  <data name="FieldShowOnDocument" xml:space="preserve">
+    <value>Show it on the document</value>
+  </data>
+  <data name="FieldWithDate" xml:space="preserve">
+    <value>Put the date on it</value>
+  </data>
+  <data name="LinkImportCertificate" xml:space="preserve">
+    <value>Import or add a certificate…</value>
+  </data>
+  <data name="LinkStampInstead" xml:space="preserve">
+    <value>Put a stamp instead, with no digital signature…</value>
+  </data>
+  <data name="FieldTimestamp" xml:space="preserve">
+    <value>Stamp the time with an authority (TSA)</value>
+  </data>
+  <data name="FieldValidationData" xml:space="preserve">
+    <value>Keep the validation data in the file</value>
+  </data>
+  <data name="SignWithLabel" xml:space="preserve">
+    <value>Sign with</value>
+  </data>
+  <data name="FieldHeading" xml:space="preserve">
+    <value>Heading</value>
+  </data>
+  <data name="FieldName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="FieldReason" xml:space="preserve">
+    <value>Reason</value>
+  </data>
+  <data name="StampBlankNote" xml:space="preserve">
+    <value>Whatever you leave empty does not appear:</value>
+  </data>
+  <data name="DlgSignDocument" xml:space="preserve">
+    <value>Sign the document</value>
+  </data>
+  <data name="BtnSignCopy" xml:space="preserve">
+    <value>Sign a copy</value>
+  </data>
+  <data name="BtnSignThisFile" xml:space="preserve">
+    <value>Sign this file</value>
+  </data>
+  <data name="BusySigningCopy" xml:space="preserve">
+    <value>Signing a copy…</value>
+  </data>
+  <data name="MsgSignCopyFailed" xml:space="preserve">
+    <value>The copy could not be signed</value>
+  </data>
+  <data name="BusyValidationData" xml:space="preserve">
+    <value>Keeping the validation data…</value>
+  </data>
+  <data name="HintNoRevocationAnswer" xml:space="preserve">
+    <value>The certificates could not be asked about: the signature is left without validation data.</value>
+  </data>
+  <data name="FieldReasonOptional" xml:space="preserve">
+    <value>Reason, if one is needed</value>
+  </data>
+  <data name="HeadingReviewedBy" xml:space="preserve">
+    <value>Reviewed by</value>
+  </data>
+  <data name="DlgPutStamp" xml:space="preserve">
+    <value>Put a stamp</value>
+  </data>
+  <data name="BtnPlaceIt" xml:space="preserve">
+    <value>Place it</value>
+  </data>
+  <data name="HeadingSignedByShort" xml:space="preserve">
+    <value>Signed by</value>
+  </data>
+  <data name="HintStampPlaced" xml:space="preserve">
+    <value>Stamp placed. It is a mark: it moves, changes and is deleted like any other.</value>
+  </data>
+  <data name="StripDragSignature" xml:space="preserve">
+    <value>Drag the signature to move it</value>
+  </data>
+  <data name="StripDragStamp" xml:space="preserve">
+    <value>Drag the stamp to move it</value>
+  </data>
+  <data name="StripSignHere" xml:space="preserve">
+    <value>Sign here</value>
+  </data>
+  <data name="StripPlaceHere" xml:space="preserve">
+    <value>Place it here</value>
+  </data>
+  <data name="StripDrawAgainF" xml:space="preserve">
+    <value>Draw it again</value>
+  </data>
+  <data name="StripDrawAgainM" xml:space="preserve">
+    <value>Draw it again</value>
+  </data>
+  <data name="StripRemoveF" xml:space="preserve">
+    <value>Remove it</value>
+  </data>
+  <data name="StripRemoveM" xml:space="preserve">
+    <value>Remove it</value>
+  </data>
+  <data name="HintDrawSignatureBox" xml:space="preserve">
+    <value>Draw a rectangle to place the signature · Esc to leave it</value>
+  </data>
+  <data name="HintDrawStampBox" xml:space="preserve">
+    <value>Draw a rectangle to place the stamp · Esc to leave it</value>
+  </data>
+  <data name="BusySigning" xml:space="preserve">
+    <value>Signing…</value>
+  </data>
+  <data name="MsgSaveBeforeSignFailed" xml:space="preserve">
+    <value>It could not be saved before signing</value>
+  </data>
+  <data name="MsgSignFailed" xml:space="preserve">
+    <value>The document could not be signed</value>
+  </data>
+  <data name="SignaturesNone" xml:space="preserve">
+    <value>This document carries no signature yet.</value>
+  </data>
+  <data name="SignerUnknown" xml:space="preserve">
+    <value>signer unknown</value>
+  </data>
+  <data name="SignatureStampMismatch" xml:space="preserve">
+    <value> (the stamp is not of this signature)</value>
+  </data>
+  <data name="SignatureDigestMismatch" xml:space="preserve">
+    <value> — does NOT match the file</value>
+  </data>
+  <data name="SignaturesOne" xml:space="preserve">
+    <value>This document already carries one signature:</value>
+  </data>
+  <data name="BusyReloading" xml:space="preserve">
+    <value>Reloading…</value>
+  </data>
+  <data name="MsgReloadFailed" xml:space="preserve">
+    <value>The document could not be reloaded</value>
+  </data>
+  <data name="UntitledDocument" xml:space="preserve">
+    <value>Document</value>
+  </data>
+  <data name="BusyPreparingPrint" xml:space="preserve">
+    <value>Getting the print ready…</value>
+  </data>
+  <data name="MsgPrintProblem" xml:space="preserve">
+    <value>There was a problem printing</value>
+  </data>
+  <data name="MsgPrintFailed" xml:space="preserve">
+    <value>It could not be printed</value>
+  </data>
+  <data name="BusyOpeningRevision" xml:space="preserve">
+    <value>Opening the revision…</value>
+  </data>
+  <data name="PropertiesCompare" xml:space="preserve">
+    <value>Comparison</value>
+  </data>
+  <data name="ComparePairUp" xml:space="preserve">
+    <value>Pair up</value>
+  </data>
+  <data name="SweepReadingSheet" xml:space="preserve">
+    <value>Reading 1 of 2…</value>
+  </data>
+  <data name="SweepReadingRevision" xml:space="preserve">
+    <value>Reading 2 of 2…</value>
+  </data>
+  <data name="SweepLooking" xml:space="preserve">
+    <value>Looking for changes…</value>
+  </data>
+  <data name="SweepBusy" xml:space="preserve">
+    <value>Looking…</value>
+  </data>
+  <data name="CompareNoChanges" xml:space="preserve">
+    <value>No changes</value>
+  </data>
+  <data name="CompareOneChange" xml:space="preserve">
+    <value>1 change</value>
+  </data>
+  <data name="ComparePairNone" xml:space="preserve">
+    <value>No pair</value>
+  </data>
+  <data name="CompareThisDocument" xml:space="preserve">
+    <value>This document</value>
+  </data>
+  <data name="CompareNoPairNote" xml:space="preserve">
+    <value>This sheet has no pair in the revision, so it is shown as it is.</value>
+  </data>
+  <data name="ToastCaptureCancelled" xml:space="preserve">
+    <value>Capture cancelled</value>
+  </data>
+  <data name="ToastCaptureTooSmall" xml:space="preserve">
+    <value>the box came out too small</value>
+  </data>
+  <data name="HintPreparingCapture" xml:space="preserve">
+    <value>Getting the capture ready…</value>
+  </data>
+  <data name="ToastCaptureFailed" xml:space="preserve">
+    <value>The capture could not be got ready</value>
+  </data>
+  <data name="ToastImageCopied" xml:space="preserve">
+    <value>Image copied to the clipboard</value>
+  </data>
+  <data name="ToastClipboardFailed" xml:space="preserve">
+    <value>It could not be copied to the clipboard</value>
+  </data>
+  <data name="HintSnapOn" xml:space="preserve">
+    <value>Points stick to the lines of the drawing.</value>
+  </data>
+  <data name="HintSnapOff" xml:space="preserve">
+    <value>Points land where you drop them, sticking to nothing.</value>
+  </data>
+  <data name="HintOrthoOn" xml:space="preserve">
+    <value>Measurements come out horizontal or vertical. Shift for a loose diagonal one.</value>
+  </data>
+  <data name="HintOrthoOff" xml:space="preserve">
+    <value>Measurements go where you take them. Shift for a single square one.</value>
+  </data>
+  <data name="HintScaleCleared" xml:space="preserve">
+    <value>The sheet is uncalibrated. Whatever measurements it has are left without a figure.</value>
+  </data>
+  <data name="FieldExampleLength" xml:space="preserve">
+    <value>For example 5.40</value>
+  </data>
+  <data name="CalibrateQuestion" xml:space="preserve">
+    <value>How long is what you have just gone along, really?</value>
+  </data>
+  <data name="CalibrateNote" xml:space="preserve">
+    <value>This calibrates every measurement on this sheet, the ones already made included.</value>
+  </data>
+  <data name="DlgCalibrate" xml:space="preserve">
+    <value>Calibrate the sheet</value>
+  </data>
+  <data name="BtnCalibrate" xml:space="preserve">
+    <value>Calibrate</value>
+  </data>
+  <data name="MsgCalibrateFailed" xml:space="preserve">
+    <value>It could not be calibrated</value>
+  </data>
+  <data name="MsgCalibrateNumber" xml:space="preserve">
+    <value>Write the distance as a number, for example 5.40.</value>
+  </data>
+  <data name="MsgCalibrateTooShort" xml:space="preserve">
+    <value>The drag is too short to calibrate with: go along a longer distance of the drawing.</value>
+  </data>
+  <data name="ScaleUncalibrated" xml:space="preserve">
+    <value>Uncalibrated</value>
+  </data>
+  <data name="ScaleUncalibratedNote" xml:space="preserve">
+    <value>Uncalibrated. No measurement can give a figure yet.</value>
+  </data>
+  <data name="SelectionCopied" xml:space="preserve">
+    <value>Text selected. Ctrl+C copies it too.</value>
+  </data>
+  <data name="SelectionPrompt" xml:space="preserve">
+    <value>Drag over the page to select.</value>
+  </data>
+  <data name="PropertiesTextSelection" xml:space="preserve">
+    <value>Text selection</value>
+  </data>
+  <data name="FillNoneLabel" xml:space="preserve">
+    <value>No fill</value>
+  </data>
+  <data name="NoteLabel" xml:space="preserve">
+    <value>Note</value>
+  </data>
+  <data name="TextLabel" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="NotePlaceholder" xml:space="preserve">
+    <value>What needs checking</value>
+  </data>
+  <data name="TextPlaceholder" xml:space="preserve">
+    <value>Write text...</value>
+  </data>
+  <data name="HintVertexTool" xml:space="preserve">
+    <value>Click for each vertex. Enter or a double click finishes it, Backspace takes the last one back, Esc drops it.</value>
+  </data>
+  <data name="MarksNone" xml:space="preserve">
+    <value>This page has no marks.</value>
+  </data>
+  <data name="MarksOne" xml:space="preserve">
+    <value>There is 1 mark on this page.</value>
+  </data>
+  <data name="ToolNameSelectAnnotation" xml:space="preserve">
+    <value>Marks</value>
+  </data>
+  <data name="ToolNameInk" xml:space="preserve">
+    <value>Pencil</value>
+  </data>
+  <data name="ToolNameLine" xml:space="preserve">
+    <value>Line</value>
+  </data>
+  <data name="ToolNameArrow" xml:space="preserve">
+    <value>Arrow</value>
+  </data>
+  <data name="ToolNamePolyline" xml:space="preserve">
+    <value>Polyline</value>
+  </data>
+  <data name="ToolNameRectangle" xml:space="preserve">
+    <value>Rectangle</value>
+  </data>
+  <data name="ToolNameEllipse" xml:space="preserve">
+    <value>Ellipse</value>
+  </data>
+  <data name="ToolNamePolygon" xml:space="preserve">
+    <value>Polygon</value>
+  </data>
+  <data name="ToolNameCloud" xml:space="preserve">
+    <value>Revision cloud</value>
+  </data>
+  <data name="ToolNameHighlight" xml:space="preserve">
+    <value>Highlight text</value>
+  </data>
+  <data name="ToolNameDistance" xml:space="preserve">
+    <value>Distance</value>
+  </data>
+  <data name="ToolNamePerimeter" xml:space="preserve">
+    <value>Perimeter</value>
+  </data>
+  <data name="ToolNameArea" xml:space="preserve">
+    <value>Area</value>
+  </data>
+  <data name="ToolNameAngle" xml:space="preserve">
+    <value>Angle</value>
+  </data>
+  <data name="ToolNameOther" xml:space="preserve">
+    <value>Tool</value>
+  </data>
+  <data name="ViewFlowContinuous" xml:space="preserve">
+    <value>Continuous</value>
+  </data>
+  <data name="ViewFlowSingle" xml:space="preserve">
+    <value>Page by page</value>
+  </data>
+  <data name="ViewTwoPages" xml:space="preserve">
+    <value> · 2 pp.</value>
+  </data>
+  <data name="AboutLine" xml:space="preserve">
+    <value>ZenInk {0} · free software (GPL-3.0) · part of ZenBIM</value>
+  </data>
+  <data name="AboutVersion" xml:space="preserve">
+    <value>Version {0}</value>
+  </data>
+  <data name="AboutWhatItIs" xml:space="preserve">
+    <value>A viewer and editor for PDF drawings. Part of the ZenBIM project, by plano y escala.</value>
+  </data>
+  <data name="AboutLicence" xml:space="preserve">
+    <value>© 2026 plano y escala.
+
+ZenInk is free software: you can redistribute it and modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License or any later version.
+
+It is distributed in the hope that it will be useful, but WITH NO WARRANTY AT ALL; not even the implied warranty of merchantability or fitness for a particular purpose. See the Licence for more detail.</value>
+  </data>
+  <data name="AboutThirdParty" xml:space="preserve">
+    <value>The licence text and the third-party notices travel inside the program, beside the executable.
+
+ZenInk draws the drawings with PDFium (BSD-3-Clause) through PDFiumCore (Apache-2.0), on WinUI 3 and Win2D.</value>
+  </data>
+  <data name="PasswordWrong" xml:space="preserve">
+    <value>That password does not open “{0}”. Try again.</value>
+  </data>
+  <data name="PasswordNeeded" xml:space="preserve">
+    <value>“{0}” is protected with a password.</value>
+  </data>
+  <data name="UnsavedInTab" xml:space="preserve">
+    <value>{0} has changes that have not been written into the PDF.</value>
+  </data>
+  <data name="DiscardTurnsAndMarks" xml:space="preserve">
+    <value>The turns and the {0} marks that have not been saved will be lost.</value>
+  </data>
+  <data name="DiscardMarks" xml:space="preserve">
+    <value>The {0} marks that have not been saved will be lost.</value>
+  </data>
+  <data name="DiscardBackToFile" xml:space="preserve">
+    <value>The document goes back to how it stands in the file.</value>
+  </data>
+  <data name="MoveOneSheet" xml:space="preserve">
+    <value>Sheet {0} of {1} will be taken wherever you say.</value>
+  </data>
+  <data name="MoveManySheets" xml:space="preserve">
+    <value>The {0} sheets you marked will be taken together, in their order, starting at the sheet you say (1 to {1}).</value>
+  </data>
+  <data name="BusyReadingPdfs" xml:space="preserve">
+    <value>Reading {0} PDFs…</value>
+  </data>
+  <data name="InsertedOne" xml:space="preserve">
+    <value>One sheet inserted.</value>
+  </data>
+  <data name="InsertedMany" xml:space="preserve">
+    <value>{0} sheets inserted.</value>
+  </data>
+  <data name="InsertedAndLocked" xml:space="preserve">
+    <value>{0} {1} file(s) could not be opened.</value>
+  </data>
+  <data name="MsgCouldNotRead" xml:space="preserve">
+    <value>“{0}” could not be read</value>
+  </data>
+  <data name="InsertSummary" xml:space="preserve">
+    <value>{0} files, {1} in all.</value>
+  </data>
+  <data name="ManySheets" xml:space="preserve">
+    <value>{0} sheets</value>
+  </data>
+  <data name="AllSheetsRange" xml:space="preserve">
+    <value>All of them (1-{0})</value>
+  </data>
+  <data name="FileHasOneSheet" xml:space="preserve">
+    <value>“{0}” has one sheet.</value>
+  </data>
+  <data name="FileHasManySheets" xml:space="preserve">
+    <value>“{0}” has {1} sheets.</value>
+  </data>
+  <data name="PaperLikeSheet" xml:space="preserve">
+    <value>Like the sheet on screen — {0} × {1} mm</value>
+  </data>
+  <data name="FileStemSheet" xml:space="preserve">
+    <value>sheet {0}</value>
+  </data>
+  <data name="ExtractedInto" xml:space="preserve">
+    <value>{0} in “{1}”.</value>
+  </data>
+  <data name="SplitSummary" xml:space="preserve">
+    <value>The document has {0} sheets. New files will be written; this one is not touched.</value>
+  </data>
+  <data name="SplitWritten" xml:space="preserve">
+    <value>{0} files in “{1}”.</value>
+  </data>
+  <data name="MovingBreaksSignature" xml:space="preserve">
+    <value>Moving the sheets about leaves the signature the document carries invalid: a signature covers the file as it stood. It can be signed again afterwards.</value>
+  </data>
+  <data name="MovingBreaksSignatures" xml:space="preserve">
+    <value>Moving the sheets about leaves the {0} signatures the document carries invalid: a signature covers the file as it stood. It can be signed again afterwards.</value>
+  </data>
+  <data name="FlattenManyMarks" xml:space="preserve">
+    <value>The {0} marks on this document will become part of the drawing.</value>
+  </data>
+  <data name="FlattenWarning" xml:space="preserve">
+    <value>Afterwards nobody can move them, change them or delete them, in ZenInk or in any other program. The annotations the file brought from other tools are flattened too.
+
+This cannot be undone: flatten onto this file and there is no way back. Flattening into a copy leaves this document as it is, with its marks still live.</value>
+  </data>
+  <data name="FlattenedSuffix" xml:space="preserve">
+    <value>flattened</value>
+  </data>
+  <data name="NoCertificateBody" xml:space="preserve">
+    <value>Windows cannot find a certificate to sign with. If yours is in a file —the Spanish FNMT one comes as a .pfx— you can install it now: the Windows wizard opens it, and it is the one that asks you for the password.</value>
+  </data>
+  <data name="CertificateIssuer" xml:space="preserve">
+    <value>Issued by {0} · expires {1}</value>
+  </data>
+  <data name="TimestampNote" xml:space="preserve">
+    <value>With a stamp, the signature still stands once the certificate expires. It goes out to the internet: what travels is a digest of the signature, neither the drawing nor who signed it.</value>
+  </data>
+  <data name="ValidationDataNote" xml:space="preserve">
+    <value>So the signature can be checked years from now without asking anybody. It asks the authorities your certificate names, now; if they do not answer, the signature is made all the same and goes without them.</value>
+  </data>
+  <data name="SaveBeforeSigningNote" xml:space="preserve">
+    <value>There are unsaved changes. They will be saved before signing: a signature covers the file, and whatever is not written is not signed.</value>
+  </data>
+  <data name="SignedCopyNote" xml:space="preserve">
+    <value>The copy: “{0}”, beside the original. Then you draw where the signature goes.</value>
+  </data>
+  <data name="HintValidationData" xml:space="preserve">
+    <value>Signature with validation data: {0} answer(s) from the authorities.</value>
+  </data>
+  <data name="HintValidationFailed" xml:space="preserve">
+    <value>The signature is made, but without validation data: {0}</value>
+  </data>
+  <data name="StampNote" xml:space="preserve">
+    <value>A stamp is a mark on the drawing: it says who has seen it, but it does not sign it. Nothing cryptographic is left behind, and anybody can move it or take it off.</value>
+  </data>
+  <data name="SignatureStamped" xml:space="preserve">
+    <value>stamped {0} {1}</value>
+  </data>
+  <data name="SignaturesMany" xml:space="preserve">
+    <value>This document already carries {0} signatures:</value>
+  </data>
+  <data name="SignatureAddedOnTop" xml:space="preserve">
+    <value>Yours is added on top without touching them.</value>
+  </data>
+  <data name="HintComparingWith" xml:space="preserve">
+    <value>Comparing with {0}</value>
+  </data>
+  <data name="CompareChangeOf" xml:space="preserve">
+    <value>Change {0} of {1}</value>
+  </data>
+  <data name="CompareChanges" xml:space="preserve">
+    <value>{0} changes</value>
+  </data>
+  <data name="ComparePairedWith" xml:space="preserve">
+    <value>With sheet {0}</value>
+  </data>
+  <data name="CompareOnlyIn" xml:space="preserve">
+    <value>Only in {0}</value>
+  </data>
+  <data name="CompareSheetOverSheet" xml:space="preserve">
+    <value>Sheet {0} over sheet {1} of the revision.</value>
+  </data>
+  <data name="CompareKeysNote" xml:space="preserve">
+    <value>F4 goes to the next change; Shift+F4, to the one before.</value>
+  </data>
+  <data name="HintCalibrated" xml:space="preserve">
+    <value>Sheet calibrated to {0}. {1} of what you went along.</value>
+  </data>
+  <data name="ScaleCalibratedNote" xml:space="preserve">
+    <value>Calibrated to {0} · 1 cm of paper = {1}</value>
+  </data>
+  <data name="MeasureAngle" xml:space="preserve">
+    <value>Angle {0}</value>
+  </data>
+  <data name="MeasureDistance" xml:space="preserve">
+    <value>Distance {0}</value>
+  </data>
+  <data name="MeasureArea" xml:space="preserve">
+    <value>Area {0}</value>
+  </data>
+  <data name="MeasureAndPerimeter" xml:space="preserve">
+    <value>perimeter {0}</value>
+  </data>
+  <data name="MeasurePerimeter" xml:space="preserve">
+    <value>Perimeter {0}</value>
+  </data>
+  <data name="MeasureAndEncloses" xml:space="preserve">
+    <value>encloses {0}</value>
+  </data>
+  <data name="PageOf" xml:space="preserve">
+    <value>Page {0} of {1}</value>
+  </data>
+  <data name="HintHighlightFixed" xml:space="preserve">
+    <value>The highlight goes with the text it covers: it does not move or change, only get deleted.</value>
+  </data>
+  <data name="HintMarkSelected" xml:space="preserve">
+    <value>Mark selected. Drag it to move it, pull a handle to stretch it or the knob to turn it.</value>
+  </data>
+  <data name="HintPickAMark" xml:space="preserve">
+    <value>Click a mark to pick it up.</value>
+  </data>
+  <data name="HintLeaveANote" xml:space="preserve">
+    <value>Click the page to leave a note.</value>
+  </data>
+  <data name="HintWriteOnPage" xml:space="preserve">
+    <value>Click the page and write right there; Esc closes it.</value>
+  </data>
+  <data name="HintDrawFreehand" xml:space="preserve">
+    <value>Draw with the pen or the mouse. The other end of the pen erases.</value>
+  </data>
+  <data name="HintDragOverText" xml:space="preserve">
+    <value>Drag over the text to highlight it.</value>
+  </data>
+  <data name="HintCloud" xml:space="preserve">
+    <value>Drag a box, or click each vertex.</value>
+  </data>
+  <data name="HintClickVertices" xml:space="preserve">
+    <value>Click each vertex; Enter or a double click finishes it.</value>
+  </data>
+  <data name="HintDragToDraw" xml:space="preserve">
+    <value>Drag over the page to draw.</value>
+  </data>
+  <data name="MarksMany" xml:space="preserve">
+    <value>There are {0} marks on this page.</value>
+  </data>
+  <data name="CorePasswordWrong" xml:space="preserve">
+    <value>That password does not open this PDF.</value>
+  </data>
+  <data name="CorePasswordNeeded" xml:space="preserve">
+    <value>This PDF is protected with a password.</value>
+  </data>
+  <data name="CoreDocumentClosed" xml:space="preserve">
+    <value>Document {0} is no longer open.</value>
+  </data>
+  <data name="CorePageNotLoadedForSaving" xml:space="preserve">
+    <value>Page {0} could not be loaded to save it.</value>
+  </data>
+  <data name="CoreFlattenFailed" xml:space="preserve">
+    <value>The marks on page {0} could not be flattened.</value>
+  </data>
+  <data name="CoreSheetNotBrought" xml:space="preserve">
+    <value>Sheet {0} of “{1}” could not be brought over.</value>
+  </data>
+  <data name="CoreOriginNotRead" xml:space="preserve">
+    <value>“{0}” could not be read to bring its sheets over.</value>
+  </data>
+  <data name="CorePageNotLoaded" xml:space="preserve">
+    <value>Page {0} could not be loaded.</value>
+  </data>
+  <data name="CoreCompareBitmap" xml:space="preserve">
+    <value>The bitmap for the comparison could not be made.</value>
+  </data>
+  <data name="CorePrintBitmap" xml:space="preserve">
+    <value>The bitmap for printing could not be made.</value>
+  </data>
+  <data name="CoreAnnotationNotCreated" xml:space="preserve">
+    <value>PDFium could not make the annotation.</value>
+  </data>
+  <data name="CoreObjectNotInXref" xml:space="preserve">
+    <value>Object {0} is not in the xref.</value>
+  </data>
+  <data name="CoreObjectStreamNotInXref" xml:space="preserve">
+    <value>Object stream {0} is not in the xref.</value>
+  </data>
+  <data name="CoreSignatureDoesNotAddUp" xml:space="preserve">
+    <value>The signature just written does not add up: {0}.</value>
+  </data>
+  <data name="CoreSignatureNoVerify" xml:space="preserve">
+    <value>it does not verify</value>
+  </data>
+  <data name="CoreValidationBrokeSignature" xml:space="preserve">
+    <value>Adding the validation data left the signature not adding up.</value>
+  </data>
+  <data name="CoreEncryptedCannotSign" xml:space="preserve">
+    <value>This PDF is encrypted and cannot be signed yet. Save a copy without a password and sign that.</value>
+  </data>
+  <data name="CoreNoCatalogue" xml:space="preserve">
+    <value>The PDF does not say where its catalogue is.</value>
+  </data>
+  <data name="CoreValidationUnsupported" xml:space="preserve">
+    <value>The validation data cannot be added: {0}.</value>
+  </data>
+  <data name="CoreSignRangeCutShort" xml:space="preserve">
+    <value>The range to sign was cut short at {0} of {1} bytes.</value>
+  </data>
+  <data name="CoreTimestampNotAsked" xml:space="preserve">
+    <value>The time stamp could not be asked of “{0}”: {1}</value>
+  </data>
+  <data name="CoreTimestampRefused" xml:space="preserve">
+    <value>The stamping authority “{0}” answered {1} {2}.</value>
+  </data>
+  <data name="CoreTimestampWrongType" xml:space="preserve">
+    <value>“{0}” answered {1}, which is not a stamping reply.</value>
+  </data>
+</root>
