@@ -79,8 +79,8 @@ tamaño que nadie mira.
 
 ## `ZenInk.Shots` — mirar las capturas
 
-La app puede capturarse a sí misma (ver «Depurar la interfaz» en `CLAUDE.md`).
-Esto es lo que se hace después con esos PNG.
+La app puede capturarse a sí misma con `RenderTargetBitmap` y dejar el PNG en
+`%TEMP%`. Esto es lo que se hace después con esos PNG.
 
 ```bash
 # Ampliar una zona a 4x, o dos capturas apiladas para comparar antes/después

@@ -33,3 +33,10 @@ desktop.ini
 
 # El paquete instalable y su certificado: se generan, no se versionan.
 dist/
+
+# Los cuadernos de trabajo: las instrucciones con las que se trabaja sobre este
+# repositorio y el documento de estado. Viven en el disco, no aquí. Hablan de la
+# máquina en la que se desarrolla y de los planos —de clientes— con los que se
+# prueba, y ninguna de las dos cosas es asunto de quien clone esto.
+/CLAUDE.md
+/ESTADO.md

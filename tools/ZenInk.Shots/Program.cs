@@ -13,9 +13,9 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 
-// Looks at the PNGs the app takes of itself (see "Depurar la interfaz" in
-// CLAUDE.md). Reasoning about the interface from the code has failed more than
-// once; these two answer questions the eye cannot at 100 %.
+// Looks at the PNGs the app takes of itself with RenderTargetBitmap. Reasoning
+// about the interface from the code has failed more than once; these two answer
+// questions the eye cannot at 100 %.
 //
 //   ampliar   crops a region and blows it up with nearest-neighbour, so an
 //             18px icon can be judged. Two files stack for a before/after.

@@ -13,8 +13,8 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 
-// Builds the whole icon set from the master in design/. ESTADO.md used to say
-// "y de ahí sale todo el juego" without saying how; this is the how.
+// Builds the whole icon set from the master in design/, which is the part
+// nothing else writes down: how the set is made, not just that it exists.
 //
 // Two things run through everything here, and the second is what makes an icon
 // look sharp rather than smeared:

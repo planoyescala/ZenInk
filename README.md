@@ -45,7 +45,7 @@ el aplanado.
 **PDFsharp se probó y se descartó** para la firma y para el hito 3: reescribe el
 archivo entero, así que una segunda firma invalida la primera. El hito 3 acabó
 sin necesitarlo —PDFium mueve, importa y borra páginas—, así que no se usa en
-ninguna parte. Ver `ESTADO.md`.
+ninguna parte.
 
 Todas las dependencias son gratuitas y libres para uso comercial/cerrado. Ver
 `THIRD-PARTY-NOTICES.md` para atribuciones de terceros empaquetadas en los binarios
