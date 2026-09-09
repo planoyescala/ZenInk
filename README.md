@@ -94,6 +94,8 @@ If **ZenInk** saves you an afternoon and you want to support free tools for the 
 
 It draws with [PDFium](https://pdfium.googlesource.com/pdfium/) (BSD-3-Clause) through [PDFiumCore](https://github.com/Dtronix/PDFiumCore) (Apache-2.0), on WinUI 3 and Win2D. Every third-party component that travels inside the program is listed in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md), with its full licence text under [`licenses/`](licenses).
 
+Two of those — the Windows App SDK and Win2D — are Microsoft's and are not free software, so a linking exception under section 7 of the GPL travels with the program and authorises carrying them: see [`LINKING-EXCEPTION.md`](LINKING-EXCEPTION.md).
+
 We believe in open knowledge. If you use this code to build something great, you must share it alike.
 
 *Copyright © 2026 **plano y escala**.*

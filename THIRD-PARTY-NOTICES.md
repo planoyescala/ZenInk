@@ -7,6 +7,11 @@ del programa o de su paquete de instalación, y la licencia de cada uno.
 Los textos íntegros están en `licenses/`. Lo que aparece aquí es el índice, no
 la licencia.
 
+Dos de ellos —el Windows App SDK y Win2D— no son software libre, y viajan
+dentro del instalable junto a código bajo GPL. Eso lo autoriza un permiso
+adicional al amparo del artículo 7 de la GPLv3, que acompaña al programa:
+ver `LINKING-EXCEPTION.md`.
+
 ## PDFium
 
 - **Qué hace**: es el motor que rasteriza las hojas, lee el texto y escribe las
