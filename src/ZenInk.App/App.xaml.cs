@@ -11,7 +11,9 @@
 //-----------------------------------------------------------------------------------------
 
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
+using WinRT.Interop;
 using Microsoft.Windows.AppLifecycle;
 using Windows.ApplicationModel.Activation;
 using Windows.Storage;
@@ -147,10 +149,46 @@ public partial class App : Application
 
             window.Activate();
 
+            // And then said again in the words the window manager listens to.
+            //
+            // Activate raises the window within the application and stops
+            // there: a window buried behind whatever the reader was working in
+            // stays buried, and the drawing they just double-clicked opens out
+            // of sight, in a tab of a window they cannot see. Windows only lets
+            // the foreground be taken by a process that has been given it, and
+            // the launch that handed over these drawings gives it away on its
+            // way out — see SingleInstance.HandOver — so by the time this runs
+            // the right is already ours to use.
+            BringToFront(WindowNative.GetWindowHandle(window));
+
             if (drawings.Count > 0)
             {
                 FilesActivated?.Invoke(drawings);
             }
         });
     }
+
+    /// <summary>
+    /// Puts a window in front of everything else, undoing a minimise first.
+    ///
+    /// ShowWindow before SetForegroundWindow, and not the other way round: the
+    /// foreground call does nothing for a window that is still minimised, and
+    /// fails silently rather than saying so.
+    /// </summary>
+    private static void BringToFront(IntPtr window)
+    {
+        const int SW_RESTORE = 9;
+
+        if (IsIconic(window)) ShowWindow(window, SW_RESTORE);
+        SetForegroundWindow(window);
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr window);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr window, int command);
 }

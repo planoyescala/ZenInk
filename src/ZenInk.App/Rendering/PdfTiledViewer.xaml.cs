@@ -585,6 +585,10 @@ public sealed partial class PdfTiledViewer : UserControl
     {
         InitializeComponent();
         UpdateCursor();
+
+        // The open box holds onto the caret from here, because losing it is
+        // something that happens to it rather than something it does.
+        WriteBox.LostFocus += OnWriteBoxLostFocus;
     }
 
     /// <summary>Raised when the visible page, zoom level or selection changes.</summary>
@@ -851,6 +855,7 @@ public sealed partial class PdfTiledViewer : UserControl
 
         _writing = mark;
         _writingPage = _selectedPage;
+        _caretRetakes = 0;
 
         // Put in before the box is shown, so the TextChanged that raises finds
         // the same words already on the mark and writes nothing back.
@@ -865,22 +870,104 @@ public sealed partial class PdfTiledViewer : UserControl
         WriteBox.Focus(FocusState.Programmatic);
         WriteBox.SelectAll();
 
-        // And again once the layout has settled, in case the first attempt was
-        // made before the box had been measured. It costs nothing when the
-        // caret is already here, and what it buys is worth having: a caret that
-        // lands nowhere means the letters reach the window as tool shortcuts,
-        // and the tool they choose drops the selection and shuts the very box
-        // they were meant for.
+        // And once more when the queue next drains, for the case where the box
+        // was still being laid out and Focus quietly returned false.
         DispatcherQueue.TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
             () =>
             {
-                if (_writing is null || WriteBox.FocusState is not FocusState.Unfocused) return;
+                if (_writing is null || CaretIsInBox()) return;
 
                 WriteBox.Focus(FocusState.Programmatic);
                 WriteBox.SelectAll();
             });
+
+        // Keeping it is the other half, and it is handled where the caret is
+        // actually lost rather than by watching the clock — see
+        // <see cref="OnWriteBoxLostFocus"/>.
     }
+
+    /// <summary>
+    /// How many times the open box will take the caret back before letting it
+    /// go. There is one theft to survive; four is room for a slow machine to
+    /// stage it differently, and a hard stop so that a control determined to
+    /// hold the focus cannot trade it back and forth with this for ever.
+    /// </summary>
+    private const int MaxCaretRetakes = 4;
+
+    private int _caretRetakes;
+
+    /// <summary>
+    /// Takes the caret back when something helps itself to it while a label is
+    /// open for typing.
+    ///
+    /// This has to hang off losing the focus rather than off a timer, and the
+    /// difference is not a nicety. The theft comes from the properties panel's
+    /// ScrollViewer as it is realised — showing the panel is what choosing a
+    /// mark tool by clicking its button does — and it lands a couple of hundred
+    /// milliseconds after the box was given the caret, which is late enough
+    /// that the reader has seen the box appear and has started to type into
+    /// nothing.
+    ///
+    /// Watching for it over a run of frames looked right and was worthless: the
+    /// rendering event only fires when the app draws, and an app sitting on a
+    /// sheet whose tiles are all in memory draws nothing at all. So the watch
+    /// ticked while a document was still rasterising — which is exactly when a
+    /// gesture gets tested — and never ticked once for a reader working on a
+    /// drawing that had settled.
+    /// </summary>
+    private void OnWriteBoxLostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_writing is null || _caretRetakes >= MaxCaretRetakes) return;
+
+        // Where the caret was, so that coming back does not select the whole
+        // label: the next letter typed would replace everything already there.
+        int at = WriteBox.SelectionStart;
+        int run = WriteBox.SelectionLength;
+
+        // Asked on the next turn of the queue, because who now holds the caret
+        // is not settled while the loss is still being announced.
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (_writing is null || CaretIsInBox() || !CaretWentToTheScenery()) return;
+
+            _caretRetakes++;
+            WriteBox.Focus(FocusState.Programmatic);
+            WriteBox.Select(at, run);
+        });
+    }
+
+    /// <summary>
+    /// Whether whatever now holds the caret is something nobody can have meant
+    /// to put it in — the drawing, a scroller, or nothing at all.
+    ///
+    /// A reader who deliberately clicks into the panel's own box, or onto a
+    /// button, is not to be argued with: that focus is left where they put it.
+    /// A press on the sheet does not reach here, because it closes the label
+    /// before the canvas takes the focus.
+    /// </summary>
+    private bool CaretWentToTheScenery()
+    {
+        if (XamlRoot is not { } root) return false;
+
+        return Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root)
+            is null or ScrollViewer or CanvasControl;
+    }
+
+    /// <summary>
+    /// Whether the caret is really in the box.
+    ///
+    /// Not <see cref="Control.FocusState"/>, which is what the first attempt at
+    /// this asked and why it stopped chasing while the letters were still going
+    /// nowhere: that property reports the focus the box was handed, not the
+    /// focus it kept, so a request that was overruled a frame later still reads
+    /// as focused. Asking who holds the focus is the only question with the
+    /// right answer, and when there is no answer the box simply asks again —
+    /// one more frame costs nothing, and giving up early is the whole fault.
+    /// </summary>
+    private bool CaretIsInBox() =>
+        XamlRoot is { } root
+        && ReferenceEquals(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root), WriteBox);
 
     /// <summary>
     /// Shows or hides the box without taking it out of the tree.
@@ -2754,14 +2841,19 @@ public sealed partial class PdfTiledViewer : UserControl
         bool middle = point.Properties.IsMiddleButtonPressed;
         if (!left && !middle) return;
 
-        Canvas.Focus(Microsoft.UI.Xaml.FocusState.Pointer);
-
         // A press on the sheet finishes whatever label was being typed. This
         // press cannot be inside the box — that is a control of its own and
         // takes its own pointer events — so reaching here means the reader has
         // gone somewhere else, which is what ends a label. Placing the next one
         // still works: this closes the old before the tool opens the new.
+        //
+        // Before the canvas takes the focus, and not after: the open box takes
+        // the caret back whenever the drawing helps itself to it, so closing
+        // the label second would have the two of them fighting over a box that
+        // is on its way out.
         EndWriting();
+
+        Canvas.Focus(Microsoft.UI.Xaml.FocusState.Pointer);
 
         // Middle-drag always pans, whichever tool is active — so the zoom
         // rectangle can stay selected while you still move around freely.

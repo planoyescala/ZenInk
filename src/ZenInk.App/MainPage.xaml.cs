@@ -471,8 +471,62 @@ public sealed partial class MainPage : Page
 
     private bool _passwordAccepted;
 
+    /// <summary>
+    /// The tab already showing a drawing, if one is.
+    ///
+    /// Compared as full paths and without regard to case, because the same
+    /// sheet reaches here spelled several ways: the shell hands over what was
+    /// double-clicked, the shortcut list holds what was opened last time, and a
+    /// mapped drive or a relative path is the same file written differently.
+    /// A comparison of the strings as they arrive would answer "not open" for
+    /// half of them, which is the duplicate tab this exists to prevent.
+    /// </summary>
+    private TabViewItem? TabShowing(string path)
+    {
+        string wanted;
+        try
+        {
+            wanted = Path.GetFullPath(path);
+        }
+        catch (Exception)
+        {
+            // Not a path this machine can make sense of. Opening it will fail
+            // in a moment and say so properly; that is not this method's job.
+            return null;
+        }
+
+        foreach (var item in Tabs.TabItems.OfType<TabViewItem>())
+        {
+            if (item.Tag is not PdfTiledViewer viewer || viewer.SourcePath is not { } open) continue;
+
+            try
+            {
+                if (string.Equals(Path.GetFullPath(open), wanted, StringComparison.OrdinalIgnoreCase))
+                {
+                    return item;
+                }
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        return null;
+    }
+
     private async Task OpenPathInNewTabAsync(string path, string displayName)
     {
+        // The same drawing twice is two tabs of the same name holding two sets
+        // of marks, and only one of them can be saved. Whoever asks for a sheet
+        // that is already open is asking to look at it, so they are taken to it.
+        if (TabShowing(path) is { } already)
+        {
+            Tabs.SelectedItem = already;
+            if (already.Tag is PdfTiledViewer shown) ShowViewer(shown);
+            UpdateChrome();
+            return;
+        }
+
         OpenButton.IsEnabled = false;
         TabViewItem? tab = null;
         try
@@ -3646,7 +3700,7 @@ public sealed partial class MainPage : Page
                 NoteEditorLabel.Text = selected!.Kind == AnnotationKind.Note ? "Comentario" : "Texto";
                 NoteText.PlaceholderText = selected.Kind == AnnotationKind.Note
                     ? "Qué hay que revisar"
-                    : "Lo que se lee en la página";
+                    : "Escribe texto...";
 
                 if (NoteText.Text != selected.Text)
                 {
