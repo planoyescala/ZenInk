@@ -15,7 +15,7 @@ Developed by **plano y escala**.
 ![Status](https://img.shields.io/badge/status-beta%20v0.0.1-orange.svg)
 ![Languages](https://img.shields.io/badge/UI-English%20|%20Español-green.svg)
 
-[![Download Installer](https://img.shields.io/badge/⬇_Download_Installer-ZenInk_v0.0.1_beta-blue?style=for-the-badge&logo=windows)](https://github.com/planoyescala/ZenInk/releases/download/v.0.0.1-beta1/ZenInk_Setup_v0.0.1.exe)
+[![Download Installer](https://img.shields.io/badge/⬇_Download_Installer-ZenInk_v0.0.1_beta-blue?style=for-the-badge&logo=windows)](https://github.com/planoyescala/ZenInk/releases/download/v0.0.1-beta1/ZenInk_Setup_v0.0.1.exe)
 
 ---
 
@@ -43,7 +43,7 @@ It is part of the **ZenBIM** project, and it is **free software** under the GPLv
 
 ## 💾 Download & Installation
 
-1. **Download** [`ZenInk_Setup_v0.0.1.exe`](https://github.com/planoyescala/ZenInk/releases/download/v.0.0.1-beta1/ZenInk_Setup_v0.0.1.exe) — 72.7 MB — or pick it from the [Releases page](https://github.com/planoyescala/ZenInk/releases).
+1. **Download** [`ZenInk_Setup_v0.0.1.exe`](https://github.com/planoyescala/ZenInk/releases/download/v0.0.1-beta1/ZenInk_Setup_v0.0.1.exe) — 72.7 MB — or pick it from the [Releases page](https://github.com/planoyescala/ZenInk/releases).
 2. **Run it.** It installs into your user folder and **does not ask for administrator rights**, which matters on a company computer.
 3. Open a PDF with it — ZenInk offers itself under *Open with*, and can be made the default from the Windows settings page it takes you to.
 
