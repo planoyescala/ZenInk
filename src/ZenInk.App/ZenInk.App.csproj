@@ -25,6 +25,14 @@
     <Authors>plano y escala</Authors>
     <Copyright>© 2026 plano y escala. Software libre bajo GPL-3.0-or-later.</Copyright>
     <AssemblyTitle>ZenInk</AssemblyTitle>
+
+    <!--
+      La versión, en un solo sitio para el ensamblado. El manifiesto MSIX y el
+      instalador de Inno llevan la suya escrita y hay que moverlas a la vez:
+      la de «Acerca de» sale del paquete cuando lo hay, y del ensamblado
+      cuando no.
+    -->
+    <Version>0.0.1</Version>
     <Description>Visor y editor de planos PDF. Parte del proyecto ZenBIM de plano y escala.</Description>
 
     <!--

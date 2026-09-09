@@ -20,7 +20,7 @@
   <Identity
     Name="planoyescala.ZenInk"
     Publisher="CN=plano y escala"
-    Version="1.0.0.0" />
+    Version="0.0.1.0" />
 
   <mp:PhoneIdentity PhoneProductId="A4591607-E02F-4E53-8EEA-B13F1FB2EC71" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 

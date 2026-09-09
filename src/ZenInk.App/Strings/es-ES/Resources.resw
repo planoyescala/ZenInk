@@ -1996,4 +1996,12 @@ Esto no se puede deshacer: si aplanas sobre este archivo, no hay vuelta atrás. 
   <data name="CoreTimestampWrongType" xml:space="preserve">
     <value>«{0}» contestó {1}, que no es una respuesta de sellado.</value>
   </data>
+  <data name="BetaTitle" xml:space="preserve">
+    <value>ZenInk está en fase beta</value>
+  </data>
+  <data name="BetaBody" xml:space="preserve">
+    <value>Esta es la versión {0}, y todavía está en pruebas. Funciona, y hay cosas que aún no: espera fallos.
+
+Esperamos que pase pronto a versión estable.</value>
+  </data>
 </root>

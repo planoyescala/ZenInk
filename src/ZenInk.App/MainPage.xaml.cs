@@ -110,9 +110,14 @@ public sealed partial class MainPage : Page
         App.Current.FilesActivated += OnFilesActivated;
         await OpenAllAsync(App.Current.LaunchFiles);
 
-        // After the drawings, never before: this opens a dialog, and one that
+        // After the drawings, never before: these open dialogs, and one that
         // stands between the reader and the sheet they double-clicked is a
         // dialog they will resent.
+        //
+        // The beta notice goes first of the two. It is about whether to trust
+        // the program with a drawing, which outranks a question about file
+        // associations, and both are said once in a lifetime.
+        await BetaNotice.ShowOnceAsync(XamlRoot, PackageVersion);
         await DefaultPdfApp.OfferAsync(XamlRoot);
     }
 

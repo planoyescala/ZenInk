@@ -1996,4 +1996,12 @@ This cannot be undone: flatten onto this file and there is no way back. Flatteni
   <data name="CoreTimestampWrongType" xml:space="preserve">
     <value>“{0}” answered {1}, which is not a stamping reply.</value>
   </data>
+  <data name="BetaTitle" xml:space="preserve">
+    <value>ZenInk is in beta</value>
+  </data>
+  <data name="BetaBody" xml:space="preserve">
+    <value>This is version {0}, and it is still being tested. It works, and some of it does not yet: expect faults.
+
+We hope it reaches a stable version soon.</value>
+  </data>
 </root>
